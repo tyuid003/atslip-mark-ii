@@ -21,6 +21,8 @@
   gap: var(--space-sm);
   align-items: center;
   margin-bottom: var(--space-md);
+  position: relative;
+  z-index: 1;
 }
 
 .slider-arrow {
@@ -35,6 +37,7 @@
   justify-content: center;
   cursor: pointer;
   transition: all var(--transition-fast);
+  z-index: 2;
 }
 
 .slider-arrow:hover {
@@ -47,7 +50,7 @@
   overflow-x: auto;
   overflow-y: visible;
   scroll-behavior: smooth;
-  padding: var(--space-xs) 0 200px;
+  padding: var(--space-xs) 0 var(--space-md);
 }
 
 .tenant-grid::-webkit-scrollbar {
