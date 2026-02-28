@@ -165,7 +165,7 @@ export const BankAccountsAPI = {
       });
       
       const account = accounts.find((acc: any) => {
-        const accId = String(acc.accountId || acc.id || acc.accountNumber || acc.account_number || '');
+        const accId = String(acc.accountNumber || acc.account_number || acc.id || '');
         const searchId = String(accountId);
         console.log('[BankAccountsAPI] Comparing:', accId, '===', searchId, '=>', accId === searchId);
         return accId === searchId;
@@ -179,8 +179,8 @@ export const BankAccountsAPI = {
       const id = `tba-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const now = Math.floor(Date.now() / 1000);
       const accountNumber = account.accountNumber || account.account_number || '';
-      const accountName = account.accountName || account.account_name || '';
-      const bankId = account.bankId || account.bank_id || '';
+      const accountName = account.accountName || account.name || account.account_name || '';
+      const bankId = account.bankId || account.id || account.bank_id || '';
       const bankName = account.bankName || account.bank_name || '';
       const bankShort = account.bankShort || account.bank_short || '';
 
@@ -194,7 +194,7 @@ export const BankAccountsAPI = {
           id,
           teamId,
           tenantId,
-          accountId,
+          accountId, // account_id = accountNumber
           accountNumber,
           accountName,
           '', // account_name_en (empty)

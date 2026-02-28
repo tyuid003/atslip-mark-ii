@@ -104,17 +104,38 @@ export class ScanService {
       body: formData,
     });
 
+    // EASYSLIP คืนค่าโดยตรงเป็น { status: 200, data: {...} } หรือ { status: 400, message: "..." }
+    const result = await response.json() as any;
+    
+    console.log('[ScanService] EASYSLIP raw response:', {
+      httpStatus: response.status,
+      httpOk: response.ok,
+      resultStatus: result.status,
+      hasData: !!result.data,
+      hasMessage: !!result.message,
+    });
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[ScanService] EASYSLIP API error:', {
-        status: response.status,
+      console.error('[ScanService] EASYSLIP API HTTP error:', {
+        httpStatus: response.status,
         statusText: response.statusText,
-        body: errorText,
+        resultStatus: result.status,
+        message: result.message,
       });
-      throw new Error(`EASYSLIP API error (${response.status}): ${response.statusText}. Please verify your EASYSLIP token is correct.`);
+      throw new Error(`EASYSLIP API error (${response.status}): ${result.message || response.statusText}`);
     }
 
-    return await response.json() as EasySlipResponse;
+    // ตรวจสอบ status ใน response body
+    if (result.status !== 200) {
+      console.error('[ScanService] EASYSLIP returned non-200 status:', result);
+      throw new Error(`EASYSLIP error (${result.status}): ${result.message || 'Scan failed'}`);
+    }
+
+    // แปลงเป็นรูปแบบที่เราต้องการ
+    return {
+      success: true,
+      data: result, // { status: 200, data: {...} }
+    };
   }
 
   /**
