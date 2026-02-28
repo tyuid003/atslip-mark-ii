@@ -541,21 +541,34 @@ function toggleTenantMenu(tenantId) {
   UI.toggleTenantMenu(tenantId);
 }
 
+// Track pending toggle states
+const pendingToggleStates = new Map();
+// Export to global for UI access
+window.pendingToggleStates = pendingToggleStates;
+
 async function toggleAutoDeposit(tenantId, enabled) {
   const toggle = document.getElementById(`toggle-${tenantId}`);
-  const originalState = !enabled;
   
   try {
+    // จำสถานะที่ user เพิ่งกด
+    pendingToggleStates.set(tenantId, enabled);
+    
     // Optimistic update - แสดงผลทันที
     const response = await api.toggleAutoDeposit(tenantId, enabled);
     addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit สำหรับ tenant`);
     
     // Reload ในเบื้องหลังเพื่ออัพเดท UI ทั้งหมด
-    loadTenants().catch(() => {});
+    await loadTenants();
+    
+    // ลบสถานะที่จำไว้หลัง reload สำเร็จ
+    pendingToggleStates.delete(tenantId);
   } catch (error) {
+    // ลบสถานะที่จำไว้
+    pendingToggleStates.delete(tenantId);
+    
     // Revert toggle ถ้า API error
     if (toggle) {
-      toggle.checked = originalState;
+      toggle.checked = !enabled;
     }
     addNotification('❌ ไม่สามารถเปลี่ยนสถานะ Auto Deposit: ' + error.message);
   }

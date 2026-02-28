@@ -1,6 +1,8 @@
 // API: Toggle Auto Deposit Enabled
 // PATCH /api/tenants/:id/auto-deposit
 
+import { jsonResponse, errorResponse } from '../utils/helpers';
+
 interface Env {
   DB: D1Database;
 }
@@ -20,10 +22,7 @@ export const AutoDepositAPI = {
         .run();
 
       if (!result.success) {
-        return Response.json(
-          { success: false, error: 'Failed to update auto deposit setting' },
-          { status: 500 }
-        );
+        return errorResponse('Failed to update auto deposit setting', 500);
       }
 
       // Get updated tenant
@@ -33,7 +32,7 @@ export const AutoDepositAPI = {
         .bind(tenantId)
         .first();
 
-      return Response.json({
+      return jsonResponse({
         success: true,
         data: {
           tenant_id: tenantId,
@@ -41,10 +40,7 @@ export const AutoDepositAPI = {
         },
       });
     } catch (error: any) {
-      return Response.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
+      return errorResponse(error.message, 500);
     }
   },
 };

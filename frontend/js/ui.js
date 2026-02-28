@@ -55,7 +55,11 @@ const UI = {
 
   createTenantCard(tenant) {
     const isConnected = tenant.admin_connected;
-    const autoDepositEnabled = tenant.auto_deposit_enabled === 1;
+    // ตรวจสอบว่ามีสถานะ pending หรือไม่ ถ้ามีให้ใช้สถานะนั้น
+    const hasPendingState = window.pendingToggleStates && window.pendingToggleStates.has(tenant.id);
+    const autoDepositEnabled = hasPendingState 
+      ? window.pendingToggleStates.get(tenant.id)
+      : tenant.auto_deposit_enabled === 1;
     const statusBadge = isConnected
       ? '<span class="badge badge-success"><i data-lucide="check-circle" size="12"></i> เชื่อมต่อแล้ว</span>'
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
