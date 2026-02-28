@@ -381,7 +381,14 @@ function bindUploadEvents() {
     return;
   }
 
-  dropzone.addEventListener('click', () => input.click());
+  // เปลี่ยนจาก dropzone click เป็นตรวจสอบว่าคลิกที่ preview หรือไม่
+  dropzone.addEventListener('click', (e) => {
+    // ถ้าคลิกที่ปุ่มหรือ element ภายใน upload-preview ให้ข้ามไป
+    if (e.target.closest('.upload-preview') || e.target.closest('button')) {
+      return;
+    }
+    input.click();
+  });
 
   input.addEventListener('change', () => {
     const file = input.files && input.files[0];
@@ -442,7 +449,7 @@ function handleSelectedSlip(file) {
           <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
           <div class="upload-preview-info">
             <p class="upload-file-name">${file.name}</p>
-            <button class="btn btn-sm btn-secondary" onclick="resetSlipUpload()">
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); resetSlipUpload();">
               <i data-lucide="x"></i> ลบ
             </button>
           </div>

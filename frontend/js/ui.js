@@ -221,13 +221,21 @@ const UI = {
 
   toggleTenantMenu(tenantId) {
     const menu = document.getElementById(`menu-${tenantId}`);
+    const button = document.querySelector(`[onclick="toggleTenantMenu('${tenantId}')"]`);
     const isVisible = menu.style.display === 'block';
 
+    // ปิดเมนูอื่นๆ ทั้งหมด
     document.querySelectorAll('.tenant-menu-dropdown').forEach((m) => {
       m.style.display = 'none';
     });
 
-    menu.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible && button) {
+      // คำนวณตำแหน่ง
+      const rect = button.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${rect.right - 200}px`; // 200px = min-width ของ menu
+      menu.style.display = 'block';
+    }
   },
 };
 
