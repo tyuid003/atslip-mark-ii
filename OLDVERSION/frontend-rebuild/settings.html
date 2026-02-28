@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Deposit System - Settings</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components/sidebar.css">
+  <link rel="stylesheet" href="css/components/forms.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/modal.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>Auto Deposit</h1>
+        <p id="tenant-display">BETAX2</p>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="manual-scan.html" class="nav-item">
+          <span class="nav-icon">📄</span>
+          <span class="nav-text">Manual Scan</span>
+        </a>
+        <a href="settings.html" class="nav-item active">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
+        </a>
+        <a href="message.html" class="nav-item">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Messages</span>
+        </a>
+      </nav>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="page-header">
+        <h2 class="page-title">Settings</h2>
+        
+        <div class="page-actions">
+          <!-- Tenant Selector -->
+          <select id="settings-tenant-select" class="form-select">
+            <option value="BETAX2">BETAX2</option>
+            <option value="WINSURE24">WINSURE24</option>
+            <option value="HENGDRAGON66">HENGDRAGON66</option>
+            <option value="TKWIN24">TKWIN24</option>
+          </select>
+        </div>
+      </header>
+      
+      <!-- Settings Form -->
+      <section class="section">
+        <h3 class="section-title">Tenant Configuration</h3>
+        
+        <form class="form">
+          <!-- Basic Info -->
+          <div class="form-group">
+            <label class="form-label">Tenant Name</label>
+            <input type="text" id="setting-name" class="form-input" placeholder="BETAX2">
+          </div>
+          
+          <!-- LINE Settings -->
+          <h4 class="form-section-title">LINE Configuration</h4>
+          
+          <div class="form-group">
+            <label class="form-label">LINE Channel ID</label>
+            <input type="text" id="setting-lineChannelId" class="form-input" placeholder="123456789">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">LINE Channel Secret</label>
+            <input type="password" id="setting-lineChannelSecret" class="form-input" placeholder="••••••••">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">LINE Access Token</label>
+            <input type="password" id="setting-lineAccessToken" class="form-input" placeholder="••••••••">
+          </div>
+          
+          <div class="form-group">
+            <button type="button" id="test-line-btn" class="btn btn-secondary">Test LINE Connection</button>
+          </div>
+          
+          <!-- EasySlip Settings -->
+          <h4 class="form-section-title">EasySlip Configuration</h4>
+          
+          <div class="form-group">
+            <label class="form-label">EasySlip API Key</label>
+            <input type="password" id="setting-easyslipKey" class="form-input" placeholder="••••••••">
+          </div>
+          
+          <!-- Backend API Settings -->
+          <h4 class="form-section-title">Backend API Configuration</h4>
+          
+          <div class="form-group">
+            <label class="form-label">API Base URL</label>
+            <input type="text" id="setting-apiBaseUrl" class="form-input" placeholder="https://api.example.com">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Session Mode</label>
+            <select id="setting-sessionMode" class="form-select">
+              <option value="per-tenant">Per Tenant</option>
+              <option value="global">Global</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <button type="button" id="test-api-btn" class="btn btn-secondary">Test API Connection</button>
+          </div>
+          
+          <!-- Actions -->
+          <div class="form-actions">
+            <button type="button" id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+  
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+  
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- JavaScript -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/settings.js"></script>
+</body>
+</html>

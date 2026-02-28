@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Deposit System - Manual Scan</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components/sidebar.css">
+  <link rel="stylesheet" href="css/components/forms.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/modal.css">
+  <link rel="stylesheet" href="css/components/pending-list.css">
+  <link rel="stylesheet" href="css/components/upload-zone.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>Auto Deposit</h1>
+        <p id="tenant-display">BETAX2</p>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="manual-scan.html" class="nav-item active">
+          <span class="nav-icon">📄</span>
+          <span class="nav-text">Manual Scan</span>
+        </a>
+        <a href="settings.html" class="nav-item">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
+        </a>
+        <a href="message.html" class="nav-item">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Messages</span>
+        </a>
+      </nav>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="page-header">
+        <h2 class="page-title">Manual Scan</h2>
+        
+        <div class="page-actions">
+          <!-- Auto Credit Toggle -->
+          <label class="switch">
+            <input type="checkbox" id="auto-credit-toggle">
+            <span class="switch-slider"></span>
+            <span class="switch-label">Auto Credit</span>
+          </label>
+          
+          <!-- Tenant Selector -->
+          <select id="tenant-select" class="form-select">
+            <option value="BETAX2">BETAX2</option>
+            <option value="WINSURE24">WINSURE24</option>
+            <option value="HENGDRAGON66">HENGDRAGON66</option>
+            <option value="TKWIN24">TKWIN24</option>
+          </select>
+        </div>
+      </header>
+      
+      <!-- Upload Zone -->
+      <section class="section">
+        <div class="upload-zone" id="drop-zone">
+          <div class="upload-icon">📸</div>
+          <h3 class="upload-title">อัปโหลดสลิปโอนเงิน</h3>
+          <p class="upload-subtitle">ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
+          <button type="button" class="upload-button" id="upload-btn">
+            เลือกไฟล์
+          </button>
+          <input type="file" id="slip-file-input" class="upload-input" accept="image/*">
+        </div>
+      </section>
+      
+      <!-- Pending List -->
+      <section class="section">
+        <h3 class="section-title">รายการรอจับคู่</h3>
+        <div class="pending-list" id="pending-list">
+          <div class="empty-state">ไม่มีรายการรอจับคู่</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+  
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- Confirm Dialog -->
+  <div id="confirm-dialog" class="hidden">
+    <div class="confirm-content">
+      <p class="confirm-message" id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button class="btn-cancel" id="confirm-cancel">ยกเลิก</button>
+        <button class="btn-confirm" id="confirm-ok">ตกลง</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- JavaScript -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/manual-scan.js"></script>
+</body>
+</html>

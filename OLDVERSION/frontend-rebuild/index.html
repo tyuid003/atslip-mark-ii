@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Deposit System</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components/sidebar.css">
+  <link rel="stylesheet" href="css/components/forms.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/modal.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>Auto Deposit</h1>
+        <p id="tenant-display">BETAX2</p>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="manual-scan.html" class="nav-item">
+          <span class="nav-icon">📄</span>
+          <span class="nav-text">Manual Scan</span>
+        </a>
+        <a href="settings.html" class="nav-item">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
+        </a>
+        <a href="message.html" class="nav-item">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Messages</span>
+        </a>
+      </nav>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="page-header">
+        <h2 class="page-title">Welcome to Auto Deposit System</h2>
+      </header>
+      
+      <section class="section">
+        <div style="text-align: center; padding: var(--spacing-8);">
+          <h1 style="font-size: var(--text-3xl); margin-bottom: var(--spacing-4);">🏦 Auto Deposit System</h1>
+          <p style="color: var(--text-secondary); margin-bottom: var(--spacing-6);">
+            ระบบเติมเครดิตอัตโนมัติผ่านการสแกนสลิปโอนเงิน
+          </p>
+          
+          <div style="display: flex; gap: var(--spacing-4); justify-content: center; flex-wrap: wrap;">
+            <a href="manual-scan.html" class="btn btn-primary" style="text-decoration: none;">
+              เริ่มใช้งาน Manual Scan
+            </a>
+            <a href="settings.html" class="btn btn-secondary" style="text-decoration: none;">
+              ตั้งค่าระบบ
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+  
+  <!-- JavaScript -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script>
+    // Set default tenant on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const tenant = APIService.getSelectedTenant();
+      document.getElementById('tenant-display').textContent = tenant.name;
+    });
+  </script>
+</body>
+</html>

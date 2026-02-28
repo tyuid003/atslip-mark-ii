@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATslip Mark-II - จัดการระบบเติมเครดิตอัตโนมัติ</title>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components/tenant-card.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  
+  <!-- Lucide Icons (Open Source) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-title">
+        <h1>ATslip Mark-II</h1>
+        <span class="header-badge">v3.0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN CONTENT
+       ============================================================ -->
+  <div class="container">
+    <div class="tenant-header">
+      <h2>
+        <i data-lucide="building-2"></i>
+        จัดการเว็บ (Tenants)
+      </h2>
+      <button class="btn btn-primary btn-lg" onclick="openCreateTenantModal()">
+        <i data-lucide="plus"></i>
+        เพิ่มเว็บใหม่
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center" style="display: none;">
+      <div class="loading"></div>
+      <p class="text-muted mt-3">กำลังโหลดข้อมูล...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-state-icon">
+        <i data-lucide="building-2" size="32"></i>
+      </div>
+      <h3>ยังไม่มีเว็บในระบบ</h3>
+      <p>เริ่มต้นโดยการเพิ่มเว็บแรกของคุณเพื่อเริ่มใช้งานระบบเติมเครดิตอัตโนมัติ</p>
+      <button class="btn btn-primary" onclick="openCreateTenantModal()">
+        <i data-lucide="plus"></i>
+        เพิ่มเว็บใหม่
+      </button>
+    </div>
+
+    <!-- Tenant Grid -->
+    <div id="tenantGrid" class="tenant-grid"></div>
+  </div>
+
+  <!-- ============================================================
+       CREATE/EDIT TENANT MODAL
+       ============================================================ -->
+  <div id="tenantModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="tenantModalTitle">เพิ่มเว็บใหม่</h3>
+        <button class="modal-close" onclick="closeTenantModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="tenantForm">
+          <input type="hidden" id="tenantId">
+          
+          <div class="form-group">
+            <label class="form-label required" for="tenantName">ชื่อเว็บ</label>
+            <input 
+              type="text" 
+              id="tenantName" 
+              class="form-input" 
+              placeholder="เช่น BETAX2, WINSURE24"
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label required" for="adminApiUrl">Admin API Base URL</label>
+            <input 
+              type="url" 
+              id="adminApiUrl" 
+              class="form-input" 
+              placeholder="https://api.example.com"
+              required
+            >
+            <p class="form-help">URL หลักของ Admin Backend API</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label required" for="adminUsername">Admin Username</label>
+            <input 
+              type="text" 
+              id="adminUsername" 
+              class="form-input" 
+              placeholder="username"
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label required" for="adminPassword">Admin Password</label>
+            <input 
+              type="password" 
+              id="adminPassword" 
+              class="form-input" 
+              placeholder="••••••••"
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label required" for="easyslipToken">EasySlip API Token</label>
+            <input 
+              type="text" 
+              id="easyslipToken" 
+              class="form-input" 
+              placeholder="your-easyslip-token"
+              required
+            >
+            <p class="form-help">Token สำหรับเรียกใช้ EasySlip API</p>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeTenantModal()">
+          ยกเลิก
+        </button>
+        <button class="btn btn-primary" onclick="saveTenant()" id="saveTenantBtn">
+          <i data-lucide="save"></i>
+          บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       LINE OA MODAL
+       ============================================================ -->
+  <div id="lineOAModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">จัดการ LINE OA</h3>
+        <button class="modal-close" onclick="closeLineOAModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: var(--space-lg);">
+          <button class="btn btn-primary" onclick="openAddLineOAModal()">
+            <i data-lucide="plus"></i>
+            เพิ่ม LINE OA
+          </button>
+        </div>
+        
+        <div id="lineOAList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeLineOAModal()">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BANK ACCOUNTS MODAL
+       ============================================================ -->
+  <div id="bankAccountsModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">รายชื่อบัญชีธนาคาร</h3>
+        <button class="modal-close" onclick="closeBankAccountsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="bankAccountsList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeBankAccountsModal()">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+  
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+  </script>
+</body>
+</html>
