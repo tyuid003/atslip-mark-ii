@@ -7,6 +7,7 @@ import { generateId, currentTimestamp } from '../utils/helpers';
 
 export async function createTenant(
   env: Env,
+  teamSlug: string,
   data: {
     name: string;
     admin_api_url: string;
@@ -15,17 +16,30 @@ export async function createTenant(
     easyslip_token: string;
   }
 ) {
+  // หา team_id จาก slug
+  const teamResult = await env.DB.prepare(
+    `SELECT id FROM teams WHERE slug = ? LIMIT 1`
+  )
+    .bind(teamSlug)
+    .first();
+
+  if (!teamResult) {
+    throw new Error(`Team with slug '${teamSlug}' not found`);
+  }
+
+  const teamId = teamResult.id;
   const id = generateId();
   const now = currentTimestamp();
 
   await env.DB.prepare(
     `INSERT INTO tenants (
-      id, name, admin_api_url, admin_username, admin_password,
+      id, team_id, name, admin_api_url, admin_username, admin_password,
       easyslip_token, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
+      teamId,
       data.name,
       data.admin_api_url,
       data.admin_username,
@@ -83,15 +97,31 @@ export async function getTenantById(env: Env, id: string) {
 // GET ALL TENANTS
 // ============================================================
 
-export async function getAllTenants(env: Env) {
+export async function getAllTenants(env: Env, teamSlug: string = 'default') {
+  // หา team_id จาก slug
+  const teamResult = await env.DB.prepare(
+    `SELECT id FROM teams WHERE slug = ? LIMIT 1`
+  )
+    .bind(teamSlug)
+    .first();
+
+  if (!teamResult) {
+    return []; // ถ้าไม่เจอ team ให้คืน array ว่าง
+  }
+
+  const teamId = teamResult.id;
+
   const results = await env.DB.prepare(
     `SELECT 
       t.*,
       (SELECT COUNT(*) FROM line_oas WHERE tenant_id = t.id AND status = 'active') as line_oa_count,
       (SELECT COUNT(*) FROM pending_transactions WHERE tenant_id = t.id AND status = 'pending') as pending_count
     FROM tenants t
+    WHERE t.team_id = ?
     ORDER BY t.created_at DESC`
-  ).all();
+  )
+    .bind(teamId)
+    .all();
 
   const tenants = [];
 

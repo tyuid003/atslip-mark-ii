@@ -2,6 +2,7 @@
 // APPLICATION STATE
 // ============================================================
 
+let currentTeamSlug = null; // team slug จาก URL
 let currentTenants = [];
 let currentTenantId = null;
 let currentLineOAs = [];
@@ -13,11 +14,39 @@ let unreadCount = 0;
 // ============================================================
 
 async function init() {
+  // ดึง team slug จาก URL
+  currentTeamSlug = window.getTeamFromURL();
+  window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
+  console.log('Current Team Slug:', currentTeamSlug);
+  
+  // อัพเดท page title ถ้าไม่ใช่ default team
+  if (currentTeamSlug !== 'default') {
+    document.title = `${currentTeamSlug.toUpperCase()} - ATslip Auto Deposit`;
+    
+    // แสดง team badge ใน header
+    const teamBadge = document.getElementById('teamBadge');
+    if (teamBadge) {
+      teamBadge.textContent = currentTeamSlug;
+      teamBadge.style.display = 'inline-block';
+    }
+  }
+  
   bindUploadEvents();
   await loadTenants();
   await loadPendingTransactions();
   initializeNotifications();
 }
+
+// รีเฟรชเมื่อ hash เปลี่ยน (สำหรับ team switching)
+window.addEventListener('hashchange', () => {
+  const newTeamSlug = window.getTeamFromURL();
+  if (newTeamSlug !== currentTeamSlug) {
+    currentTeamSlug = newTeamSlug;
+    window.currentTeamSlug = currentTeamSlug;
+    console.log('Team changed to:', currentTeamSlug);
+    window.location.reload(); // reload หน้าใหม่เมื่อเปลี่ยน team
+  }
+});
 
 // ============================================================
 // TENANT MANAGEMENT

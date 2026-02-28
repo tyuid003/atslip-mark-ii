@@ -65,6 +65,17 @@ body {
   font-weight: 600;
 }
 
+.team-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
 .header-actions {
   position: relative;
   display: flex;

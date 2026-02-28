@@ -11,9 +11,12 @@ import * as TenantService from '../services/tenant.service';
 // GET /api/tenants - รายการ tenant ทั้งหมด
 // ============================================================
 
-export async function handleGetTenants(env: Env): Promise<Response> {
+export async function handleGetTenants(request: Request, env: Env): Promise<Response> {
   try {
-    const tenants = await TenantService.getAllTenants(env);
+    // ดึง team slug จาก header หรือ query parameter
+    const teamSlug = request.headers.get('X-Team-Slug') || new URL(request.url).searchParams.get('team') || 'default';
+    
+    const tenants = await TenantService.getAllTenants(env, teamSlug);
     return successResponse(tenants);
   } catch (error: any) {
     return errorResponse(error.message, 500);
@@ -60,7 +63,10 @@ export async function handleCreateTenant(
       'easyslip_token',
     ]);
 
-    const tenant = await TenantService.createTenant(env, {
+    // ดึง team slug จาง header
+    const teamSlug = request.headers.get('X-Team-Slug') || 'default';
+
+    const tenant = await TenantService.createTenant(env, teamSlug, {
       name: body.name,
       admin_api_url: body.admin_api_url,
       admin_username: body.admin_username,

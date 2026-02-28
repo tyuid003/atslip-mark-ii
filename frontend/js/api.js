@@ -10,13 +10,22 @@ class API {
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
     
+    // เพิ่ม X-Team-ID header สำหรับ team filtering
+    const teamSlug = window.currentTeamSlug || window.getTeamFromURL();
+    
     const defaultOptions = {
       headers: {
         'Content-Type': 'application/json',
+        'X-Team-Slug': teamSlug, // ส่ง team slug ไปกับทุก request
       },
     };
 
     const config = { ...defaultOptions, ...options };
+    
+    // Merge headers ถ้ามี custom headers
+    if (options.headers) {
+      config.headers = { ...defaultOptions.headers, ...options.headers };
+    }
 
     try {
       const response = await fetch(url, config);

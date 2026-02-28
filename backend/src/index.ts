@@ -27,7 +27,7 @@ export default {
 
     // GET /api/tenants - ดูรายการ tenant ทั้งหมด
     if (method === 'GET' && pathname === '/api/tenants') {
-      return await TenantsAPI.handleGetTenants(env);
+      return await TenantsAPI.handleGetTenants(request, env);
     }
 
     // POST /api/tenants - สร้าง tenant ใหม่
