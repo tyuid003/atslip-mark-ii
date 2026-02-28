@@ -402,6 +402,36 @@
 .pending-item-bottom {
   color: var(--color-gray-500);
   font-size: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.pending-delete-btn {
+  background: none;
+  border: none;
+  color: var(--color-gray-400);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.pending-delete-btn:hover {
+  background: var(--color-red-50);
+  color: var(--color-red-600);
+}
+
+.pending-delete-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .pending-empty {
@@ -410,6 +440,120 @@
   padding: var(--space-md);
   color: var(--color-gray-500);
   text-align: center;
+}
+
+/* Delete Confirmation Modal */
+.delete-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease;
+}
+
+.delete-confirm-content {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow-xl);
+  animation: slideUp 0.2s ease;
+}
+
+.delete-confirm-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  color: var(--color-orange-600);
+}
+
+.delete-confirm-header svg {
+  width: 24px;
+  height: 24px;
+}
+
+.delete-confirm-header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-gray-900);
+}
+
+.delete-confirm-content p {
+  color: var(--color-gray-700);
+  margin-bottom: var(--space-lg);
+  line-height: 1.6;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.delete-confirm-actions button {
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-md);
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.btn-cancel {
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+}
+
+.btn-cancel:hover {
+  background: var(--color-gray-200);
+}
+
+.btn-confirm {
+  background: var(--color-red-600);
+  color: var(--color-white);
+}
+
+.btn-confirm:hover {
+  background: var(--color-red-700);
+}
+
+.btn-confirm:disabled {
+  background: var(--color-gray-300);
+  color: var(--color-gray-500);
+  cursor: not-allowed;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ============================================================

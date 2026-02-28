@@ -756,6 +756,80 @@ async function loadPendingTransactions() {
   }
 }
 
+async function deletePendingItem(transactionId) {
+  // สร้าง custom confirmation modal
+  const modal = document.createElement('div');
+  modal.className = 'delete-confirm-modal';
+  modal.innerHTML = `
+    <div class="delete-confirm-content">
+      <div class="delete-confirm-header">
+        <i data-lucide="alert-circle"></i>
+        <h3>ยืนยันการลบ</h3>
+      </div>
+      <p>คุณต้องการลบรายการนี้หรือไม่?</p>
+      <div class="delete-confirm-actions">
+        <button class="btn-cancel" id="cancelDeleteBtn">ยกเลิก</button>
+        <button class="btn-confirm" id="confirmDeleteBtn">ตกลง</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  lucide.createIcons();
+  
+  // Focus ปุ่มตกลง
+  const confirmBtn = document.getElementById('confirmDeleteBtn');
+  const cancelBtn = document.getElementById('cancelDeleteBtn');
+  confirmBtn.focus();
+  
+  // Handle Enter key
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmBtn.click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelBtn.click();
+    }
+  };
+  
+  modal.addEventListener('keydown', handleKeyPress);
+  
+  // Return promise to handle user action
+  return new Promise((resolve) => {
+    confirmBtn.onclick = async () => {
+      try {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<div class="loading"></div> กำลังลบ...';
+        
+        await api.deletePendingTransaction(transactionId);
+        addNotification('✅ ลบรายการสำเร็จ');
+        await loadPendingTransactions();
+        
+        modal.remove();
+        resolve(true);
+      } catch (error) {
+        addNotification('❌ ไม่สามารถลบรายการได้: ' + error.message);
+        modal.remove();
+        resolve(false);
+      }
+    };
+    
+    cancelBtn.onclick = () => {
+      modal.remove();
+      resolve(false);
+    };
+    
+    // Click outside to close
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        modal.remove();
+        resolve(false);
+      }
+    };
+  });
+}
+
 // ============================================================
 // SLIP UPLOAD (UI ONLY)
 // ============================================================

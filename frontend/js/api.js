@@ -218,6 +218,12 @@ class API {
   async getPendingTransactions(limit = 50) {
     return this.request(`/api/pending-transactions?limit=${limit}`);
   }
+
+  async deletePendingTransaction(transactionId) {
+    return this.request(`/api/pending-transactions/${transactionId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 // Create API instance

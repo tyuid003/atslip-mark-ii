@@ -226,6 +226,13 @@ export default {
       return await PendingAPI.handleGetPendingTransactions(env, request);
     }
 
+    // DELETE /api/pending-transactions/:id - ลบรายการ pending
+    const deletePendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)$/);
+    if (method === 'DELETE' && deletePendingMatch) {
+      const transactionId = decodeURIComponent(deletePendingMatch[1]);
+      return await PendingAPI.handleDeletePendingTransaction(env, transactionId);
+    }
+
     // ============================================================
     // SCAN ROUTES
     // ============================================================

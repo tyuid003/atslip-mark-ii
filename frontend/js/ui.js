@@ -166,12 +166,17 @@ const UI = {
               <span>${amount} บาท</span>
             </div>
             <div class="pending-item-bottom">
-              Ref: ${item.slip_ref || '-'} • ${created}
+              ${created}
+              <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
+                <i data-lucide="x"></i>
+              </button>
             </div>
           </div>
         `;
       })
       .join('');
+    
+    lucide.createIcons();
   },
 
   renderNotifications(notifications) {

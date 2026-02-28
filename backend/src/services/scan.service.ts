@@ -107,13 +107,33 @@ export class ScanService {
     // EASYSLIP คืนค่าโดยตรงเป็น { status: 200, data: {...} } หรือ { status: 400, message: "..." }
     const result = await response.json() as any;
     
-    console.log('[ScanService] EASYSLIP raw response:', {
+    console.log('[ScanService] 📥 EASYSLIP Response:', {
       httpStatus: response.status,
       httpOk: response.ok,
       resultStatus: result.status,
       hasData: !!result.data,
       hasMessage: !!result.message,
     });
+
+    // Log ข้อมูลสลิปที่ได้รับ (ถ้า success)
+    if (result.status === 200 && result.data) {
+      const slip = result.data;
+      console.log('[ScanService] 📋 Slip Data:', {
+        transRef: slip.transRef,
+        amount: slip.amount?.amount,
+        date: slip.date,
+        sender: {
+          bank: slip.sender?.bank?.name || slip.sender?.bank?.short || slip.sender?.bank?.id,
+          account: slip.sender?.account?.bank?.account || slip.sender?.account?.proxy?.account,
+          name: slip.sender?.account?.name?.th || slip.sender?.account?.name?.en,
+        },
+        receiver: {
+          bank: slip.receiver?.bank?.name || slip.receiver?.bank?.short || slip.receiver?.bank?.id,
+          account: slip.receiver?.account?.bank?.account || slip.receiver?.account?.proxy?.account,
+          name: slip.receiver?.account?.name?.th || slip.receiver?.account?.name?.en,
+        },
+      });
+    }
 
     if (!response.ok) {
       console.error('[ScanService] EASYSLIP API HTTP error:', {
@@ -278,6 +298,14 @@ export class ScanService {
           bankMatched = receiverBankVariants.some(rv =>
             accountBankVariants.some(av => av.includes(rv) || rv.includes(av))
           );
+
+          console.log('[ScanService] 🔍 Bank Match:', {
+            receiverBankInput: receiverBank.name || receiverBank.short || receiverBank.id,
+            receiverBankVariants,
+            accountBankName,
+            accountBankVariants,
+            bankMatched,
+          });
         }
 
         // ถ้าธนาคารไม่ตรง ข้ามไปบัญชีถัดไปเลย
@@ -298,6 +326,14 @@ export class ScanService {
             }
           }
         }
+
+        console.log('[ScanService] 🔍 Account Match:', {
+          receiverAccountInput: receiverAccount,
+          receiverAccountClean,
+          tenantAccountNumber: accountNumber,
+          minAccountDigits,
+          accountMatched,
+        });
 
         // 3. Match ชื่อผู้รับ (ถ้าเลขบัญชีไม่ตรง)
         if (!accountMatched && (receiverNameTh || receiverNameEn)) {
@@ -325,6 +361,15 @@ export class ScanService {
               nameMatched = true;
             }
           }
+
+          console.log('[ScanService] 🔍 Name Match:', {
+            receiverNameTh,
+            receiverNameEn,
+            accountNameTh,
+            accountNameEn,
+            minNameChars,
+            nameMatched,
+          });
         }
 
         // ถ้า match ธนาคาร AND (เลขบัญชี OR ชื่อ) ให้ return tenant นี้

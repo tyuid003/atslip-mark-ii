@@ -86,17 +86,17 @@ export class BankRefreshService {
         const accountsData = await accountsResponse.json() as any;
         const accounts = accountsData.list || [];
 
-        // บันทึกบัญชีธนาคารลง KV Storage พร้อม TTL
+        // บันทึกบัญชีธนาคารลง KV Storage
+        // ไม่ใช้ expirationTtl เพื่อให้ข้อมูลอยู่ตลอดจนกว่าจะ refresh ใหม่
+        // ป้องกันการขาดช่วงถ้า scheduled job ล่าช้า
         await env.BANK_KV.put(
           bankKey,
           JSON.stringify({
             accounts: accounts,
             total: accountsData.total || accounts.length,
             updated_at: now,
-          }),
-          {
-            expirationTtl: cacheTtl,
-          }
+            ttl_seconds: cacheTtl,
+          })
         );
 
         console.log(`[BankRefresh] ✅ Updated ${accounts.length} accounts for ${tenantId}`);

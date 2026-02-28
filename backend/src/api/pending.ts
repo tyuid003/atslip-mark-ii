@@ -24,3 +24,34 @@ export async function handleGetPendingTransactions(
     return errorResponse(error.message, 500);
   }
 }
+
+export async function handleDeletePendingTransaction(
+  env: Env,
+  transactionId: string
+): Promise<Response> {
+  try {
+    // ตรวจสอบว่ามีรายการนี้อยู่จริง
+    const existing = await env.DB.prepare(
+      `SELECT id FROM pending_transactions WHERE id = ?`
+    )
+      .bind(transactionId)
+      .first();
+
+    if (!existing) {
+      return errorResponse('Transaction not found', 404);
+    }
+
+    // ลบรายการ
+    await env.DB.prepare(
+      `DELETE FROM pending_transactions WHERE id = ?`
+    )
+      .bind(transactionId)
+      .run();
+
+    console.log(`[PendingAPI] Deleted transaction: ${transactionId}`);
+    return successResponse({ id: transactionId, deleted: true });
+  } catch (error: any) {
+    console.error('[PendingAPI] Delete error:', error);
+    return errorResponse(error.message, 500);
+  }
+}
