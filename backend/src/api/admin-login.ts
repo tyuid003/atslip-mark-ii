@@ -43,11 +43,12 @@ export const AdminLoginAPI = {
 
       const captchaData = await captchaResponse.json() as any;
 
+      // Admin API ส่ง response เป็น {id: "...", base64: "data:image/png;base64,..."}
       return jsonResponse({
         success: true,
         data: {
-          captcha_key: captchaData.captcha_key || captchaData.key,
-          captcha_image: captchaData.captcha_image || captchaData.image,
+          captcha_key: captchaData.id,
+          captcha_image: captchaData.base64,
         },
       });
     } catch (error: any) {
@@ -87,6 +88,7 @@ export const AdminLoginAPI = {
       const password = tenant.admin_password as string;
 
       // Login ไปที่ admin backend
+      // Admin API ต้องการ captcha_id และ captcha_code
       const loginResponse = await fetch(`${adminApiUrl}/api/login`, {
         method: 'POST',
         headers: {
@@ -96,7 +98,7 @@ export const AdminLoginAPI = {
         body: JSON.stringify({
           username,
           password,
-          captcha_key: body.captcha_key,
+          captcha_id: body.captcha_key,  // captcha_key คือ id ที่ได้จาก /api/captcha
           captcha_code: body.captcha_code,
         }),
       });
