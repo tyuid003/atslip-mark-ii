@@ -84,6 +84,11 @@ export const ScanAPI = {
       let slipData: any;
       try {
         slipData = await ScanService.scanSlip(file, easyslipToken);
+        console.log('[ScanAPI] ScanService.scanSlip() returned:', {
+          success: slipData?.success,
+          hasData: !!slipData?.data,
+          dataKeys: slipData?.data ? Object.keys(slipData.data) : [],
+        });
       } catch (scanError: any) {
         console.error('[ScanAPI] ❌ ScanService.scanSlip() threw exception:', scanError.message);
         return errorResponse(`EASYSLIP error: ${scanError.message}`, 400);

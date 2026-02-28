@@ -375,7 +375,14 @@ function renderBankAccountsList(accounts, metadata = []) {
     html = '<div class="bank-accounts-empty"><i data-lucide="inbox" size="48" style="color: var(--color-gray-400); margin-bottom: var(--space-md);"></i><p>ไม่พบบัญชีธนาคาร</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณาเชื่อมต่อ Admin Backend ก่อน</p></div>';
   } else {
     accounts.forEach((account) => {
-      const accountId = account.id || account.accountId;
+      // ใช้ accountId จาก API response หรือ fallback ไปใช้ id (แปลงเป็น string ทั้งหมด)
+      const accountId = String(account.accountId || account.id || account.accountNumber || '');
+      console.log('[renderBankAccountsList] Account:', {
+        id: account.id,
+        accountId: account.accountId,
+        accountNumber: account.accountNumber,
+        using: accountId,
+      });
       const meta = metadata.find(m => m.account_id === accountId);
       const englishName = meta?.account_name_en || '';
       const metaId = meta?.id || '';
@@ -856,6 +863,7 @@ async function uploadAndScanSlip(file) {
     // แสดง loading icon
     if (loadingIcon) {
       loadingIcon.style.display = 'block';
+      loadingIcon.classList.add('spin-icon'); // เพิ่ม class สำหรับ animation
       lucide.createIcons();
     }
     
@@ -889,9 +897,10 @@ async function uploadAndScanSlip(file) {
       resetSlipUpload();
     }, 1500);
   } finally {
-    // ซ่อน loading icon เสมอ (แม้เกิด error)
+    // ซ่อน loading icon เสมอ (แม้เกิด error) + ลบ animation
     if (loadingIcon) {
       loadingIcon.style.display = 'none';
+      loadingIcon.classList.remove('spin-icon'); // ลบ class animation เพื่อหยุดหมุน
       lucide.createIcons();
     }
   }

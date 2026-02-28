@@ -165,9 +165,10 @@ export const BankAccountsAPI = {
       });
       
       const account = accounts.find((acc: any) => {
-        const accId = acc.id || acc.accountId;
-        console.log('[BankAccountsAPI] Checking account:', accId, 'vs', accountId);
-        return accId === accountId;
+        const accId = String(acc.accountId || acc.id || acc.accountNumber || acc.account_number || '');
+        const searchId = String(accountId);
+        console.log('[BankAccountsAPI] Comparing:', accId, '===', searchId, '=>', accId === searchId);
+        return accId === searchId;
       });
 
       if (!account) {
