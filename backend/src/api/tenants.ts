@@ -164,16 +164,18 @@ export async function handleGetBankAccounts(
   tenantId: string
 ): Promise<Response> {
   try {
-    const accounts = await TenantService.getBankAccounts(env, tenantId);
+    const bankData = await TenantService.getBankAccounts(env, tenantId);
 
-    if (!accounts) {
-      return errorResponse(
-        'No bank accounts found. Please connect to admin first.',
-        404
-      );
+    // ถ้าไม่มีข้อมูล ส่ง empty array กลับไปแทน error 404
+    if (!bankData) {
+      return successResponse({
+        accounts: [],
+        total: 0,
+        updated_at: null,
+      });
     }
 
-    return successResponse(accounts);
+    return successResponse(bankData);
   } catch (error: any) {
     return errorResponse(error.message, 500);
   }
