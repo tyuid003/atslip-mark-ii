@@ -397,6 +397,24 @@ function bindUploadEvents() {
     const file = event.dataTransfer?.files && event.dataTransfer.files[0];
     handleSelectedSlip(file);
   });
+
+  // เพิ่ม Ctrl+V เพื่อ paste รูปจาก clipboard
+  document.addEventListener('paste', (event) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf('image') !== -1) {
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          handleSelectedSlip(file);
+        }
+        break;
+      }
+    }
+  });
 }
 
 function openSlipPicker() {
