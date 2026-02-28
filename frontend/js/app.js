@@ -542,15 +542,20 @@ function toggleTenantMenu(tenantId) {
 }
 
 async function toggleAutoDeposit(tenantId, enabled) {
+  const checkbox = document.querySelector(`input[data-tenant-id="${tenantId}"]`);
+  
   try {
     const response = await api.toggleAutoDeposit(tenantId, enabled);
     addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit สำหรับ tenant`);
-    // Reload tenants เพื่ออัพเดทสถานะ
-    await loadTenants();
+    
+    // ไม่ต้อง reload ทั้งหน้า แค่ state ถูกต้องแล้วโดย API
   } catch (error) {
     addNotification('❌ ไม่สามารถเปลี่ยนสถานะ Auto Deposit: ' + error.message);
-    // Reload เพื่อ reset toggle กลับเป็นค่าเดิม
-    await loadTenants();
+    
+    // ถ้าผิดพลาด เปลี่ยนกลับค่าเดิม
+    if (checkbox) {
+      checkbox.checked = !enabled;
+    }
   }
 }
 

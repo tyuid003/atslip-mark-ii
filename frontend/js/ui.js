@@ -79,13 +79,14 @@ const UI = {
           </div>
           <div class="tenant-card-actions">
             <label class="toggle-switch toggle-switch-compact">
-              <input type="checkbox" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
+              <input type="checkbox" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)" data-tenant-id="${tenant.id}">
               <span class="toggle-slider"></span>
             </label>
-            <button class="tenant-menu-btn" onclick="toggleTenantMenu('${tenant.id}')">
-              <i data-lucide="more-vertical" size="16"></i>
-            </button>
-            <div id="menu-${tenant.id}" class="tenant-menu-dropdown" style="display: none;">
+            <div class="tenant-card-menu">
+              <button class="tenant-menu-btn" onclick="toggleTenantMenu('${tenant.id}')">
+                <i data-lucide="more-vertical" size="16"></i>
+              </button>
+              <div id="menu-${tenant.id}" class="tenant-menu-dropdown" style="display: none;">
               <button class="tenant-menu-item" onclick="openEditTenantModal('${tenant.id}')">
                 <i data-lucide="edit" size="16"></i>
                 แก้ไข
