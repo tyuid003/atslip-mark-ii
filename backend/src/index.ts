@@ -2,6 +2,7 @@ import type { Env } from './types';
 import { handleOptions, errorResponse } from './utils/helpers';
 import * as TenantsAPI from './api/tenants';
 import * as LineOAsAPI from './api/lineoas';
+import * as PendingAPI from './api/pending';
 
 // ============================================================
 // MAIN ROUTER
@@ -119,6 +120,15 @@ export default {
     if (method === 'DELETE' && deleteLineOAMatch) {
       const lineOAId = decodeURIComponent(deleteLineOAMatch[1]);
       return await LineOAsAPI.handleDeleteLineOA(env, lineOAId);
+    }
+
+    // ============================================================
+    // PENDING ROUTES
+    // ============================================================
+
+    const pendingMatch = pathname.match(/^\/api\/pending-transactions\/?$/);
+    if (method === 'GET' && pendingMatch) {
+      return await PendingAPI.handleGetPendingTransactions(env, request);
     }
 
     // ============================================================

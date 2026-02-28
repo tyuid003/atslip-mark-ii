@@ -5,13 +5,18 @@
 let currentTenants = [];
 let currentTenantId = null;
 let currentLineOAs = [];
+let notifications = [];
+let unreadCount = 0;
 
 // ============================================================
 // INITIALIZATION
 // ============================================================
 
 async function init() {
+  bindUploadEvents();
   await loadTenants();
+  await loadPendingTransactions();
+  initializeNotifications();
 }
 
 // ============================================================
@@ -94,9 +99,11 @@ async function saveTenant() {
     if (tenantId) {
       await api.updateTenant(tenantId, data);
       UI.showToast('อัพเดทสำเร็จ', 'success');
+      addNotification('อัปเดต tenant สำเร็จ');
     } else {
       await api.createTenant(data);
       UI.showToast('เพิ่มเว็บใหม่สำเร็จ', 'success');
+      addNotification(`มี tenant ใหม่: ${name}`);
     }
 
     closeTenantModal();
@@ -119,9 +126,28 @@ async function deleteTenant(tenantId, tenantName) {
   try {
     await api.deleteTenant(tenantId);
     UI.showToast('ลบสำเร็จ', 'success');
+    addNotification(`ลบ tenant: ${tenantName}`);
     await loadTenants();
   } catch (error) {
     UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+  }
+}
+
+// ============================================================
+// TENANT SLIDER
+// ============================================================
+
+function scrollTenants(direction) {
+  const container = document.getElementById('tenantGrid');
+  const distance = 320;
+  if (!container) {
+    return;
+  }
+
+  if (direction === 'left') {
+    container.scrollBy({ left: -distance, behavior: 'smooth' });
+  } else {
+    container.scrollBy({ left: distance, behavior: 'smooth' });
   }
 }
 
@@ -130,8 +156,8 @@ async function deleteTenant(tenantId, tenantName) {
 // ============================================================
 
 async function connectAdmin(tenantId) {
-  const tenant = currentTenants.find(t => t.id === tenantId);
-  
+  const tenant = currentTenants.find((t) => t.id === tenantId);
+
   if (!confirm(`คุณต้องการเชื่อมต่อกับ Admin Backend ของ "${tenant.name}" หรือไม่?\n\nระบบจะทำการ Login และดึงรายชื่อบัญชีธนาคารมาเก็บไว้`)) {
     return;
   }
@@ -140,6 +166,7 @@ async function connectAdmin(tenantId) {
     UI.showToast('กำลังเชื่อมต่อ...', 'info');
     const response = await api.connectAdmin(tenantId);
     UI.showToast(`เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count} บัญชี`, 'success');
+    addNotification(`เชื่อมต่อ Admin สำเร็จ: ${tenant.name}`);
     await loadTenants();
   } catch (error) {
     UI.showToast('เชื่อมต่อล้มเหลว: ' + error.message, 'error');
@@ -147,8 +174,8 @@ async function connectAdmin(tenantId) {
 }
 
 async function disconnectAdmin(tenantId) {
-  const tenant = currentTenants.find(t => t.id === tenantId);
-  
+  const tenant = currentTenants.find((t) => t.id === tenantId);
+
   if (!confirm(`คุณต้องการยกเลิกการเชื่อมต่อกับ Admin Backend ของ "${tenant.name}" หรือไม่?\n\nข้อมูลบัญชีธนาคารจะถูกลบออก`)) {
     return;
   }
@@ -156,6 +183,7 @@ async function disconnectAdmin(tenantId) {
   try {
     await api.disconnectAdmin(tenantId);
     UI.showToast('ยกเลิกการเชื่อมต่อสำเร็จ', 'success');
+    addNotification(`ยกเลิกการเชื่อมต่อ: ${tenant.name}`);
     await loadTenants();
   } catch (error) {
     UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
@@ -172,12 +200,12 @@ async function viewBankAccounts(tenantId) {
     const accounts = response.data || [];
 
     let html = '';
-    
+
     if (accounts.length === 0) {
       html = '<div class="text-center text-muted">ไม่พบบัญชีธนาคาร<br>กรุณาเชื่อมต่อ Admin Backend ก่อน</div>';
     } else {
       html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
-      accounts.forEach(account => {
+      accounts.forEach((account) => {
         html += `
           <div class="card">
             <div class="card-body">
@@ -225,11 +253,11 @@ function closeBankAccountsModal() {
 
 async function manageLineOAs(tenantId) {
   currentTenantId = tenantId;
-  
+
   try {
     const response = await api.getLineOAs(tenantId);
     currentLineOAs = response.data || [];
-    
+
     renderLineOAList();
     document.getElementById('lineOAModal').style.display = 'flex';
     lucide.createIcons();
@@ -240,16 +268,16 @@ async function manageLineOAs(tenantId) {
 
 function renderLineOAList() {
   let html = '';
-  
+
   if (currentLineOAs.length === 0) {
     html = '<div class="text-center text-muted">ยังไม่มี LINE OA</div>';
   } else {
     html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
-    currentLineOAs.forEach(lineOA => {
+    currentLineOAs.forEach((lineOA) => {
       const statusBadge = lineOA.status === 'active'
         ? '<span class="badge badge-success">ใช้งาน</span>'
         : '<span class="badge badge-gray">ปิดใช้งาน</span>';
-      
+
       const webhookBadge = lineOA.webhook_enabled
         ? '<span class="badge badge-info">Webhook ON</span>'
         : '<span class="badge badge-gray">Webhook OFF</span>';
@@ -281,7 +309,7 @@ function renderLineOAList() {
     });
     html += '</div>';
   }
-  
+
   document.getElementById('lineOAList').innerHTML = html;
   lucide.createIcons();
 }
@@ -293,16 +321,16 @@ function closeLineOAModal() {
 function openAddLineOAModal() {
   const name = prompt('ชื่อ LINE OA:');
   if (!name) return;
-  
+
   const channel_id = prompt('Channel ID:');
   if (!channel_id) return;
-  
+
   const channel_secret = prompt('Channel Secret:');
   if (!channel_secret) return;
-  
+
   const channel_access_token = prompt('Channel Access Token:');
   if (!channel_access_token) return;
-  
+
   createLineOA({ name, channel_id, channel_secret, channel_access_token });
 }
 
@@ -310,6 +338,7 @@ async function createLineOA(data) {
   try {
     await api.createLineOA(currentTenantId, data);
     UI.showToast('เพิ่ม LINE OA สำเร็จ', 'success');
+    addNotification('เพิ่ม LINE OA สำเร็จ');
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
@@ -321,14 +350,130 @@ async function deleteLineOA(lineOAId, lineOAName) {
   if (!confirm(`คุณต้องการลบ LINE OA "${lineOAName}" หรือไม่?`)) {
     return;
   }
-  
+
   try {
     await api.deleteLineOA(lineOAId);
     UI.showToast('ลบสำเร็จ', 'success');
+    addNotification(`ลบ LINE OA: ${lineOAName}`);
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
     UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+  }
+}
+
+// ============================================================
+// PENDING TRANSACTIONS
+// ============================================================
+
+async function loadPendingTransactions() {
+  try {
+    const response = await api.getPendingTransactions(50);
+    const list = response.data || [];
+    UI.renderPendingTransactions(list.slice(0, 50));
+  } catch (error) {
+    UI.renderPendingTransactions([]);
+  }
+}
+
+// ============================================================
+// SLIP UPLOAD (UI ONLY)
+// ============================================================
+
+function bindUploadEvents() {
+  const dropzone = document.getElementById('slipDropzone');
+  const input = document.getElementById('slipUploadInput');
+
+  if (!dropzone || !input) {
+    return;
+  }
+
+  dropzone.addEventListener('click', () => input.click());
+
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    handleSelectedSlip(file);
+  });
+
+  dropzone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+  });
+
+  dropzone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer?.files && event.dataTransfer.files[0];
+    handleSelectedSlip(file);
+  });
+}
+
+function openSlipPicker() {
+  document.getElementById('slipUploadInput')?.click();
+}
+
+function handleSelectedSlip(file) {
+  if (!file) {
+    return;
+  }
+
+  const hint = document.getElementById('slipUploadHint');
+  if (hint) {
+    hint.textContent = `ไฟล์ที่เลือก: ${file.name}`;
+  }
+
+  UI.showToast('รับไฟล์แล้ว (พร้อมต่อกับ scan.ts ในขั้นตอนถัดไป)', 'info');
+  addNotification(`อัพโหลดสลิป: ${file.name}`);
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+function initializeNotifications() {
+  notifications = [];
+  unreadCount = 0;
+  UI.renderNotifications(notifications);
+  updateNotificationBadge();
+}
+
+function addNotification(title) {
+  const time = new Date().toLocaleString('th-TH');
+  notifications.unshift({ title, time });
+  if (notifications.length > 99) {
+    notifications = notifications.slice(0, 99);
+  }
+
+  unreadCount = Math.min(unreadCount + 1, 99);
+  UI.renderNotifications(notifications);
+  updateNotificationBadge();
+}
+
+function updateNotificationBadge() {
+  const badge = document.getElementById('notificationBadge');
+  if (!badge) {
+    return;
+  }
+
+  if (unreadCount <= 0) {
+    badge.style.display = 'none';
+    return;
+  }
+
+  badge.textContent = String(unreadCount);
+  badge.style.display = 'flex';
+}
+
+function toggleNotificationDropdown() {
+  const dropdown = document.getElementById('notificationDropdown');
+  if (!dropdown) {
+    return;
+  }
+
+  const isOpen = dropdown.style.display === 'block';
+  dropdown.style.display = isOpen ? 'none' : 'block';
+
+  if (!isOpen) {
+    unreadCount = 0;
+    updateNotificationBadge();
   }
 }
 

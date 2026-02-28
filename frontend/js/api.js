@@ -108,6 +108,14 @@ class API {
       method: 'DELETE',
     });
   }
+
+  // ============================================================
+  // PENDING TRANSACTIONS APIs
+  // ============================================================
+
+  async getPendingTransactions(limit = 50) {
+    return this.request(`/api/pending-transactions?limit=${limit}`);
+  }
 }
 
 // Create API instance

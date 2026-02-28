@@ -1,25 +1,61 @@
 /* ============================================================
-   TENANT GRID
+   TENANT SECTION
    ============================================================ */
 
 .tenant-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-sm);
 }
 
 .tenant-header h2 {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--color-gray-900);
 }
 
-.tenant-grid {
+.tenant-slider-shell {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: var(--space-lg);
-  margin-top: var(--space-lg);
+  grid-template-columns: 44px 1fr 44px;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.slider-arrow {
+  height: 44px;
+  width: 44px;
+  border: 1px solid var(--color-gray-200);
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  color: var(--color-gray-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.slider-arrow:hover {
+  background: var(--color-gray-100);
+}
+
+.tenant-grid {
+  display: flex;
+  gap: var(--space-md);
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: var(--space-xs) 0 var(--space-sm);
+}
+
+.tenant-grid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tenant-grid::-webkit-scrollbar-thumb {
+  background: var(--color-gray-300);
+  border-radius: var(--radius-full);
 }
 
 /* ============================================================
@@ -27,6 +63,8 @@
    ============================================================ */
 
 .tenant-card {
+  min-width: 300px;
+  max-width: 300px;
   position: relative;
   background: var(--color-white);
   border-radius: var(--radius-lg);
@@ -37,12 +75,12 @@
 }
 
 .tenant-card:hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   border-color: var(--color-primary);
 }
 
 .tenant-card-header {
-  padding: var(--space-lg);
+  padding: var(--space-md);
   border-bottom: 1px solid var(--color-gray-200);
   display: flex;
   justify-content: space-between;
@@ -51,29 +89,38 @@
 
 .tenant-card-info {
   flex: 1;
+  min-width: 0;
 }
 
 .tenant-card-name {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--color-gray-900);
   margin-bottom: var(--space-xs);
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .tenant-card-url {
-  font-size: 0.875rem;
+  font-size: 0.72rem;
   color: var(--color-gray-500);
   margin-bottom: var(--space-sm);
   font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tenant-card-status {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   flex-wrap: wrap;
+}
+
+.badge-disconnected {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
 }
 
 .tenant-card-menu {
@@ -84,7 +131,7 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: var(--space-sm);
+  padding: var(--space-xs);
   border-radius: var(--radius-md);
   color: var(--color-gray-400);
   display: flex;
@@ -109,18 +156,6 @@
   box-shadow: var(--shadow-lg);
   min-width: 200px;
   z-index: 100;
-  animation: slideDown var(--transition-fast);
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .tenant-menu-item {
@@ -132,7 +167,7 @@
   border: none;
   background: transparent;
   text-align: left;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   color: var(--color-gray-700);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -158,24 +193,26 @@
 }
 
 .tenant-card-body {
-  padding: var(--space-lg);
+  padding: var(--space-md);
 }
 
 .tenant-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
 }
 
 .tenant-stat {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
+  flex: 1;
+  min-width: 0;
 }
 
 .tenant-stat-icon {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -199,15 +236,89 @@
 }
 
 .tenant-stat-label {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--color-gray-500);
   margin-bottom: 2px;
 }
 
 .tenant-stat-value {
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-gray-900);
+}
+
+/* ============================================================
+   WORKBENCH
+   ============================================================ */
+
+.workbench-grid {
+  margin-top: var(--space-md);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.workbench-card {
+  min-height: 340px;
+}
+
+.upload-dropzone {
+  border: 1px dashed var(--color-gray-300);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  text-align: center;
+  background: var(--color-gray-50);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: center;
+  min-height: 230px;
+  cursor: pointer;
+}
+
+.upload-dropzone i {
+  color: var(--color-primary);
+}
+
+.pending-body {
+  padding-top: 0;
+}
+
+.pending-list {
+  max-height: 410px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.pending-item {
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  background: var(--color-white);
+}
+
+.pending-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.pending-item-bottom {
+  color: var(--color-gray-500);
+  font-size: 0.75rem;
+}
+
+.pending-empty {
+  border: 1px dashed var(--color-gray-300);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  color: var(--color-gray-500);
+  text-align: center;
 }
 
 /* ============================================================
@@ -244,4 +355,24 @@
 .empty-state p {
   color: var(--color-gray-500);
   margin-bottom: var(--space-lg);
+}
+
+@media (max-width: 900px) {
+  .tenant-slider-shell {
+    grid-template-columns: 36px 1fr 36px;
+  }
+
+  .slider-arrow {
+    height: 36px;
+    width: 36px;
+  }
+
+  .tenant-card {
+    min-width: 270px;
+    max-width: 270px;
+  }
+
+  .workbench-grid {
+    grid-template-columns: 1fr;
+  }
 }

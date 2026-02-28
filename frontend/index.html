@@ -21,7 +21,19 @@
     <div class="header-content">
       <div class="header-title">
         <h1>ATslip Mark-II</h1>
-        <span class="header-badge">v3.0</span>
+        <span class="header-badge">v2.0</span>
+      </div>
+      <div class="header-actions">
+        <button class="notification-btn" onclick="toggleNotificationDropdown()" aria-label="การแจ้งเตือน">
+          <i data-lucide="bell"></i>
+          <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+        </button>
+        <div id="notificationDropdown" class="notification-dropdown" style="display: none;">
+          <div class="notification-dropdown-header">
+            <h4>การแจ้งเตือน</h4>
+          </div>
+          <div id="notificationList" class="notification-list"></div>
+        </div>
       </div>
     </div>
   </header>
@@ -31,10 +43,9 @@
        ============================================================ -->
   <div class="container">
     <div class="tenant-header">
-      <h2>
-        <i data-lucide="building-2"></i>
-        จัดการเว็บ (Tenants)
-      </h2>
+      <div class="tenant-title-wrap">
+        <h2>รายชื่อเว็บ</h2>
+      </div>
       <button class="btn btn-primary btn-lg" onclick="openCreateTenantModal()">
         <i data-lucide="plus"></i>
         เพิ่มเว็บใหม่
@@ -60,8 +71,44 @@
       </button>
     </div>
 
-    <!-- Tenant Grid -->
-    <div id="tenantGrid" class="tenant-grid"></div>
+    <!-- Tenant Slider -->
+    <div class="tenant-slider-shell">
+      <button class="slider-arrow" onclick="scrollTenants('left')" aria-label="เลื่อนไปซ้าย">
+        <i data-lucide="chevron-left"></i>
+      </button>
+      <div id="tenantGrid" class="tenant-grid"></div>
+      <button class="slider-arrow" onclick="scrollTenants('right')" aria-label="เลื่อนไปขวา">
+        <i data-lucide="chevron-right"></i>
+      </button>
+    </div>
+
+    <!-- Workbench -->
+    <div class="workbench-grid">
+      <section class="card workbench-card">
+        <div class="card-header">
+          <h3 class="card-title">อัพโหลดสลิป</h3>
+        </div>
+        <div class="card-body">
+          <div class="upload-dropzone" id="slipDropzone">
+            <i data-lucide="upload-cloud"></i>
+            <p>ลากไฟล์สลิปมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
+            <input id="slipUploadInput" type="file" accept="image/*" hidden>
+            <button class="btn btn-secondary" onclick="openSlipPicker()">เลือกไฟล์</button>
+          </div>
+          <p id="slipUploadHint" class="form-help mt-2">รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG)</p>
+        </div>
+      </section>
+
+      <section class="card workbench-card">
+        <div class="card-header">
+          <h3 class="card-title">Pending Transactions</h3>
+          <span class="badge badge-warning">สูงสุด 50 รายการ</span>
+        </div>
+        <div class="card-body pending-body">
+          <div id="pendingList" class="pending-list"></div>
+        </div>
+      </section>
+    </div>
   </div>
 
   <!-- ============================================================
@@ -85,13 +132,13 @@
               type="text" 
               id="tenantName" 
               class="form-input" 
-              placeholder="เช่น BETAX2, WINSURE24"
+              placeholder="กรุณาใส่ชื่อเว็บของคุณ"
               required
             >
           </div>
 
           <div class="form-group">
-            <label class="form-label required" for="adminApiUrl">Admin API Base URL</label>
+            <label class="form-label required" for="adminApiUrl">ลิ้งก์ API</label>
             <input 
               type="url" 
               id="adminApiUrl" 
@@ -103,18 +150,18 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label required" for="adminUsername">Admin Username</label>
+            <label class="form-label required" for="adminUsername">ชื่อผู้ใช้ Admin</label>
             <input 
               type="text" 
               id="adminUsername" 
               class="form-input" 
-              placeholder="username"
+              placeholder="กรุณาใส่ชื่อผู้ใช้ Admin ของคุณ"
               required
             >
           </div>
 
           <div class="form-group">
-            <label class="form-label required" for="adminPassword">Admin Password</label>
+            <label class="form-label required" for="adminPassword">รหัสผ่าน Admin</label>
             <input 
               type="password" 
               id="adminPassword" 
@@ -130,7 +177,7 @@
               type="text" 
               id="easyslipToken" 
               class="form-input" 
-              placeholder="your-easyslip-token"
+              placeholder="กรุณาใส่ EasySlip API Token ของคุณ"
               required
             >
             <p class="form-help">Token สำหรับเรียกใช้ EasySlip API</p>
