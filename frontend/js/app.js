@@ -381,46 +381,45 @@ function renderBankAccountsList(accounts, metadata = []) {
       const metaId = meta?.id || '';
 
       html += `
-        <div class="bank-account-item" style="flex-direction: column; align-items: flex-start; gap: var(--space-sm);">
+        <div class="bank-account-item">
           <div style="display: flex; align-items: center; gap: var(--space-sm); width: 100%;">
             <img src="${account.bankIconUrl || ''}" alt="${account.bankName || 'Bank'}" class="bank-icon" onerror="this.style.display='none'">
             <div class="bank-info" style="flex: 1;">
               <div class="bank-name">${account.accountName || 'ไม่ระบุชื่อ'}</div>
               <div class="bank-number">${account.accountNumber || '-'}</div>
               ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
-            </div>
-          </div>
-          <div style="width: 100%; padding-left: 40px; display: flex; align-items: center; gap: var(--space-sm);">
-            ${metaId ? `
-            <div style="flex: 1;">
-              <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ (สำหรับจับคู่สลิป)</label>
-              <div style="display: flex; gap: var(--space-xs);">
-                <input 
-                  type="text" 
-                  value="${englishName}" 
-                  placeholder="Enter English name" 
-                  id="en-name-${metaId}"
-                  style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
-                >
-                <button 
-                  class="btn btn-sm btn-primary" 
-                  onclick="updateEnglishName('${metaId}')"
-                  style="padding: 6px var(--space-sm);"
-                >
-                  <i data-lucide="check" size="14"></i> บันทึก
-                </button>
+              ${metaId ? `
+              <div style="margin-top: var(--space-xs);">
+                <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ</label>
+                <div style="display: flex; gap: var(--space-xs);">
+                  <input 
+                    type="text" 
+                    value="${englishName}" 
+                    placeholder="Enter English name" 
+                    id="en-name-${metaId}"
+                    style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
+                  >
+                  <button 
+                    class="btn btn-sm btn-primary" 
+                    onclick="updateEnglishName('${metaId}')"
+                    style="padding: 6px var(--space-sm);"
+                  >
+                    <i data-lucide="check" size="14"></i> บันทึก
+                  </button>
+                </div>
               </div>
+              ` : ''}
             </div>
-            ` : `
+            ${!metaId ? `
             <button 
               class="btn btn-sm" 
               onclick="syncBankMetadata()" 
-              style="margin-left: auto; padding: 6px var(--space-sm); background: var(--color-gray-100); border: 1px solid var(--color-border);"
+              style="padding: 6px var(--space-sm); background: var(--color-gray-100); border: 1px solid var(--color-border); white-space: nowrap;"
               title="Sync เพื่อเพิ่มชื่ออังกฤษ"
             >
               <i data-lucide="plus" size="14"></i> เพิ่มชื่ออังกฤษ
             </button>
-            `}
+            ` : ''}
           </div>
         </div>
       `;
@@ -493,10 +492,7 @@ async function refreshBankAccountsNow() {
 async function syncBankMetadata() {
   if (!currentTenantId) return;
 
-  const syncIcon = document.getElementById('syncBankIcon');
-
   try {
-    syncIcon.classList.add('spin-icon');
     addNotification('🔄 กำลัง Sync metadata...');
 
     const response = await api.syncBankAccounts(currentTenantId);
@@ -508,8 +504,6 @@ async function syncBankMetadata() {
     await viewBankAccounts(currentTenantId);
   } catch (error) {
     addNotification('❌ Sync ไม่สำเร็จ: ' + error.message);
-  } finally {
-    syncIcon.classList.remove('spin-icon');
   }
 }
 

@@ -345,6 +345,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 64px; /* ป้องกันไม่ให้ card ขยายเมื่อมี loading icon */
 }
 
 .card-title {

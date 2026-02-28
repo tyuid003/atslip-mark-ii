@@ -42,37 +42,45 @@ export const ScanAPI = {
           .first();
 
         if (!tenant) {
+          console.error('[ScanAPI] ❌ Tenant not found:', tenantId);
           return errorResponse('Tenant not found or inactive', 404);
         }
 
         easyslipToken = tenant.easyslip_token as string;
+        console.log('[ScanAPI] Using tenant-specific token:', {
+          tenantId,
+          hasToken: !!easyslipToken,
+          tokenLength: easyslipToken?.length || 0,
+        });
       } else {
         // ใช้ token ของ tenant active ตัวแรก
         const tenant = await env.DB.prepare(
-          'SELECT easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
+          'SELECT id, name, easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
         )
           .bind('active', '')
           .first();
 
         if (!tenant) {
+          console.error('[ScanAPI] ❌ No active tenant with EASYSLIP token found');
           return errorResponse('No active tenant with EASYSLIP token found. Please configure EASYSLIP token in tenant settings.', 404);
         }
 
         easyslipToken = tenant.easyslip_token as string;
+        console.log('[ScanAPI] Using default tenant token:', {
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          hasToken: !!easyslipToken,
+          tokenLength: easyslipToken?.length || 0,
+        });
       }
 
       // ตรวจสอบว่า token มีค่าหรือไม่
-      if (!easyslipToken || easyslipToken.trim() === '') {
-        console.error('[ScanAPI] ❌ EASYSLIP token is empty');
-        return errorResponse('EASYSLIP token is not configured. Please update tenant settings.', 400);
+      if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
+        console.error('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
+        return errorResponse('EASYSLIP token is not configured or invalid. Please update tenant settings with a valid EASYSLIP API token.', 400);
       }
 
       // สแกนสลิป
-      console.log('[ScanAPI] Scanning slip with EASYSLIP...', {
-        tokenLength: easyslipToken.length,
-        tokenPreview: easyslipToken.substring(0, 10) + '...',
-      });
-      
       const slipData = await ScanService.scanSlip(file, easyslipToken);
 
       if (!slipData.success || slipData.data.status !== 200) {

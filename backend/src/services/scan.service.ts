@@ -81,8 +81,20 @@ export class ScanService {
    * สแกนสลิปโดยใช้ EASYSLIP API
    */
   static async scanSlip(imageFile: File, easyslipToken: string): Promise<EasySlipResponse> {
+    // Validate token ก่อน
+    if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
+      throw new Error('EASYSLIP token is empty or invalid. Please configure it in tenant settings.');
+    }
+
     const formData = new FormData();
     formData.append('file', imageFile);
+
+    console.log('[ScanService] Calling EASYSLIP API...', {
+      tokenLength: easyslipToken.length,
+      tokenStart: easyslipToken.substring(0, 8),
+      fileSize: imageFile.size,
+      fileType: imageFile.type,
+    });
 
     const response = await fetch('https://developer.easyslip.com/api/v1/verify', {
       method: 'POST',
@@ -93,7 +105,13 @@ export class ScanService {
     });
 
     if (!response.ok) {
-      throw new Error(`EASYSLIP API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('[ScanService] EASYSLIP API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      });
+      throw new Error(`EASYSLIP API error (${response.status}): ${response.statusText}. Please verify your EASYSLIP token is correct.`);
     }
 
     return await response.json() as EasySlipResponse;
