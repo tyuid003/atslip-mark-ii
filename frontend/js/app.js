@@ -341,6 +341,11 @@ async function disconnectAdmin(tenantId) {
 async function viewBankAccounts(tenantId) {
   currentTenantId = tenantId;
   
+  // ปิด dropdown menu ก่อนเปิด popup
+  document.querySelectorAll('.tenant-menu-dropdown').forEach((m) => {
+    m.style.display = 'none';
+  });
+  
   try {
     const response = await api.getBankAccounts(tenantId);
     const bankData = response.data || {};

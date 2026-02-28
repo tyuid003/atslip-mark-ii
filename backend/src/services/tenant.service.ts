@@ -323,13 +323,9 @@ export async function getBankAccounts(env: Env, tenantId: string) {
 
   const cache = JSON.parse(bankData);
 
-  // เช็คว่า cache หมดอายุหรือยัง
-  if (cache.expires_at < currentTimestamp()) {
-    await env.BANK_KV.delete(bankKey);
-    return null;
-  }
-
-  return cache.accounts;
+  // KV จะลบข้อมูลให้เองเมื่อ expirationTtl หมดอายุ
+  // ไม่ต้องเช็ค expires_at เอง
+  return cache; // คืนทั้ง object { accounts, total, updated_at }
 }
 
 // ============================================================
