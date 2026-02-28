@@ -49,24 +49,35 @@ export const ScanAPI = {
       } else {
         // ใช้ token ของ tenant active ตัวแรก
         const tenant = await env.DB.prepare(
-          'SELECT easyslip_token FROM tenants WHERE status = ? LIMIT 1'
+          'SELECT easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
         )
-          .bind('active')
+          .bind('active', '')
           .first();
 
         if (!tenant) {
-          return errorResponse('No active tenant found', 404);
+          return errorResponse('No active tenant with EASYSLIP token found. Please configure EASYSLIP token in tenant settings.', 404);
         }
 
         easyslipToken = tenant.easyslip_token as string;
       }
 
+      // ตรวจสอบว่า token มีค่าหรือไม่
+      if (!easyslipToken || easyslipToken.trim() === '') {
+        console.error('[ScanAPI] ❌ EASYSLIP token is empty');
+        return errorResponse('EASYSLIP token is not configured. Please update tenant settings.', 400);
+      }
+
       // สแกนสลิป
-      console.log('[ScanAPI] Scanning slip with EASYSLIP...');
+      console.log('[ScanAPI] Scanning slip with EASYSLIP...', {
+        tokenLength: easyslipToken.length,
+        tokenPreview: easyslipToken.substring(0, 10) + '...',
+      });
+      
       const slipData = await ScanService.scanSlip(file, easyslipToken);
 
       if (!slipData.success || slipData.data.status !== 200) {
-        return errorResponse('Failed to scan slip', 400);
+        console.error('[ScanAPI] ❌ EASYSLIP scan failed:', slipData);
+        return errorResponse(`Failed to scan slip: ${slipData.data?.message || 'Unknown error'}`, 400);
       }
 
       const slip = slipData.data.data;

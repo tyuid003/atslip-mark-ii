@@ -89,6 +89,7 @@
       <section class="card workbench-card">
         <div class="card-header">
           <h3 class="card-title">อัพโหลดสลิป</h3>
+          <i data-lucide="loader" id="uploadLoadingIcon" class="spin-icon" style="display: none; margin-left: auto;"></i>
         </div>
         <div class="card-body">
           <div class="upload-dropzone" id="slipDropzone">
@@ -275,10 +276,7 @@
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title">รายชื่อบัญชีธนาคาร</h3>
-        <button class="btn-icon" onclick="syncBankMetadata()" title="Sync Metadata" style="margin-right: auto; margin-left: var(--space-md);">
-          <i data-lucide="database" id="syncBankIcon"></i>
-        </button>
-        <button class="btn-icon" onclick="refreshBankAccountsNow()" title="รีเฟรช">
+        <button class="btn-icon" onclick="refreshBankAccountsNow()" title="รีเฟรช" style="margin-right: auto; margin-left: var(--space-md);">
           <i data-lucide="refresh-cw" id="refreshBankIcon"></i>
         </button>
         <button class="modal-close" onclick="closeBankAccountsModal()">

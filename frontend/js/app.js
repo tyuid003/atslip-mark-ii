@@ -390,27 +390,38 @@ function renderBankAccountsList(accounts, metadata = []) {
               ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
             </div>
           </div>
-          ${metaId ? `
-          <div style="width: 100%; padding-left: 40px;">
-            <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ (สำหรับจับคู่สลิป)</label>
-            <div style="display: flex; gap: var(--space-xs);">
-              <input 
-                type="text" 
-                value="${englishName}" 
-                placeholder="Enter English name" 
-                id="en-name-${metaId}"
-                style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
-              >
-              <button 
-                class="btn btn-sm btn-primary" 
-                onclick="updateEnglishName('${metaId}')"
-                style="padding: 6px var(--space-sm);"
-              >
-                <i data-lucide="check" size="14"></i> บันทึก
-              </button>
+          <div style="width: 100%; padding-left: 40px; display: flex; align-items: center; gap: var(--space-sm);">
+            ${metaId ? `
+            <div style="flex: 1;">
+              <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ (สำหรับจับคู่สลิป)</label>
+              <div style="display: flex; gap: var(--space-xs);">
+                <input 
+                  type="text" 
+                  value="${englishName}" 
+                  placeholder="Enter English name" 
+                  id="en-name-${metaId}"
+                  style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
+                >
+                <button 
+                  class="btn btn-sm btn-primary" 
+                  onclick="updateEnglishName('${metaId}')"
+                  style="padding: 6px var(--space-sm);"
+                >
+                  <i data-lucide="check" size="14"></i> บันทึก
+                </button>
+              </div>
             </div>
+            ` : `
+            <button 
+              class="btn btn-sm" 
+              onclick="syncBankMetadata()" 
+              style="margin-left: auto; padding: 6px var(--space-sm); background: var(--color-gray-100); border: 1px solid var(--color-border);"
+              title="Sync เพื่อเพิ่มชื่ออังกฤษ"
+            >
+              <i data-lucide="plus" size="14"></i> เพิ่มชื่ออังกฤษ
+            </button>
+            `}
           </div>
-          ` : ''}
         </div>
       `;
     });
@@ -816,7 +827,15 @@ function handleSelectedSlip(file) {
 }
 
 async function uploadAndScanSlip(file) {
+  const loadingIcon = document.getElementById('uploadLoadingIcon');
+  
   try {
+    // แสดง loading icon
+    if (loadingIcon) {
+      loadingIcon.style.display = 'block';
+      lucide.createIcons();
+    }
+    
     const result = await api.uploadSlip(file);
     
     if (result.success) {
@@ -841,6 +860,16 @@ async function uploadAndScanSlip(file) {
   } catch (error) {
     addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
     console.error('Upload error:', error);
+    
+    // รีเซ็ต upload zone เมื่อเกิด error
+    setTimeout(() => {
+      resetSlipUpload();
+    }, 1500);
+  } finally {
+    // ซ่อน loading icon
+    if (loadingIcon) {
+      loadingIcon.style.display = 'none';
+    }
   }
 }
 
