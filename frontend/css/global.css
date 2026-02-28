@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap');
 @import './variables.css';
 
 * {
@@ -8,7 +8,7 @@
 }
 
 body {
-  font-family: var(--font-Sans);
+  font-family: 'Noto Sans Thai', var(--font-Sans);
   background-color: var(--color-gray-50);
   color: var(--color-gray-900);
   line-height: 1.6;
@@ -70,6 +70,53 @@ body {
   position: relative;
   display: flex;
   align-items: center;
+  gap: var(--space-md);
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-gray-700);
+  user-select: none;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background-color: var(--color-gray-300);
+  border-radius: 11px;
+  transition: background-color var(--transition-normal);
+  display: inline-block;
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background-color: var(--color-white);
+  border-radius: 50%;
+  transition: left var(--transition-normal);
+  box-shadow: var(--shadow-sm);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::after {
+  left: 20px;
 }
 
 .notification-btn {
@@ -88,6 +135,25 @@ body {
 
 .notification-btn:hover {
   background: var(--color-gray-100);
+}
+
+.filter-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  color: var(--color-gray-600);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.filter-btn:hover {
+  background: var(--color-gray-100);
+  color: var(--color-primary);
 }
 
 .notification-badge {

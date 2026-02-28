@@ -23,8 +23,11 @@
         <h1>ATslip Mark-II</h1>
         <span class="header-badge">v2.0</span>
       </div>
-      <div class="header-actions">
-        <button class="notification-btn" onclick="toggleNotificationDropdown()" aria-label="การแจ้งเตือน">
+      <div class="header-actions">        <label class=\"toggle-switch\">
+          <input type=\"checkbox\" id=\"autoDepositToggle\" onchange=\"toggleAutoDeposit()\">
+          <span class=\"toggle-slider\"></span>
+          <span class=\"toggle-label\">Auto Deposit</span>
+        </label>        <button class="notification-btn" onclick="toggleNotificationDropdown()" aria-label="การแจ้งเตือน">
           <i data-lucide="bell"></i>
           <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
         </button>
@@ -102,7 +105,9 @@
       <section class="card workbench-card">
         <div class="card-header">
           <h3 class="card-title">Pending Transactions</h3>
-          <span class="badge badge-warning">สูงสุด 50 รายการ</span>
+          <button class=\"filter-btn\" onclick=\"openPendingFilter()\" aria-label=\"Filter pending transactions\">
+            <i data-lucide=\"filter\"></i>
+          </button>
         </div>
         <div class="card-body pending-body">
           <div id="pendingList" class="pending-list"></div>

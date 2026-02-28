@@ -30,7 +30,7 @@ async function loadTenants() {
     currentTenants = response.data || [];
     UI.renderTenants(currentTenants);
   } catch (error) {
-    UI.showToast('ไม่สามารถโหลดข้อมูลได้: ' + error.message, 'error');
+    addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   } finally {
     UI.hideLoading();
   }
@@ -62,7 +62,7 @@ async function openEditTenantModal(tenantId) {
     document.getElementById('tenantModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
-    UI.showToast('ไม่สามารถโหลดข้อมูลได้: ' + error.message, 'error');
+    addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   }
 }
 
@@ -79,7 +79,7 @@ async function saveTenant() {
   const easyslip_token = document.getElementById('easyslipToken').value;
 
   if (!name || !admin_api_url || !admin_username || !admin_password || !easyslip_token) {
-    UI.showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'warning');
+    addNotification('⚠️ กรุณากรอกข้อมูลให้ครบถ้วน');
     return;
   }
 
@@ -98,18 +98,16 @@ async function saveTenant() {
 
     if (tenantId) {
       await api.updateTenant(tenantId, data);
-      UI.showToast('อัพเดทสำเร็จ', 'success');
-      addNotification('อัปเดต tenant สำเร็จ');
+      addNotification('✅ อัพเดท tenant สำเร็จ');
     } else {
       await api.createTenant(data);
-      UI.showToast('เพิ่มเว็บใหม่สำเร็จ', 'success');
-      addNotification(`มี tenant ใหม่: ${name}`);
+      addNotification(`✅ มี tenant ใหม่: ${name}`);
     }
 
     closeTenantModal();
     await loadTenants();
   } catch (error) {
-    UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
   } finally {
     const saveBtn = document.getElementById('saveTenantBtn');
     saveBtn.disabled = false;
@@ -125,11 +123,10 @@ async function deleteTenant(tenantId, tenantName) {
 
   try {
     await api.deleteTenant(tenantId);
-    UI.showToast('ลบสำเร็จ', 'success');
-    addNotification(`ลบ tenant: ${tenantName}`);
+    addNotification(`✅ ลบ tenant: ${tenantName}`);
     await loadTenants();
   } catch (error) {
-    UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
   }
 }
 
@@ -163,13 +160,12 @@ async function connectAdmin(tenantId) {
   }
 
   try {
-    UI.showToast('กำลังเชื่อมต่อ...', 'info');
+    addNotification('⏳ กำลังเชื่อมต่อ...');
     const response = await api.connectAdmin(tenantId);
-    UI.showToast(`เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count} บัญชี`, 'success');
-    addNotification(`เชื่อมต่อ Admin สำเร็จ: ${tenant.name}`);
+    addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count} บัญชี`);
     await loadTenants();
   } catch (error) {
-    UI.showToast('เชื่อมต่อล้มเหลว: ' + error.message, 'error');
+    addNotification('❌ เชื่อมต่อล้มเหลว: ' + error.message);
   }
 }
 
@@ -182,11 +178,10 @@ async function disconnectAdmin(tenantId) {
 
   try {
     await api.disconnectAdmin(tenantId);
-    UI.showToast('ยกเลิกการเชื่อมต่อสำเร็จ', 'success');
-    addNotification(`ยกเลิกการเชื่อมต่อ: ${tenant.name}`);
+    addNotification(`✅ ยกเลิกการเชื่อมต่อ: ${tenant.name}`);
     await loadTenants();
   } catch (error) {
-    UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
   }
 }
 
@@ -239,7 +234,7 @@ async function viewBankAccounts(tenantId) {
     document.getElementById('bankAccountsModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
-    UI.showToast('ไม่สามารถโหลดข้อมูลได้: ' + error.message, 'error');
+    addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   }
 }
 
@@ -262,7 +257,7 @@ async function manageLineOAs(tenantId) {
     document.getElementById('lineOAModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
-    UI.showToast('ไม่สามารถโหลดข้อมูลได้: ' + error.message, 'error');
+    addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   }
 }
 
@@ -337,12 +332,11 @@ function openAddLineOAModal() {
 async function createLineOA(data) {
   try {
     await api.createLineOA(currentTenantId, data);
-    UI.showToast('เพิ่ม LINE OA สำเร็จ', 'success');
-    addNotification('เพิ่ม LINE OA สำเร็จ');
+    addNotification('✅ เพิ่ม LINE OA สำเร็จ');
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
-    UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
   }
 }
 
@@ -353,12 +347,11 @@ async function deleteLineOA(lineOAId, lineOAName) {
 
   try {
     await api.deleteLineOA(lineOAId);
-    UI.showToast('ลบสำเร็จ', 'success');
-    addNotification(`ลบ LINE OA: ${lineOAName}`);
+    addNotification(`✅ ลบ LINE OA: ${lineOAName}`);
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
-    UI.showToast('เกิดข้อผิดพลาด: ' + error.message, 'error');
+    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
   }
 }
 
@@ -420,8 +413,7 @@ function handleSelectedSlip(file) {
     hint.textContent = `ไฟล์ที่เลือก: ${file.name}`;
   }
 
-  UI.showToast('รับไฟล์แล้ว (พร้อมต่อกับ scan.ts ในขั้นตอนถัดไป)', 'info');
-  addNotification(`อัพโหลดสลิป: ${file.name}`);
+  addNotification(`📄 อัพโหลดสลิป: ${file.name}`);
 }
 
 // ============================================================
@@ -483,6 +475,31 @@ function toggleNotificationDropdown() {
 
 function toggleTenantMenu(tenantId) {
   UI.toggleTenantMenu(tenantId);
+}
+
+function toggleAutoDeposit() {
+  const toggle = document.getElementById('autoDepositToggle');
+  const enabled = toggle.checked;
+  addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit`);
+  console.log('Auto Deposit:', enabled);
+  // TODO: Save to backend when API is ready
+}
+
+function openPendingFilter() {
+  const tenantName = prompt('ค้นหาชื่อเว็บ (เว้นว่างเพื่อไม่กรอง):');
+  let filtered = [];
+  
+  try {
+    const response = api.getPendingTransactions(50);
+    if (tenantName && tenantName.trim()) {
+      // Filter by tenant name or website name
+      console.log('Filtering by:', tenantName);
+    }
+    // TODO: Implement actual filtering when backend supports it
+    addNotification('filters: ' + (tenantName || 'ทั้งหมด'));
+  } catch (error) {
+    addNotification('❌ ไม่สามารถโหลดข้อมูล');
+  }
 }
 
 // ============================================================
