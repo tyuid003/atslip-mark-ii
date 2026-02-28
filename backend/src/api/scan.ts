@@ -182,6 +182,18 @@ export const ScanAPI = {
         console.log('[ScanAPI] ⚠️ No active session for tenant');
       }
 
+      // ตรวจสอบสลิปซ้ำก่อนบันทึก
+      const existingSlip = await env.DB.prepare(
+        `SELECT id FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
+      )
+        .bind(slip.transRef)
+        .first();
+
+      if (existingSlip) {
+        console.log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
+        return errorResponse('สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)', 400);
+      }
+
       // บันทึกใน pending_transactions
       const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const now = Math.floor(Date.now() / 1000);

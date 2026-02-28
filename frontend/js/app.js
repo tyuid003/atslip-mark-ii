@@ -909,9 +909,22 @@ async function uploadAndScanSlip(file) {
 function resetSlipUpload() {
   const dropzone = document.getElementById('slipDropzone');
   const input = document.getElementById('slipUploadInput');
+  const loadingIcon = document.getElementById('uploadLoadingIcon');
+  const hint = document.getElementById('slipUploadHint');
   
   if (input) {
     input.value = '';
+  }
+  
+  // ซ่อน loading icon
+  if (loadingIcon) {
+    loadingIcon.style.display = 'none';
+    loadingIcon.classList.remove('spin-icon');
+  }
+  
+  // รีเซ็ต hint text
+  if (hint) {
+    hint.textContent = 'รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG)';
   }
   
   if (dropzone) {

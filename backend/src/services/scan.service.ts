@@ -262,9 +262,11 @@ export class ScanService {
 
       // ค้นหาบัญชีที่ตรงกัน
       for (const account of accounts) {
-        let matched = false;
+        let bankMatched = false;
+        let accountMatched = false;
+        let nameMatched = false;
 
-        // 1. Match ชื่อธนาคาร
+        // 1. Match ชื่อธนาคาร (จำเป็น)
         if (receiverBank.name || receiverBank.short || receiverBank.id) {
           const receiverBankVariants = this.normalizeBankName(
             receiverBank.name || receiverBank.short || receiverBank.id || ''
@@ -273,61 +275,66 @@ export class ScanService {
           const accountBankName = account.bankName || account.bank_name || '';
           const accountBankVariants = this.normalizeBankName(accountBankName);
 
-          const bankMatched = receiverBankVariants.some(rv =>
+          bankMatched = receiverBankVariants.some(rv =>
             accountBankVariants.some(av => av.includes(rv) || rv.includes(av))
           );
+        }
 
-          if (bankMatched) {
-            matched = true;
-          }
+        // ถ้าธนาคารไม่ตรง ข้ามไปบัญชีถัดไปเลย
+        if (!bankMatched) {
+          continue;
         }
 
         // 2. Match เลขบัญชี (ขั้นต่ำ 3 ตัว)
-        if (!matched) {
-          const accountNumber = (account.accountNumber || account.account_number || '').replace(/[^0-9]/g, '');
-          const receiverAccountClean = receiverAccount.replace(/[^0-9]/g, '');
+        const accountNumber = (account.accountNumber || account.account_number || '').replace(/[^0-9]/g, '');
+        const receiverAccountClean = receiverAccount.replace(/[^0-9]/g, '');
 
-          if (accountNumber.length >= minAccountDigits && receiverAccountClean.length >= minAccountDigits) {
-            for (let i = 0; i <= receiverAccountClean.length - minAccountDigits; i++) {
-              const substring = receiverAccountClean.substring(i, i + minAccountDigits);
-              if (accountNumber.includes(substring)) {
-                matched = true;
-                break;
-              }
+        if (accountNumber.length >= minAccountDigits && receiverAccountClean.length >= minAccountDigits) {
+          for (let i = 0; i <= receiverAccountClean.length - minAccountDigits; i++) {
+            const substring = receiverAccountClean.substring(i, i + minAccountDigits);
+            if (accountNumber.includes(substring)) {
+              accountMatched = true;
+              break;
             }
           }
         }
 
-        // 3. Match ชื่อผู้รับ
-        if (!matched && (receiverNameTh || receiverNameEn)) {
+        // 3. Match ชื่อผู้รับ (ถ้าเลขบัญชีไม่ตรง)
+        if (!accountMatched && (receiverNameTh || receiverNameEn)) {
           // ดึง metadata จาก D1 (ถ้ามี)
           const metadata = await env.DB.prepare(
             `SELECT account_name_th, account_name_en FROM tenant_bank_accounts 
              WHERE tenant_id = ? AND account_id = ?`
           )
-            .bind(tenantId, account.id || account.accountId)
+            .bind(tenantId, account.accountNumber || account.account_number || account.id || account.accountId)
             .first();
 
-          const accountNameTh = metadata?.account_name_th as string || account.accountName || account.account_name || '';
+          const accountNameTh = metadata?.account_name_th as string || account.accountName || account.name || account.account_name || '';
           const accountNameEn = metadata?.account_name_en as string || '';
 
           // Match ภาษาไทย
           if (receiverNameTh && accountNameTh) {
             if (this.matchName(receiverNameTh, accountNameTh, minNameChars)) {
-              matched = true;
+              nameMatched = true;
             }
           }
 
           // Match ภาษาอังกฤษ
-          if (!matched && receiverNameEn && accountNameEn) {
+          if (!nameMatched && receiverNameEn && accountNameEn) {
             if (this.matchName(receiverNameEn, accountNameEn, minNameChars)) {
-              matched = true;
+              nameMatched = true;
             }
           }
         }
 
-        // ถ้า match แล้วให้ return tenant นี้
-        if (matched) {
+        // ถ้า match ธนาคาร AND (เลขบัญชี OR ชื่อ) ให้ return tenant นี้
+        if (bankMatched && (accountMatched || nameMatched)) {
+          console.log('[ScanService] ✅ Matched tenant:', {
+            tenantId,
+            bankMatched,
+            accountMatched,
+            nameMatched,
+          });
           return {
             id: tenantId,
             team_id: tenant.team_id as string,
