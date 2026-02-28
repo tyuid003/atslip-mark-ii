@@ -83,9 +83,21 @@ export const ScanAPI = {
       // สแกนสลิป
       const slipData = await ScanService.scanSlip(file, easyslipToken);
 
-      if (!slipData.success || slipData.data.status !== 200) {
-        console.error('[ScanAPI] ❌ EASYSLIP scan failed:', slipData);
-        return errorResponse(`Failed to scan slip: ${slipData.data?.message || 'Unknown error'}`, 400);
+      console.log('[ScanAPI] EASYSLIP response:', {
+        success: slipData.success,
+        status: slipData.data?.status,
+        message: slipData.data?.message,
+        hasData: !!slipData.data?.data,
+      });
+
+      if (!slipData.success) {
+        console.error('[ScanAPI] ❌ EASYSLIP API call failed:', JSON.stringify(slipData, null, 2));
+        return errorResponse(`EASYSLIP error: ${slipData.data?.message || 'API request failed'}`, 400);
+      }
+
+      if (slipData.data.status !== 200) {
+        console.error('[ScanAPI] ❌ EASYSLIP returned non-200 status:', JSON.stringify(slipData.data, null, 2));
+        return errorResponse(`EASYSLIP error (${slipData.data.status}): ${slipData.data?.message || 'Scan failed'}`, 400);
       }
 
       const slip = slipData.data.data;

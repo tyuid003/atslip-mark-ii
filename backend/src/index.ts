@@ -110,6 +110,16 @@ export default {
       return await BankAccountsAPI.handleSyncBankAccounts(env, tenantId);
     }
 
+    // POST /api/tenants/:tenantId/bank-accounts/:accountId/metadata - สร้าง metadata สำหรับบัญชีเดียว
+    const createMetadataMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/bank-accounts\/([^\/]+)\/metadata$/
+    );
+    if (method === 'POST' && createMetadataMatch) {
+      const tenantId = decodeURIComponent(createMetadataMatch[1]);
+      const accountId = decodeURIComponent(createMetadataMatch[2]);
+      return await BankAccountsAPI.handleCreateMetadata(env, tenantId, accountId);
+    }
+
     // PATCH /api/bank-accounts/:id/english-name - แก้ไขชื่อภาษาอังกฤษ
     const updateEnNameMatch = pathname.match(
       /^\/api\/bank-accounts\/([^\/]+)\/english-name$/

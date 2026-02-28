@@ -194,6 +194,12 @@ class API {
     });
   }
 
+  async createBankAccountMetadata(tenantId, accountId) {
+    return this.request(`/api/tenants/${tenantId}/bank-accounts/${accountId}/metadata`, {
+      method: 'POST',
+    });
+  }
+
   async getBankAccountsMetadata(tenantId) {
     return this.request(`/api/tenants/${tenantId}/bank-accounts/metadata`);
   }

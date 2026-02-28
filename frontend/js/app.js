@@ -413,9 +413,9 @@ function renderBankAccountsList(accounts, metadata = []) {
             ${!metaId ? `
             <button 
               class="btn btn-sm" 
-              onclick="syncBankMetadata()" 
+              onclick="addEnglishName('${accountId}')" 
               style="padding: 6px var(--space-sm); background: var(--color-gray-100); border: 1px solid var(--color-border); white-space: nowrap;"
-              title="Sync เพื่อเพิ่มชื่ออังกฤษ"
+              title="เพิ่มชื่ออังกฤษสำหรับบัญชีนี้"
             >
               <i data-lucide="plus" size="14"></i> เพิ่มชื่ออังกฤษ
             </button>
@@ -486,6 +486,28 @@ async function refreshBankAccountsNow() {
     lucide.createIcons();
   } finally {
     refreshIcon.classList.remove('spin-icon');
+  }
+}
+
+async function addEnglishName(accountId) {
+  if (!currentTenantId) return;
+
+  try {
+    addNotification('📄 กำลังเพิ่ลข้อมูลบัญชี...');
+
+    const response = await api.createBankAccountMetadata(currentTenantId, accountId);
+    const data = response.data || {};
+
+    if (data.exists) {
+      addNotification('ℹ️ ข้อมูลมีอยู่แล้ว');
+    } else {
+      addNotification('✅ เพิ่มข้อมูลบัญชีสำเร็จ! ตอนนี้สามารถกรอกชื่ออังกฤษได้แล้ว');
+    }
+
+    // Reload bank accounts with metadata
+    await viewBankAccounts(currentTenantId);
+  } catch (error) {
+    addNotification('❌ ไม่สามารถเพิ่มข้อมูลได้: ' + error.message);
   }
 }
 

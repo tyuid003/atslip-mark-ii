@@ -111,6 +111,99 @@ export const BankAccountsAPI = {
   },
 
   /**
+   * POST /api/tenants/:tenantId/bank-accounts/:accountId/metadata
+   * สร้าง metadata สำหรับบัญชีเดียว
+   */
+  async handleCreateMetadata(env: Env, tenantId: string, accountId: string): Promise<Response> {
+    try {
+      // ดึงข้อมูล tenant
+      const tenant = await env.DB.prepare(
+        'SELECT id, team_id FROM tenants WHERE id = ?'
+      )
+        .bind(tenantId)
+        .first();
+
+      if (!tenant) {
+        return errorResponse('Tenant not found', 404);
+      }
+
+      const teamId = tenant.team_id as string;
+
+      // ตรวจสอบว่ามี metadata อยู่แล้วหรือไม่
+      const existing = await env.DB.prepare(
+        `SELECT id FROM tenant_bank_accounts WHERE tenant_id = ? AND account_id = ?`
+      )
+        .bind(tenantId, accountId)
+        .first();
+
+      if (existing) {
+        return successResponse(
+          { id: existing.id, exists: true },
+          'Metadata already exists'
+        );
+      }
+
+      // ดึงข้อมูลบัญชีจาก KV
+      const bankKey = `tenant:${tenantId}:banks`;
+      const bankData = await env.BANK_KV.get(bankKey);
+
+      if (!bankData) {
+        return errorResponse('No bank accounts found in cache', 404);
+      }
+
+      const cache = JSON.parse(bankData);
+      const accounts = cache.accounts || [];
+      const account = accounts.find((acc: any) => 
+        (acc.id || acc.accountId) === accountId
+      );
+
+      if (!account) {
+        return errorResponse('Account not found', 404);
+      }
+
+      // สร้าง metadata ใหม่
+      const id = `tba-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const now = Math.floor(Date.now() / 1000);
+      const accountNumber = account.accountNumber || account.account_number || '';
+      const accountName = account.accountName || account.account_name || '';
+      const bankId = account.bankId || account.bank_id || '';
+      const bankName = account.bankName || account.bank_name || '';
+      const bankShort = account.bankShort || account.bank_short || '';
+
+      await env.DB.prepare(
+        `INSERT INTO tenant_bank_accounts 
+         (id, team_id, tenant_id, account_id, account_number, account_name_th, account_name_en, 
+          bank_id, bank_name, bank_short, status, created_at, updated_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          id,
+          teamId,
+          tenantId,
+          accountId,
+          accountNumber,
+          accountName,
+          '', // account_name_en (empty)
+          bankId,
+          bankName,
+          bankShort,
+          'active',
+          now,
+          now
+        )
+        .run();
+
+      return successResponse(
+        { id, account_id: accountId, created: true },
+        'Metadata created successfully'
+      );
+    } catch (error: any) {
+      console.error('[BankAccountsAPI] Error creating metadata:', error);
+      return errorResponse(error.message, 500);
+    }
+  },
+
+  /**
    * PATCH /api/bank-accounts/:id/english-name
    * แก้ไขชื่อภาษาอังกฤษของบัญชี
    */
