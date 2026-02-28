@@ -125,6 +125,15 @@ export default {
       return await AdminLoginAPI.handleLogin(env, request, tenantId);
     }
 
+    // POST /api/tenants/:id/refresh-accounts - รีเฟรชบัญชีธนาคาร
+    const refreshAccountsMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/refresh-accounts$/
+    );
+    if (method === 'POST' && refreshAccountsMatch) {
+      const tenantId = decodeURIComponent(refreshAccountsMatch[1]);
+      return await AdminLoginAPI.handleRefreshAccounts(env, tenantId);
+    }
+
     // ============================================================
     // LINE OA ROUTES
     // ============================================================

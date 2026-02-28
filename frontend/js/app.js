@@ -339,51 +339,87 @@ async function disconnectAdmin(tenantId) {
 // ============================================================
 
 async function viewBankAccounts(tenantId) {
+  currentTenantId = tenantId;
+  
   try {
     const response = await api.getBankAccounts(tenantId);
-    const accounts = response.data || [];
+    const bankData = response.data || {};
+    const accounts = bankData.accounts || [];
 
-    let html = '';
-
-    if (accounts.length === 0) {
-      html = '<div class="text-center text-muted">ไม่พบบัญชีธนาคาร<br>กรุณาเชื่อมต่อ Admin Backend ก่อน</div>';
-    } else {
-      html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
-      accounts.forEach((account) => {
-        html += `
-          <div class="card">
-            <div class="card-body">
-              <div style="display: flex; align-items: center; gap: var(--space-md);">
-                <div style="
-                  width: 48px;
-                  height: 48px;
-                  background: var(--color-primary-light);
-                  color: var(--color-primary);
-                  border-radius: var(--radius-md);
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                ">
-                  <i data-lucide="building" size="24"></i>
-                </div>
-                <div style="flex: 1;">
-                  <div style="font-weight: 600; margin-bottom: 4px;">${account.accountName}</div>
-                  <div style="font-family: var(--font-mono); color: var(--color-gray-600);">${account.accountNumber}</div>
-                  ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500);">${account.bankName}</div>` : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      });
-      html += '</div>';
-    }
-
-    document.getElementById('bankAccountsList').innerHTML = html;
+    renderBankAccountsList(accounts);
     document.getElementById('bankAccountsModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
     addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
+  }
+}
+
+function renderBankAccountsList(accounts) {
+  let html = '';
+
+  if (accounts.length === 0) {
+    html = '<div class="bank-accounts-empty"><i data-lucide="inbox" size="48" style="color: var(--color-gray-400); margin-bottom: var(--space-md);"></i><p>ไม่พบบัญชีธนาคาร</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณาเชื่อมต่อ Admin Backend ก่อน</p></div>';
+  } else {
+    accounts.forEach((account) => {
+      html += `
+        <div class="bank-account-item">
+          <img src="${account.bankIconUrl || ''}" alt="${account.bankName || 'Bank'}" class="bank-icon" onerror="this.style.display='none'">
+          <div class="bank-info">
+            <div class="bank-name">${account.accountName || 'ไม่ระบุชื่อ'}</div>
+            <div class="bank-number">${account.accountNumber || '-'}</div>
+            ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  document.getElementById('bankAccountsList').innerHTML = html;
+  lucide.createIcons();
+}
+
+async function refreshBankAccountsNow() {
+  if (!currentTenantId) return;
+
+  const refreshIcon = document.getElementById('refreshBankIcon');
+  const listContainer = document.getElementById('bankAccountsList');
+
+  try {
+    // แสดง loading animation
+    refreshIcon.classList.add('spin-icon');
+    listContainer.innerHTML = '<div class="bank-accounts-loading"><i data-lucide="loader" size="32" class="spin-icon"></i><p style="margin-top: var(--space-md);">กำลังรีเฟรชข้อมูล...</p></div>';
+    lucide.createIcons();
+
+    const response = await api.refreshBankAccounts(currentTenantId);
+    const bankData = response.data || {};
+    
+    // แสดงข้อความสำเร็จ
+    addNotification(`✅ รีเฟรชบัญชีธนาคารสำเร็จ (${bankData.account_count} บัญชี)`);
+
+    // โหลดข้อมูลใหม่
+    const accountsResponse = await api.getBankAccounts(currentTenantId);
+    const accounts = (accountsResponse.data || {}).accounts || [];
+    
+    renderBankAccountsList(accounts);
+
+    // รีเฟรชรายการ tenant เพื่ออัพเดทสถานะ
+    await loadTenants();
+  } catch (error) {
+    addNotification('❌ ไม่สามารถรีเฟรชข้อมูลได้: ' + error.message);
+    
+    // ถ้า error แสดงว่า session หมดอายุ ให้อัพเดทสถานะเป็นไม่เชื่อมต่อ
+    if (error.message.includes('Session expired') || error.message.includes('401')) {
+      listContainer.innerHTML = '<div class="bank-accounts-empty"><i data-lucide="alert-circle" size="48" style="color: var(--color-error); margin-bottom: var(--space-md);"></i><p>เซสชันหมดอายุ</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณา Login ใหม่</p></div>';
+      await loadTenants(); // รีเฟรชเพื่ออัพเดทสถานะเชื่อมต่อ
+    } else {
+      // แสดงบัญชีเดิมที่มีอยู่
+      const accountsResponse = await api.getBankAccounts(currentTenantId);
+      const accounts = (accountsResponse.data || {}).accounts || [];
+      renderBankAccountsList(accounts);
+    }
+    lucide.createIcons();
+  } finally {
+    refreshIcon.classList.remove('spin-icon');
   }
 }
 

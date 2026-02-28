@@ -84,6 +84,12 @@ class API {
     return this.request(`/api/tenants/${id}/accounts`);
   }
 
+  async refreshBankAccounts(id) {
+    return this.request(`/api/tenants/${id}/refresh-accounts`, {
+      method: 'POST',
+    });
+  }
+
   async disconnectAdmin(id) {
     return this.request(`/api/tenants/${id}/disconnect`, {
       method: 'POST',

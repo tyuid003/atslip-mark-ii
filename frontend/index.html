@@ -236,12 +236,15 @@
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title">รายชื่อบัญชีธนาคาร</h3>
+        <button class="btn-icon" onclick="refreshBankAccountsNow()" title="รีเฟรช" style="margin-right: auto; margin-left: var(--space-md);">
+          <i data-lucide="refresh-cw" id="refreshBankIcon"></i>
+        </button>
         <button class="modal-close" onclick="closeBankAccountsModal()">
           <i data-lucide="x"></i>
         </button>
       </div>
       <div class="modal-body">
-        <div id="bankAccountsList"></div>
+        <div id="bankAccountsList" class="bank-accounts-list"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeBankAccountsModal()">

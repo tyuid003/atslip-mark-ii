@@ -74,22 +74,18 @@ export async function getTenantById(env: Env, id: string) {
     return null;
   }
 
-  // เช็คว่ามีบัญชีธนาคารใน KV หรือไม่
+  // เช็คว่ามีบัญชีธนาคารใน KV หรือไม่ (สถานะเชื่อมต่อ)
   const bankKey = `tenant:${id}:banks`;
   const bankData = await env.BANK_KV.get(bankKey);
   const bank_account_count = bankData ? JSON.parse(bankData).accounts.length : 0;
 
-  // เช็คว่ามี admin session หรือไม่
-  const sessionResult = await env.DB.prepare(
-    `SELECT id FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
-  )
-    .bind(id, currentTimestamp())
-    .first();
+  // สถานะเชื่อมต่อ admin ขึ้นอยู่กับการมีบัญชีธนาคาร (ไม่ใช่ session อีกต่อไป)
+  const admin_connected = bank_account_count > 0;
 
   return {
     ...result,
     bank_account_count,
-    admin_connected: !!sessionResult,
+    admin_connected,
   };
 }
 
@@ -130,16 +126,13 @@ export async function getAllTenants(env: Env, teamSlug: string = 'default') {
     const bankData = await env.BANK_KV.get(bankKey);
     const bank_account_count = bankData ? JSON.parse(bankData).accounts.length : 0;
 
-    const sessionResult = await env.DB.prepare(
-      `SELECT id FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
-    )
-      .bind(tenant.id, currentTimestamp())
-      .first();
+    // สถานะเชื่อมต่อขึ้่นอยู่กับการมีบัญชีธนาคาร
+    const admin_connected = bank_account_count > 0;
 
     tenants.push({
       ...tenant,
       bank_account_count,
-      admin_connected: !!sessionResult,
+      admin_connected,
     });
   }
 

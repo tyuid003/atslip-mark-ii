@@ -124,7 +124,7 @@ export const AdminLoginAPI = {
         throw new Error('No session token received');
       }
 
-      // บันทึก session token ใน admin_sessions table (D1)
+      // บันทึก session token ใน admin_sessions table (D1 เท่านั้น)
       const now = Math.floor(Date.now() / 1000);
       const sessionId = crypto.randomUUID();
       const expiresAt = now + (24 * 60 * 60); // expires in 24 hours
@@ -134,7 +134,7 @@ export const AdminLoginAPI = {
         .bind(tenantId)
         .run();
 
-      // สร้าง session ใหม่
+      // สร้าง session ใหม่ พร้อม refreshToken
       await env.DB.prepare(
         `INSERT INTO admin_sessions 
          (id, tenant_id, session_token, expires_at, created_at) 
@@ -143,28 +143,19 @@ export const AdminLoginAPI = {
         .bind(sessionId, tenantId, sessionToken, expiresAt, now)
         .run();
 
-      // บันทึก tokens ลง KV Storage (สำหรับใช้งานภายหลัง)
-      const tokenKey = `tenant:${tenantId}:tokens`;
-      await env.BANK_KV.put(
-        tokenKey,
-        JSON.stringify({
-          token: sessionToken,
-          refreshToken: refreshToken,
-          expiresAt: expiresAt,
-          updated_at: now,
-        }),
-        {
-          expirationTtl: 24 * 60 * 60, // 24 hours
-        }
-      );
-
       // อัพเดท updated_at
       await env.DB.prepare('UPDATE tenants SET updated_at = ? WHERE id = ?')
         .bind(now, tenantId)
         .run();
 
+      // ดึง TTL จาก system_settings
+      const ttlSetting = await env.DB.prepare(
+        `SELECT value FROM system_settings WHERE key = 'bank_account_cache_ttl'`
+      ).first();
+      const cacheTtl = ttlSetting ? parseInt(ttlSetting.value as string) : 3600;
+
       // ดึงรายชื่อบัญชีธนาคาร
-      const accountsResponse = await fetch(`${adminApiUrl}/api/bank-accounts`, {
+      const accountsResponse = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
@@ -173,33 +164,125 @@ export const AdminLoginAPI = {
       });
 
       let accountCount = 0;
+      let connected = false;
 
       if (accountsResponse.ok) {
         const accountsData = await accountsResponse.json() as any;
-        const accounts = accountsData.data || accountsData.accounts || [];
+        const accounts = accountsData.list || []; // Admin API ใช้ 'list' แทน 'data'
         accountCount = accounts.length;
+        connected = true;
 
-        // บันทึกบัญชีธนาคารลง KV Storage
-        if (accounts.length > 0) {
-          const bankKey = `tenant:${tenantId}:banks`;
-          await env.BANK_KV.put(
-            bankKey,
-            JSON.stringify({
-              accounts: accounts,
-              updated_at: now,
-            })
-          );
-        }
+        // บันทึกบัญชีธนาคารลง KV Storage พร้อม TTL
+        const bankKey = `tenant:${tenantId}:banks`;
+        await env.BANK_KV.put(
+          bankKey,
+          JSON.stringify({
+            accounts: accounts,
+            total: accountsData.total || accounts.length,
+            updated_at: now,
+          }),
+          {
+            expirationTtl: cacheTtl, // ใช้ TTL จาก settings
+          }
+        );
       }
 
       return jsonResponse({
         success: true,
         data: {
           tenant_id: tenantId,
-          connected: true,
+          connected: connected,
           account_count: accountCount,
         },
-        message: 'Login successful',
+        message: connected ? 'Login successful and bank accounts loaded' : 'Login successful but failed to load bank accounts',
+      });
+    } catch (error: any) {
+      return errorResponse(error.message, 500);
+    }
+  },
+
+  /**
+   * POST /api/tenants/:id/refresh-accounts
+   * รีเฟรชรายชื่อบัญชีธนาคารทันที
+   */
+  async handleRefreshAccounts(env: Env, tenantId: string): Promise<Response> {
+    try {
+      // ดึงข้อมูล tenant และ session
+      const tenant = await env.DB.prepare(
+        `SELECT t.id, t.admin_api_url, s.session_token
+         FROM tenants t
+         LEFT JOIN admin_sessions s ON s.tenant_id = t.id AND s.expires_at > ?
+         WHERE t.id = ?
+         LIMIT 1`
+      )
+        .bind(Math.floor(Date.now() / 1000), tenantId)
+        .first();
+
+      if (!tenant) {
+        return errorResponse('Tenant not found', 404);
+      }
+
+      const sessionToken = tenant.session_token as string | null;
+      if (!sessionToken) {
+        return errorResponse('No active session. Please login first.', 401);
+      }
+
+      const adminApiUrl = tenant.admin_api_url as string;
+
+      // ดึง TTL จาก system_settings
+      const ttlSetting = await env.DB.prepare(
+        `SELECT value FROM system_settings WHERE key = 'bank_account_cache_ttl'`
+      ).first();
+      const cacheTtl = ttlSetting ? parseInt(ttlSetting.value as string) : 3600;
+
+      // ดึงรายชื่อบัญชีธนาคาร
+      const accountsResponse = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!accountsResponse.ok) {
+        // ถ้าดึงไม่สำเร็จ ลบ session ออก (token หมดอายุหรือไม่ valid)
+        await env.DB.prepare('DELETE FROM admin_sessions WHERE tenant_id = ?')
+          .bind(tenantId)
+          .run();
+
+        // ลบบัญชีเก่าออกจาก KV
+        const bankKey = `tenant:${tenantId}:banks`;
+        await env.BANK_KV.delete(bankKey);
+
+        return errorResponse('Failed to refresh bank accounts. Session expired.', 401);
+      }
+
+      const accountsData = await accountsResponse.json() as any;
+      const accounts = accountsData.list || [];
+      const now = Math.floor(Date.now() / 1000);
+
+      // บันทึกบัญชีธนาคารลง KV Storage พร้อม TTL
+      const bankKey = `tenant:${tenantId}:banks`;
+      await env.BANK_KV.put(
+        bankKey,
+        JSON.stringify({
+          accounts: accounts,
+          total: accountsData.total || accounts.length,
+          updated_at: now,
+        }),
+        {
+          expirationTtl: cacheTtl,
+        }
+      );
+
+      return jsonResponse({
+        success: true,
+        data: {
+          tenant_id: tenantId,
+          account_count: accounts.length,
+          updated_at: now,
+        },
+        message: 'Bank accounts refreshed successfully',
       });
     } catch (error: any) {
       return errorResponse(error.message, 500);
