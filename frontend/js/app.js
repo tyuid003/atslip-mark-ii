@@ -421,7 +421,22 @@ function handleSelectedSlip(file) {
 // ============================================================
 
 function initializeNotifications() {
-  notifications = [];
+  // โหลด notifications จาก localStorage
+  const saved = localStorage.getItem('atslip_notifications');
+  if (saved) {
+    try {
+      notifications = JSON.parse(saved);
+      // จำกัดสูงสุด 99 รายการ
+      if (notifications.length > 99) {
+        notifications = notifications.slice(0, 99);
+      }
+    } catch (e) {
+      notifications = [];
+    }
+  } else {
+    notifications = [];
+  }
+  
   unreadCount = 0;
   UI.renderNotifications(notifications);
   updateNotificationBadge();
@@ -430,8 +445,17 @@ function initializeNotifications() {
 function addNotification(title) {
   const time = new Date().toLocaleString('th-TH');
   notifications.unshift({ title, time });
+  
+  // จำกัดสูงสุด 99 รายการ
   if (notifications.length > 99) {
     notifications = notifications.slice(0, 99);
+  }
+
+  // บันทึกลง localStorage
+  try {
+    localStorage.setItem('atslip_notifications', JSON.stringify(notifications));
+  } catch (e) {
+    console.warn('ไม่สามารถบันทึก notifications ลง localStorage:', e);
   }
 
   unreadCount = Math.min(unreadCount + 1, 99);
@@ -477,12 +501,17 @@ function toggleTenantMenu(tenantId) {
   UI.toggleTenantMenu(tenantId);
 }
 
-function toggleAutoDeposit() {
-  const toggle = document.getElementById('autoDepositToggle');
-  const enabled = toggle.checked;
-  addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit`);
-  console.log('Auto Deposit:', enabled);
-  // TODO: Save to backend when API is ready
+async function toggleAutoDeposit(tenantId, enabled) {
+  try {
+    const response = await api.toggleAutoDeposit(tenantId, enabled);
+    addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit สำหรับ tenant`);
+    // Reload tenants เพื่ออัพเดทสถานะ
+    await loadTenants();
+  } catch (error) {
+    addNotification('❌ ไม่สามารถเปลี่ยนสถานะ Auto Deposit: ' + error.message);
+    // Reload เพื่อ reset toggle กลับเป็นค่าเดิม
+    await loadTenants();
+  }
 }
 
 function openPendingFilter() {

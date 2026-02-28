@@ -3,6 +3,7 @@ import { handleOptions, errorResponse } from './utils/helpers';
 import * as TenantsAPI from './api/tenants';
 import * as LineOAsAPI from './api/lineoas';
 import * as PendingAPI from './api/pending';
+import { AutoDepositAPI } from './api/auto-deposit';
 
 // ============================================================
 // MAIN ROUTER
@@ -77,6 +78,15 @@ export default {
     if (method === 'POST' && disconnectMatch) {
       const tenantId = decodeURIComponent(disconnectMatch[1]);
       return await TenantsAPI.handleDisconnectAdmin(env, tenantId);
+    }
+
+    // PATCH /api/tenants/:id/auto-deposit - Toggle auto deposit
+    const autoDepositMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/auto-deposit$/
+    );
+    if (method === 'PATCH' && autoDepositMatch) {
+      const tenantId = decodeURIComponent(autoDepositMatch[1]);
+      return await AutoDepositAPI.handleToggleAutoDeposit(env, request, tenantId);
     }
 
     // ============================================================

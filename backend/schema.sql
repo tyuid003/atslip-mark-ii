@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   admin_password TEXT NOT NULL,
   easyslip_token TEXT NOT NULL,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  auto_deposit_enabled INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

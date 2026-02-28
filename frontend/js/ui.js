@@ -55,6 +55,7 @@ const UI = {
 
   createTenantCard(tenant) {
     const isConnected = tenant.admin_connected;
+    const autoDepositEnabled = tenant.auto_deposit_enabled === 1;
     const statusBadge = isConnected
       ? '<span class="badge badge-success"><i data-lucide="check-circle" size="12"></i> เชื่อมต่อแล้ว</span>'
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
@@ -125,6 +126,13 @@ const UI = {
                 <div class="tenant-stat-value">${tenant.bank_account_count || 0}</div>
               </div>
             </div>
+          </div>
+          <div class="tenant-auto-deposit">
+            <label class="toggle-switch">
+              <span class="toggle-label">Auto Deposit</span>
+              <input type="checkbox" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
           </div>
         </div>
       </div>

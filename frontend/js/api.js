@@ -81,6 +81,13 @@ class API {
     });
   }
 
+  async toggleAutoDeposit(id, enabled) {
+    return this.request(`/api/tenants/${id}/auto-deposit`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
   // ============================================================
   // LINE OA APIs
   // ============================================================

@@ -252,7 +252,13 @@
   font-weight: 600;
   color: var(--color-gray-900);
 }
-
+.tenant-auto-deposit {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-gray-200);
+  display: flex;
+  justify-content: center;
+}
 /* ============================================================
    WORKBENCH
    ============================================================ */
