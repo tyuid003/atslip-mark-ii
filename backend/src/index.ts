@@ -3,6 +3,7 @@ import { handleOptions, errorResponse } from './utils/helpers';
 import * as TenantsAPI from './api/tenants';
 import * as LineOAsAPI from './api/lineoas';
 import * as PendingAPI from './api/pending';
+import * as TeamsAPI from './api/teams';
 import { AutoDepositAPI } from './api/auto-deposit';
 import { AdminLoginAPI } from './api/admin-login';
 
@@ -19,6 +20,22 @@ export default {
     // Handle CORS preflight
     if (method === 'OPTIONS') {
       return handleOptions();
+    }
+
+    // ============================================================
+    // TEAMS ROUTES
+    // ============================================================
+
+    // GET /api/teams - ดูรายการ team ทั้งหมด
+    if (method === 'GET' && pathname === '/api/teams') {
+      return await TeamsAPI.handleGetAllTeams(env);
+    }
+
+    // GET /api/teams/:slug - ดูข้อมูล team ตาม slug
+    const getTeamMatch = pathname.match(/^\/api\/teams\/([^\/]+)$/);
+    if (method === 'GET' && getTeamMatch) {
+      const slug = decodeURIComponent(getTeamMatch[1]);
+      return await TeamsAPI.handleGetTeamBySlug(env, slug);
     }
 
     // ============================================================

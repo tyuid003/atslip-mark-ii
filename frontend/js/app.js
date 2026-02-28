@@ -19,15 +19,31 @@ async function init() {
   window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
   console.log('Current Team Slug:', currentTeamSlug);
   
-  // อัพเดท page title ถ้าไม่ใช่ default team
+  // อัพเดท page title และ badge ถ้าไม่ใช่ default team
   if (currentTeamSlug !== 'default') {
-    document.title = `${currentTeamSlug.toUpperCase()} - ATslip Auto Deposit`;
-    
-    // แสดง team badge ใน header
-    const teamBadge = document.getElementById('teamBadge');
-    if (teamBadge) {
-      teamBadge.textContent = currentTeamSlug;
-      teamBadge.style.display = 'inline-block';
+    try {
+      // ดึงข้อมูล team จาก API
+      const response = await api.getTeamBySlug(currentTeamSlug);
+      const teamData = response.data;
+      
+      // อัพเดท page title ด้วยชื่อทีม
+      document.title = `${teamData.name} - ATslip Auto Deposit`;
+      
+      // แสดง team badge ด้วยชื่อทีม
+      const teamBadge = document.getElementById('teamBadge');
+      if (teamBadge) {
+        teamBadge.textContent = teamData.name;
+        teamBadge.style.display = 'inline-block';
+      }
+    } catch (error) {
+      console.error('Error loading team data:', error);
+      // ถ้า error ใช้ slug แทน
+      document.title = `${currentTeamSlug.toUpperCase()} - ATslip Auto Deposit`;
+      const teamBadge = document.getElementById('teamBadge');
+      if (teamBadge) {
+        teamBadge.textContent = currentTeamSlug;
+        teamBadge.style.display = 'inline-block';
+      }
     }
   }
   
