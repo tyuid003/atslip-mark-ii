@@ -153,9 +153,22 @@ export const BankAccountsAPI = {
 
       const cache = JSON.parse(bankData);
       const accounts = cache.accounts || [];
-      const account = accounts.find((acc: any) => 
-        (acc.id || acc.accountId) === accountId
-      );
+      
+      console.log('[BankAccountsAPI] Looking for account:', {
+        accountId,
+        totalAccounts: accounts.length,
+        sampleAccount: accounts[0] ? {
+          id: accounts[0].id,
+          accountId: accounts[0].accountId,
+          accountNumber: accounts[0].accountNumber || accounts[0].account_number,
+        } : null,
+      });
+      
+      const account = accounts.find((acc: any) => {
+        const accId = acc.id || acc.accountId;
+        console.log('[BankAccountsAPI] Checking account:', accId, 'vs', accountId);
+        return accId === accountId;
+      });
 
       if (!account) {
         return errorResponse('Account not found', 404);

@@ -493,7 +493,8 @@ async function addEnglishName(accountId) {
   if (!currentTenantId) return;
 
   try {
-    addNotification('📄 กำลังเพิ่ลข้อมูลบัญชี...');
+    console.log('[addEnglishName] Creating metadata for account:', accountId);
+    addNotification('📄 กำลังเพิ่มข้อมูลบัญชี...');
 
     const response = await api.createBankAccountMetadata(currentTenantId, accountId);
     const data = response.data || {};
@@ -507,6 +508,7 @@ async function addEnglishName(accountId) {
     // Reload bank accounts with metadata
     await viewBankAccounts(currentTenantId);
   } catch (error) {
+    console.error('[addEnglishName] Error:', error);
     addNotification('❌ ไม่สามารถเพิ่มข้อมูลได้: ' + error.message);
   }
 }
@@ -887,9 +889,10 @@ async function uploadAndScanSlip(file) {
       resetSlipUpload();
     }, 1500);
   } finally {
-    // ซ่อน loading icon
+    // ซ่อน loading icon เสมอ (แม้เกิด error)
     if (loadingIcon) {
       loadingIcon.style.display = 'none';
+      lucide.createIcons();
     }
   }
 }
