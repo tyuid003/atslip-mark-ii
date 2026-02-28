@@ -493,17 +493,21 @@ async function syncBankMetadata() {
   if (!currentTenantId) return;
 
   try {
-    addNotification('🔄 กำลัง Sync metadata...');
+    addNotification('🔄 กำลังเพิ่มข้อมูลบัญชีธนาคาร...');
 
     const response = await api.syncBankAccounts(currentTenantId);
     const data = response.data || {};
 
-    addNotification(`✅ Sync สำเร็จ! (${data.synced} ใหม่, ${data.updated} อัพเดท)`);
+    if (data.synced > 0) {
+      addNotification(`✅ เพิ่มข้อมูล ${data.synced} บัญชีสำเร็จ! ตอนนี้สามารถเพิ่มชื่ออังกฤษได้แล้ว`);
+    } else {
+      addNotification(`ℹ️ ข้อมูลบัญชีครบแล้ว (${data.updated} บัญชี)`);
+    }
 
     // Reload bank accounts with metadata
     await viewBankAccounts(currentTenantId);
   } catch (error) {
-    addNotification('❌ Sync ไม่สำเร็จ: ' + error.message);
+    addNotification('❌ ไม่สามารถเพิ่มข้อมูลได้: ' + error.message);
   }
 }
 
@@ -785,10 +789,11 @@ function handleSelectedSlip(file) {
     return;
   }
 
-  // แสดงชื่อไฟล์
+  // แสดงชื่อไฟล์ (ตัดถ้ายาวเกิน)
   const hint = document.getElementById('slipUploadHint');
   if (hint) {
-    hint.textContent = `ไฟล์ที่เลือก: ${file.name}`;
+    const truncatedName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
+    hint.textContent = `ไฟล์ที่เลือก: ${truncatedName}`;
   }
 
   // แสดง preview รูปภาพ
