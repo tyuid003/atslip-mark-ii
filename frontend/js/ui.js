@@ -77,7 +77,11 @@ const UI = {
               }
             </div>
           </div>
-          <div class="tenant-card-menu">
+          <div class="tenant-card-actions">
+            <label class="toggle-switch toggle-switch-compact">
+              <input type="checkbox" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
             <button class="tenant-menu-btn" onclick="toggleTenantMenu('${tenant.id}')">
               <i data-lucide="more-vertical" size="16"></i>
             </button>
@@ -127,13 +131,18 @@ const UI = {
               </div>
             </div>
           </div>
-          <div class="tenant-auto-deposit">
-            <label class="toggle-switch">
-              <span class="toggle-label">Auto Deposit</span>
-              <input type="checkbox" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  createAddTenantCard() {
+    return `
+      <div class="tenant-card tenant-card-add" onclick="openCreateTenantModal()">
+        <div class="tenant-card-add-content">
+          <i data-lucide="plus-circle" size="48"></i>
+          <h3>เพิ่มเว็บใหม่</h3>
+          <p>คลิกเพื่อเพิ่มเว็บใหม่</p>
         </div>
       </div>
     `;
@@ -148,7 +157,9 @@ const UI = {
     }
 
     this.showTenantGrid();
-    grid.innerHTML = tenants.map((tenant) => this.createTenantCard(tenant)).join('');
+    const tenantCards = tenants.map((tenant) => this.createTenantCard(tenant)).join('');
+    const addCard = this.createAddTenantCard();
+    grid.innerHTML = tenantCards + addCard;
     lucide.createIcons();
   },
 

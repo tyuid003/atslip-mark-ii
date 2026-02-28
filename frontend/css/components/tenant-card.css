@@ -98,6 +98,12 @@
   min-width: 0;
 }
 
+.tenant-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .tenant-card-name {
   font-size: 1rem;
   font-weight: 600;
@@ -161,7 +167,7 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   min-width: 200px;
-  z-index: 500;
+  z-index: 1000;
 }
 
 .tenant-menu-item {
@@ -252,13 +258,50 @@
   font-weight: 600;
   color: var(--color-gray-900);
 }
-.tenant-auto-deposit {
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-gray-200);
+
+/* ============================================================
+   ADD TENANT CARD
+   ============================================================ */
+
+.tenant-card-add {
+  background: var(--color-gray-50);
+  border: 2px dashed var(--color-gray-300);
+  cursor: pointer;
   display: flex;
+  align-items: center;
   justify-content: center;
+  transition: all var(--transition-normal);
 }
+
+.tenant-card-add:hover {
+  background: var(--color-gray-100);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.tenant-card-add-content {
+  text-align: center;
+  padding: var(--space-lg);
+  color: var(--color-gray-500);
+}
+
+.tenant-card-add-content i {
+  color: var(--color-gray-400);
+  margin-bottom: var(--space-md);
+}
+
+.tenant-card-add-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-gray-700);
+  margin-bottom: var(--space-xs);
+}
+
+.tenant-card-add-content p {
+  font-size: 0.8rem;
+  color: var(--color-gray-500);
+}
+
 /* ============================================================
    WORKBENCH
    ============================================================ */
@@ -291,6 +334,40 @@
 
 .upload-dropzone i {
   color: var(--color-primary);
+}
+
+.upload-preview {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.upload-preview-image {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gray-200);
+  object-fit: contain;
+}
+
+.upload-preview-info {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.upload-file-name {
+  font-size: 0.85rem;
+  color: var(--color-gray-700);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 var(--space-sm);
 }
 
 .pending-body {

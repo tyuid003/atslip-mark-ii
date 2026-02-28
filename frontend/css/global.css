@@ -125,6 +125,25 @@ body {
   left: 21px;
 }
 
+/* Compact toggle - no label */
+.toggle-switch-compact {
+  gap: 0;
+}
+
+.toggle-switch-compact .toggle-slider {
+  width: 36px;
+  height: 20px;
+}
+
+.toggle-switch-compact .toggle-slider::after {
+  width: 14px;
+  height: 14px;
+}
+
+.toggle-switch-compact input:checked + .toggle-slider::after {
+  left: 19px;
+}
+
 .notification-btn {
   position: relative;
   width: 34px;

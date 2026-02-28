@@ -408,12 +408,52 @@ function handleSelectedSlip(file) {
     return;
   }
 
+  // แสดงชื่อไฟล์
   const hint = document.getElementById('slipUploadHint');
   if (hint) {
     hint.textContent = `ไฟล์ที่เลือก: ${file.name}`;
   }
 
+  // แสดง preview รูปภาพ
+  const dropzone = document.getElementById('slipDropzone');
+  if (file.type.startsWith('image/') && dropzone) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      dropzone.innerHTML = `
+        <div class="upload-preview">
+          <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
+          <div class="upload-preview-info">
+            <p class="upload-file-name">${file.name}</p>
+            <button class="btn btn-sm btn-secondary" onclick="resetSlipUpload()">
+              <i data-lucide="x"></i> ลบ
+            </button>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    };
+    reader.readAsDataURL(file);
+  }
+
   addNotification(`📄 อัพโหลดสลิป: ${file.name}`);
+}
+
+function resetSlipUpload() {
+  const dropzone = document.getElementById('slipDropzone');
+  const input = document.getElementById('slipUploadInput');
+  
+  if (input) {
+    input.value = '';
+  }
+  
+  if (dropzone) {
+    dropzone.innerHTML = `
+      <i data-lucide="upload-cloud"></i>
+      <p>ลากไฟล์สลิปมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
+    `;
+    lucide.createIcons();
+    bindUploadEvents();
+  }
 }
 
 // ============================================================
