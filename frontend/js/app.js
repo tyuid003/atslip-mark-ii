@@ -218,6 +218,14 @@ async function connectAdmin(tenantId) {
   passwordEl.value = tenant.admin_password || '';
   captchaInputEl.value = '';
   
+  // เพิ่ม Enter key handler สำหรับ captcha input
+  captchaInputEl.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitAdminLogin();
+    }
+  };
+  
   modal.style.display = 'flex';
   lucide.createIcons();
   
@@ -273,7 +281,9 @@ async function loadCaptcha(tenant) {
 async function refreshCaptcha() {
   if (!currentLoginTenant) return;
   await loadCaptcha(currentLoginTenant);
-  document.getElementById('captchaInput').value = '';
+  const input = document.getElementById('captchaInput');
+  input.value = '';
+  input.focus();
 }
 
 async function submitAdminLogin() {

@@ -394,18 +394,70 @@
 .pending-item-top {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: var(--space-sm);
-  font-size: 0.8rem;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .pending-item-bottom {
-  color: var(--color-gray-500);
-  font-size: 0.75rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.pending-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sender-name {
+  font-size: 0.75rem;
+  color: var(--color-gray-700);
+  font-weight: 500;
+}
+
+.slip-date {
+  font-size: 0.7rem;
+  color: var(--color-gray-500);
+}
+
+.amount {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  white-space: nowrap;
+}
+
+/* Status Badge */
+.status-badge {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.status-yellow {
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px #fef3c7;
+}
+
+.status-blue {
+  background: #3b82f6;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
+.status-green {
+  background: #10b981;
+  box-shadow: 0 0 0 2px #d1fae5;
+}
+
+.status-red {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px #fee2e2;
 }
 
 .pending-delete-btn {
@@ -432,6 +484,7 @@
 .pending-delete-btn svg {
   width: 14px;
   height: 14px;
+  color: #ef4444;
 }
 
 .pending-empty {
@@ -503,6 +556,8 @@
   padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-md);
   border: none;
+  color: var(--color-gray-700);
+  background: var(--color-gray-200);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;

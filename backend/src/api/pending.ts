@@ -11,7 +11,7 @@ export async function handleGetPendingTransactions(
     const limit = Math.min(Math.max(limitParam, 1), 50);
 
     const results = await env.DB.prepare(
-      `SELECT id, tenant_id, slip_ref, amount, sender_name, status, created_at
+      `SELECT id, tenant_id, slip_ref, amount, sender_name, status, slip_data, created_at
        FROM pending_transactions
        ORDER BY created_at DESC
        LIMIT ?`

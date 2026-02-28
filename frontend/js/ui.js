@@ -155,21 +155,47 @@ const UI = {
     list.innerHTML = displayItems
       .map((item) => {
         const amount = Number(item.amount || 0).toLocaleString('th-TH');
-        const created = item.created_at
-          ? new Date(item.created_at * 1000).toLocaleString('th-TH')
-          : '-';
+        
+        // ใช้วันที่จากสลิป (slip_data.date) แทน created_at
+        let slipDate = '-';
+        try {
+          if (item.slip_data) {
+            const slipData = typeof item.slip_data === 'string' 
+              ? JSON.parse(item.slip_data) 
+              : item.slip_data;
+            if (slipData.date) {
+              slipDate = new Date(slipData.date).toLocaleString('th-TH');
+            }
+          }
+        } catch (e) {
+          slipDate = item.created_at 
+            ? new Date(item.created_at * 1000).toLocaleString('th-TH')
+            : '-';
+        }
+
+        // กำหนดสีตาม status
+        const statusConfig = {
+          pending: { color: 'yellow', label: 'รอจับคู่' },
+          matched: { color: 'blue', label: 'จับคู่แล้ว' },
+          completed: { color: 'green', label: 'เติมแล้ว' },
+          duplicate: { color: 'red', label: 'ยอดซ้ำ' },
+        };
+        const status = statusConfig[item.status] || statusConfig.pending;
 
         return `
           <div class="pending-item">
             <div class="pending-item-top">
-              <strong>${item.sender_name || 'ไม่ระบุชื่อ'}</strong>
-              <span>${amount} บาท</span>
-            </div>
-            <div class="pending-item-bottom">
-              ${created}
+              <span class="status-badge status-${status.color}" title="${status.label}"></span>
               <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
                 <i data-lucide="x"></i>
               </button>
+            </div>
+            <div class="pending-item-bottom">
+              <div class="pending-info">
+                <span class="sender-name">${item.sender_name || 'ไม่ระบุชื่อ'}</span>
+                <span class="slip-date">${slipDate}</span>
+              </div>
+              <span class="amount">${amount} บาท</span>
             </div>
           </div>
         `;

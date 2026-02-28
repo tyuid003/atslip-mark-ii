@@ -174,9 +174,9 @@ body {
 }
 
 .filter-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-gray-300);
+  width: 20px;
+  height: 20px;
+  border: 0px solid var(--color-gray-300);
   border-radius: var(--radius-md);
   background: var(--color-white);
   color: var(--color-gray-600);
