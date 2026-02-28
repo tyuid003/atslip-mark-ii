@@ -87,8 +87,12 @@ export const AdminLoginAPI = {
       const username = tenant.admin_username as string;
       const password = tenant.admin_password as string;
 
+      // ดึง User-Agent และ IP Address จาก request
+      const userAgent = request.headers.get('User-Agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+      const ipAddress = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '0.0.0.0';
+
       // Login ไปที่ admin backend
-      // Admin API ต้องการ captcha_id และ captcha_code
+      // Admin API ต้องการ: username, password, captchaId, captchaValue, agent, ipAddress (camelCase)
       const loginResponse = await fetch(`${adminApiUrl}/api/login`, {
         method: 'POST',
         headers: {
@@ -98,8 +102,10 @@ export const AdminLoginAPI = {
         body: JSON.stringify({
           username,
           password,
-          captcha_id: body.captcha_key,  // captcha_key คือ id ที่ได้จาก /api/captcha
-          captcha_code: body.captcha_code,
+          captchaId: body.captcha_key,  // captcha_key คือ id ที่ได้จาก /api/captcha
+          captchaValue: body.captcha_code,  // captcha_code คือค่าที่ผู้ใช้กรอก
+          agent: userAgent,
+          ipAddress: ipAddress,
         }),
       });
 
@@ -110,14 +116,15 @@ export const AdminLoginAPI = {
 
       const loginData = await loginResponse.json() as any;
 
-      // ดึง session token
-      const sessionToken = loginData.token || loginData.access_token || loginData.session_token;
+      // ดึง token และ refreshToken
+      const sessionToken = loginData.token;
+      const refreshToken = loginData.refreshToken;
 
       if (!sessionToken) {
         throw new Error('No session token received');
       }
 
-      // บันทึก session token ใน admin_sessions table
+      // บันทึก session token ใน admin_sessions table (D1)
       const now = Math.floor(Date.now() / 1000);
       const sessionId = crypto.randomUUID();
       const expiresAt = now + (24 * 60 * 60); // expires in 24 hours
@@ -135,6 +142,21 @@ export const AdminLoginAPI = {
       )
         .bind(sessionId, tenantId, sessionToken, expiresAt, now)
         .run();
+
+      // บันทึก tokens ลง KV Storage (สำหรับใช้งานภายหลัง)
+      const tokenKey = `tenant:${tenantId}:tokens`;
+      await env.BANK_KV.put(
+        tokenKey,
+        JSON.stringify({
+          token: sessionToken,
+          refreshToken: refreshToken,
+          expiresAt: expiresAt,
+          updated_at: now,
+        }),
+        {
+          expirationTtl: 24 * 60 * 60, // 24 hours
+        }
+      );
 
       // อัพเดท updated_at
       await env.DB.prepare('UPDATE tenants SET updated_at = ? WHERE id = ?')
