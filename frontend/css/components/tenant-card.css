@@ -45,8 +45,9 @@
   display: flex;
   gap: var(--space-md);
   overflow-x: auto;
+  overflow-y: visible;
   scroll-behavior: smooth;
-  padding: var(--space-xs) 0 var(--space-sm);
+  padding: var(--space-xs) 0 200px;
 }
 
 .tenant-grid::-webkit-scrollbar {
