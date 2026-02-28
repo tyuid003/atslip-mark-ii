@@ -212,13 +212,52 @@
         </button>
       </div>
       <div class="modal-body">
+        <!-- Add LINE OA Form -->
+        <div id="addLineOAForm" style="display: none; margin-bottom: var(--space-lg); background: var(--color-gray-50); padding: var(--space-lg); border-radius: var(--radius-md);">
+          <h4 style="margin: 0 0 var(--space-md) 0; display: flex; align-items: center; gap: var(--space-sm);">
+            <i data-lucide="plus-circle" size="18"></i>
+            เพิ่ม LINE OA ใหม่
+          </h4>
+          <form id="lineOAFormElement" onsubmit="submitLineOAForm(event)">
+            <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">ชื่อ LINE OA <span style="color: var(--color-danger);">*</span></label>
+                <input type="text" id="lineOAName" required placeholder="เช่น LINE OA หลัก" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;">
+              </div>
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">Channel ID <span style="color: var(--color-danger);">*</span></label>
+                <input type="text" id="lineOAChannelId" required placeholder="1234567890" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.875rem;">
+              </div>
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">Channel Secret <span style="color: var(--color-danger);">*</span></label>
+                <input type="password" id="lineOAChannelSecret" required placeholder="••••••••••••••••" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.875rem;">
+              </div>
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">Channel Access Token <span style="color: var(--color-danger);">*</span></label>
+                <input type="password" id="lineOAAccessToken" required placeholder="••••••••••••••••" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.875rem;">
+              </div>
+              <div style="display: flex; gap: var(--space-sm); justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="cancelAddLineOA()">
+                  ยกเลิก
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  <i data-lucide="check" size="16"></i>
+                  เพิ่ม LINE OA
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Toggle Add Form Button -->
         <div style="margin-bottom: var(--space-lg);">
-          <button class="btn btn-primary" onclick="openAddLineOAModal()">
+          <button id="showAddFormBtn" class="btn btn-primary" onclick="showAddLineOAForm()">
             <i data-lucide="plus"></i>
             เพิ่ม LINE OA
           </button>
         </div>
         
+        <!-- LINE OA List -->
         <div id="lineOAList"></div>
       </div>
       <div class="modal-footer">
@@ -236,7 +275,10 @@
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title">รายชื่อบัญชีธนาคาร</h3>
-        <button class="btn-icon" onclick="refreshBankAccountsNow()" title="รีเฟรช" style="margin-right: auto; margin-left: var(--space-md);">
+        <button class="btn-icon" onclick="syncBankMetadata()" title="Sync Metadata" style="margin-right: auto; margin-left: var(--space-md);">
+          <i data-lucide="database" id="syncBankIcon"></i>
+        </button>
+        <button class="btn-icon" onclick="refreshBankAccountsNow()" title="รีเฟรช">
           <i data-lucide="refresh-cw" id="refreshBankIcon"></i>
         </button>
         <button class="modal-close" onclick="closeBankAccountsModal()">

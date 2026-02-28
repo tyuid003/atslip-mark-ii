@@ -75,10 +75,6 @@ const UI = {
             <div class="tenant-card-url">${tenant.admin_api_url}</div>
             <div class="tenant-card-status">
               ${statusBadge}
-              ${tenant.status === 'active'
-                ? '<span class="badge badge-success">ใช้งาน</span>'
-                : '<span class="badge badge-gray">ปิดใช้งาน</span>'
-              }
             </div>
           </div>
           <div class="tenant-card-actions">
@@ -112,28 +108,6 @@ const UI = {
                 <i data-lucide="trash-2" size="16"></i>
                 ลบ
               </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="tenant-card-body">
-          <div class="tenant-stats">
-            <div class="tenant-stat">
-              <div class="tenant-stat-icon primary">
-                <i data-lucide="message-circle" size="16"></i>
-              </div>
-              <div class="tenant-stat-content">
-                <div class="tenant-stat-label">LINE OA</div>
-                <div class="tenant-stat-value">${tenant.line_oa_count || 0}</div>
-              </div>
-            </div>
-            <div class="tenant-stat">
-              <div class="tenant-stat-icon success">
-                <i data-lucide="building" size="16"></i>
-              </div>
-              <div class="tenant-stat-content">
-                <div class="tenant-stat-label">บัญชี</div>
-                <div class="tenant-stat-value">${tenant.bank_account_count || 0}</div>
               </div>
             </div>
           </div>
@@ -173,7 +147,7 @@ const UI = {
     const list = document.getElementById('pendingList');
 
     if (!items || items.length === 0) {
-      list.innerHTML = '<div class="pending-empty">ยังไม่มีรายการ pending</div>';
+      list.innerHTML = '<div class="pending-empty">ยังไม่มีรายการ...</div>';
       return;
     }
 

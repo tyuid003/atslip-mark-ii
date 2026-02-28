@@ -155,6 +155,57 @@ class API {
   }
 
   // ============================================================
+  // SCAN APIs
+  // ============================================================
+
+  async uploadSlip(file, tenantId = null) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (tenantId) {
+      formData.append('tenant_id', tenantId);
+    }
+
+    const teamSlug = window.currentTeamSlug || window.getTeamFromURL();
+    
+    const response = await fetch(`${this.baseURL}/api/scan/upload`, {
+      method: 'POST',
+      headers: {
+        'X-Team-Slug': teamSlug,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    return data;
+  }
+
+  // ============================================================
+  // BANK ACCOUNTS APIs
+  // ============================================================
+
+  async syncBankAccounts(tenantId) {
+    return this.request(`/api/tenants/${tenantId}/bank-accounts/sync`, {
+      method: 'POST',
+    });
+  }
+
+  async getBankAccountsMetadata(tenantId) {
+    return this.request(`/api/tenants/${tenantId}/bank-accounts/metadata`);
+  }
+
+  async updateEnglishName(accountId, englishName) {
+    return this.request(`/api/bank-accounts/${accountId}/english-name`, {
+      method: 'PATCH',
+      body: JSON.stringify({ english_name: englishName }),
+    });
+  }
+
+  // ============================================================
   // PENDING TRANSACTIONS APIs
   // ============================================================
 

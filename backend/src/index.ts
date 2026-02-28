@@ -6,6 +6,9 @@ import * as PendingAPI from './api/pending';
 import * as TeamsAPI from './api/teams';
 import { AutoDepositAPI } from './api/auto-deposit';
 import { AdminLoginAPI } from './api/admin-login';
+import { BankRefreshService } from './services/bank-refresh.service';
+import { ScanAPI } from './api/scan';
+import { BankAccountsAPI } from './api/bank-accounts';
 
 // ============================================================
 // MAIN ROUTER
@@ -87,6 +90,33 @@ export default {
     if (method === 'GET' && accountsMatch) {
       const tenantId = decodeURIComponent(accountsMatch[1]);
       return await TenantsAPI.handleGetBankAccounts(env, tenantId);
+    }
+
+    // GET /api/tenants/:id/bank-accounts/metadata - ดูข้อมูล metadata ของบัญชีธนาคาร
+    const metadataMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/bank-accounts\/metadata$/
+    );
+    if (method === 'GET' && metadataMatch) {
+      const tenantId = decodeURIComponent(metadataMatch[1]);
+      return await BankAccountsAPI.handleGetBankAccountsMetadata(env, tenantId);
+    }
+
+    // POST /api/tenants/:id/bank-accounts/sync - Sync bank accounts
+    const syncMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/bank-accounts\/sync$/
+    );
+    if (method === 'POST' && syncMatch) {
+      const tenantId = decodeURIComponent(syncMatch[1]);
+      return await BankAccountsAPI.handleSyncBankAccounts(env, tenantId);
+    }
+
+    // PATCH /api/bank-accounts/:id/english-name - แก้ไขชื่อภาษาอังกฤษ
+    const updateEnNameMatch = pathname.match(
+      /^\/api\/bank-accounts\/([^\/]+)\/english-name$/
+    );
+    if (method === 'PATCH' && updateEnNameMatch) {
+      const accountId = decodeURIComponent(updateEnNameMatch[1]);
+      return await BankAccountsAPI.handleUpdateEnglishName(request, env, accountId);
     }
 
     // POST /api/tenants/:id/disconnect - ยกเลิกการเชื่อมต่อ
@@ -187,9 +217,32 @@ export default {
     }
 
     // ============================================================
+    // SCAN ROUTES
+    // ============================================================
+
+    // POST /api/scan/upload - อัพโหลดและสแกนสลิป
+    if (method === 'POST' && pathname === '/api/scan/upload') {
+      return await ScanAPI.handleUploadSlip(request, env);
+    }
+
+    // ============================================================
     // 404 NOT FOUND
     // ============================================================
 
     return errorResponse('Not found', 404);
+  },
+
+  // ============================================================
+  // SCHEDULED WORKER (Cron Jobs)
+  // ============================================================
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log('[Scheduled] Starting cron job at', new Date(event.scheduledTime).toISOString());
+    
+    // ดึงบัญชีธนาคารสำหรับทุก tenant ที่มี active session
+    ctx.waitUntil(
+      BankRefreshService.refreshAllTenantBankAccounts(env)
+        .then(() => console.log('[Scheduled] Bank refresh completed'))
+        .catch((err) => console.error('[Scheduled] Bank refresh error:', err))
+    );
   },
 };

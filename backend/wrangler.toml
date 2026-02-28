@@ -13,5 +13,9 @@ database_id = "5638e087-63c2-4fb6-95ad-66c864fdfa95"
 binding = "BANK_KV"
 id = "4bdbda645df643df91bd042bd176b24d"
 
+# Scheduled Jobs (Cron)
+[triggers]
+crons = ["*/5 * * * *"]  # ทุก 5 นาที
+
 # Environment Variables (set via Cloudflare dashboard or wrangler secret)
 # EASYSLIP_API_KEY = "your-easyslip-key"

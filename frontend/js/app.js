@@ -351,7 +351,16 @@ async function viewBankAccounts(tenantId) {
     const bankData = response.data || {};
     const accounts = bankData.accounts || [];
 
-    renderBankAccountsList(accounts);
+    // ดึง metadata จาก D1 ด้วย
+    let metadata = [];
+    try {
+      const metadataResponse = await api.getBankAccountsMetadata(tenantId);
+      metadata = (metadataResponse.data || {}).accounts || [];
+    } catch (err) {
+      console.log('No metadata found');
+    }
+
+    renderBankAccountsList(accounts, metadata);
     document.getElementById('bankAccountsModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
@@ -359,21 +368,49 @@ async function viewBankAccounts(tenantId) {
   }
 }
 
-function renderBankAccountsList(accounts) {
+function renderBankAccountsList(accounts, metadata = []) {
   let html = '';
 
   if (accounts.length === 0) {
     html = '<div class="bank-accounts-empty"><i data-lucide="inbox" size="48" style="color: var(--color-gray-400); margin-bottom: var(--space-md);"></i><p>ไม่พบบัญชีธนาคาร</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณาเชื่อมต่อ Admin Backend ก่อน</p></div>';
   } else {
     accounts.forEach((account) => {
+      const accountId = account.id || account.accountId;
+      const meta = metadata.find(m => m.account_id === accountId);
+      const englishName = meta?.account_name_en || '';
+      const metaId = meta?.id || '';
+
       html += `
-        <div class="bank-account-item">
-          <img src="${account.bankIconUrl || ''}" alt="${account.bankName || 'Bank'}" class="bank-icon" onerror="this.style.display='none'">
-          <div class="bank-info">
-            <div class="bank-name">${account.accountName || 'ไม่ระบุชื่อ'}</div>
-            <div class="bank-number">${account.accountNumber || '-'}</div>
-            ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
+        <div class="bank-account-item" style="flex-direction: column; align-items: flex-start; gap: var(--space-sm);">
+          <div style="display: flex; align-items: center; gap: var(--space-sm); width: 100%;">
+            <img src="${account.bankIconUrl || ''}" alt="${account.bankName || 'Bank'}" class="bank-icon" onerror="this.style.display='none'">
+            <div class="bank-info" style="flex: 1;">
+              <div class="bank-name">${account.accountName || 'ไม่ระบุชื่อ'}</div>
+              <div class="bank-number">${account.accountNumber || '-'}</div>
+              ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
+            </div>
           </div>
+          ${metaId ? `
+          <div style="width: 100%; padding-left: 40px;">
+            <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ (สำหรับจับคู่สลิป)</label>
+            <div style="display: flex; gap: var(--space-xs);">
+              <input 
+                type="text" 
+                value="${englishName}" 
+                placeholder="Enter English name" 
+                id="en-name-${metaId}"
+                style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
+              >
+              <button 
+                class="btn btn-sm btn-primary" 
+                onclick="updateEnglishName('${metaId}')"
+                style="padding: 6px var(--space-sm);"
+              >
+                <i data-lucide="check" size="14"></i> บันทึก
+              </button>
+            </div>
+          </div>
+          ` : ''}
         </div>
       `;
     });
@@ -405,7 +442,16 @@ async function refreshBankAccountsNow() {
     const accountsResponse = await api.getBankAccounts(currentTenantId);
     const accounts = (accountsResponse.data || {}).accounts || [];
     
-    renderBankAccountsList(accounts);
+    // ดึง metadata ด้วย
+    let metadata = [];
+    try {
+      const metadataResponse = await api.getBankAccountsMetadata(currentTenantId);
+      metadata = (metadataResponse.data || {}).accounts || [];
+    } catch (err) {
+      console.log('No metadata');
+    }
+    
+    renderBankAccountsList(accounts, metadata);
 
     // รีเฟรชรายการ tenant เพื่ออัพเดทสถานะ
     await loadTenants();
@@ -420,11 +466,57 @@ async function refreshBankAccountsNow() {
       // แสดงบัญชีเดิมที่มีอยู่
       const accountsResponse = await api.getBankAccounts(currentTenantId);
       const accounts = (accountsResponse.data || {}).accounts || [];
-      renderBankAccountsList(accounts);
+      let metadata = [];
+      try {
+        const metadataResponse = await api.getBankAccountsMetadata(currentTenantId);
+        metadata = (metadataResponse.data || {}).accounts || [];
+      } catch (err) {}
+      renderBankAccountsList(accounts, metadata);
     }
     lucide.createIcons();
   } finally {
     refreshIcon.classList.remove('spin-icon');
+  }
+}
+
+async function syncBankMetadata() {
+  if (!currentTenantId) return;
+
+  const syncIcon = document.getElementById('syncBankIcon');
+
+  try {
+    syncIcon.classList.add('spin-icon');
+    addNotification('🔄 กำลัง Sync metadata...');
+
+    const response = await api.syncBankAccounts(currentTenantId);
+    const data = response.data || {};
+
+    addNotification(`✅ Sync สำเร็จ! (${data.synced} ใหม่, ${data.updated} อัพเดท)`);
+
+    // Reload bank accounts with metadata
+    await viewBankAccounts(currentTenantId);
+  } catch (error) {
+    addNotification('❌ Sync ไม่สำเร็จ: ' + error.message);
+  } finally {
+    syncIcon.classList.remove('spin-icon');
+  }
+}
+
+async function updateEnglishName(metaId) {
+  const input = document.getElementById(`en-name-${metaId}`);
+  if (!input) return;
+
+  const englishName = input.value.trim();
+  if (!englishName) {
+    addNotification('❌ กรุณากรอกชื่อภาษาอังกฤษ');
+    return;
+  }
+
+  try {
+    await api.updateEnglishName(metaId, englishName);
+    addNotification(`✅ บันทึกชื่อภาษาอังกฤษสำเร็จ`);
+  } catch (error) {
+    addNotification('❌ บันทึกไม่สำเร็จ: ' + error.message);
   }
 }
 
@@ -467,10 +559,13 @@ function renderLineOAList() {
         ? '<span class="badge badge-info">Webhook ON</span>'
         : '<span class="badge badge-gray">Webhook OFF</span>';
 
+      // สร้าง webhook URL
+      const webhookUrl = `${API_CONFIG.BASE_URL}/webhook/${currentTenantId}/${lineOA.id}`;
+
       html += `
         <div class="card">
           <div class="card-body">
-            <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-md);">
               <div style="flex: 1;">
                 <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: var(--space-sm);">
                   <i data-lucide="message-circle" size="16"></i>
@@ -488,6 +583,32 @@ function renderLineOAList() {
                 <i data-lucide="trash-2" size="14"></i>
               </button>
             </div>
+            
+            <!-- Webhook URL Section -->
+            <div style="background: var(--color-gray-50); padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+              <div style="font-size: 0.75rem; font-weight: 500; color: var(--color-gray-600); margin-bottom: var(--space-xs); display: flex; align-items: center; gap: var(--space-xs);">
+                <i data-lucide="link" size="12"></i>
+                Webhook URL
+              </div>
+              <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                <input 
+                  type="text" 
+                  value="${webhookUrl}" 
+                  readonly 
+                  id="webhook-${lineOA.id}"
+                  style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.75rem; background: white;"
+                >
+                <button 
+                  class="btn btn-sm" 
+                  onclick="copyWebhookUrl('${lineOA.id}')"
+                  style="padding: 6px var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap;"
+                  title="คัดลอก Webhook URL"
+                >
+                  <i data-lucide="copy" size="14"></i>
+                  คัดลอก
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -501,28 +622,64 @@ function renderLineOAList() {
 
 function closeLineOAModal() {
   document.getElementById('lineOAModal').style.display = 'none';
+  // Reset form when closing
+  cancelAddLineOA();
 }
 
-function openAddLineOAModal() {
-  const name = prompt('ชื่อ LINE OA:');
-  if (!name) return;
+function showAddLineOAForm() {
+  document.getElementById('addLineOAForm').style.display = 'block';
+  document.getElementById('showAddFormBtn').style.display = 'none';
+  lucide.createIcons();
+}
 
-  const channel_id = prompt('Channel ID:');
-  if (!channel_id) return;
+function cancelAddLineOA() {
+  document.getElementById('addLineOAForm').style.display = 'none';
+  document.getElementById('showAddFormBtn').style.display = 'block';
+  document.getElementById('lineOAFormElement').reset();
+}
 
-  const channel_secret = prompt('Channel Secret:');
-  if (!channel_secret) return;
+function submitLineOAForm(event) {
+  event.preventDefault();
+  
+  const name = document.getElementById('lineOAName').value.trim();
+  const channel_id = document.getElementById('lineOAChannelId').value.trim();
+  const channel_secret = document.getElementById('lineOAChannelSecret').value.trim();
+  const channel_access_token = document.getElementById('lineOAAccessToken').value.trim();
 
-  const channel_access_token = prompt('Channel Access Token:');
-  if (!channel_access_token) return;
+  if (!name || !channel_id || !channel_secret || !channel_access_token) {
+    addNotification('❌ กรุณากรอกข้อมูลให้ครบทุกช่อง');
+    return;
+  }
 
   createLineOA({ name, channel_id, channel_secret, channel_access_token });
+}
+
+function copyWebhookUrl(lineOAId) {
+  const input = document.getElementById(`webhook-${lineOAId}`);
+  if (input) {
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile devices
+    
+    navigator.clipboard.writeText(input.value).then(() => {
+      addNotification('✅ คัดลอก Webhook URL แล้ว');
+    }).catch(err => {
+      // Fallback for older browsers
+      document.execCommand('copy');
+      addNotification('✅ คัดลอก Webhook URL แล้ว');
+    });
+  }
+}
+
+// Deprecated: openAddLineOAModal is no longer used, replaced with form
+function openAddLineOAModal() {
+  showAddLineOAForm();
 }
 
 async function createLineOA(data) {
   try {
     await api.createLineOA(currentTenantId, data);
     addNotification('✅ เพิ่ม LINE OA สำเร็จ');
+    cancelAddLineOA(); // Hide and reset form
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
@@ -639,9 +796,11 @@ function handleSelectedSlip(file) {
           <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
           <div class="upload-preview-info">
             <p class="upload-file-name">${file.name}</p>
-            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); resetSlipUpload();">
-              <i data-lucide="x"></i> ลบ
-            </button>
+            <div style="display: flex; gap: var(--space-xs);">
+              <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); resetSlipUpload();">
+                <i data-lucide="x"></i> ลบ
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -650,7 +809,39 @@ function handleSelectedSlip(file) {
     reader.readAsDataURL(file);
   }
 
-  addNotification(`📄 อัพโหลดสลิป: ${file.name}`);
+  addNotification(`📄 กำลังสแกนสลิป: ${file.name}...`);
+  
+  // ส่งไปสแกนทันที
+  uploadAndScanSlip(file);
+}
+
+async function uploadAndScanSlip(file) {
+  try {
+    const result = await api.uploadSlip(file);
+    
+    if (result.success) {
+      const data = result.data;
+      
+      if (data.status === 'matched') {
+        addNotification(`✅ สแกนสำเร็จ! จับคู่กับ ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
+      } else {
+        addNotification(`⚠️ สแกนสำเร็จ แต่ไม่พบผู้ใช้ในระบบ (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
+      }
+      
+      // รีเฟรช pending list
+      await loadPendingTransactions();
+      
+      // รีเซ็ต upload zone
+      setTimeout(() => {
+        resetSlipUpload();
+      }, 1500);
+    } else {
+      addNotification(`❌ สแกนสลิปไม่สำเร็จ: ${result.message || 'Unknown error'}`);
+    }
+  } catch (error) {
+    addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+    console.error('Upload error:', error);
+  }
 }
 
 function resetSlipUpload() {
