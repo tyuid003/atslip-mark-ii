@@ -4,6 +4,7 @@ import * as TenantsAPI from './api/tenants';
 import * as LineOAsAPI from './api/lineoas';
 import * as PendingAPI from './api/pending';
 import { AutoDepositAPI } from './api/auto-deposit';
+import { AdminLoginAPI } from './api/admin-login';
 
 // ============================================================
 // MAIN ROUTER
@@ -87,6 +88,24 @@ export default {
     if (method === 'PATCH' && autoDepositMatch) {
       const tenantId = decodeURIComponent(autoDepositMatch[1]);
       return await AutoDepositAPI.handleToggleAutoDeposit(env, request, tenantId);
+    }
+
+    // GET /api/tenants/:id/captcha - ดึง captcha จาก admin API
+    const captchaMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/captcha$/
+    );
+    if (method === 'GET' && captchaMatch) {
+      const tenantId = decodeURIComponent(captchaMatch[1]);
+      return await AdminLoginAPI.handleGetCaptcha(env, tenantId);
+    }
+
+    // POST /api/tenants/:id/login - Login พร้อม captcha
+    const loginMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/login$/
+    );
+    if (method === 'POST' && loginMatch) {
+      const tenantId = decodeURIComponent(loginMatch[1]);
+      return await AdminLoginAPI.handleLogin(env, request, tenantId);
     }
 
     // ============================================================

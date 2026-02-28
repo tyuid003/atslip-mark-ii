@@ -81,6 +81,17 @@ class API {
     });
   }
 
+  async getCaptcha(tenantId) {
+    return this.request(`/api/tenants/${tenantId}/captcha`);
+  }
+
+  async loginAdmin(tenantId, data) {
+    return this.request(`/api/tenants/${tenantId}/login`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async toggleAutoDeposit(id, enabled) {
     return this.request(`/api/tenants/${id}/auto-deposit`, {
       method: 'PATCH',

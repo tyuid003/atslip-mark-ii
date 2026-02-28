@@ -152,20 +152,124 @@ function scrollTenants(direction) {
 // ADMIN CONNECTION
 // ============================================================
 
+let currentLoginTenant = null;
+let currentCaptchaKey = null;
+
 async function connectAdmin(tenantId) {
   const tenant = currentTenants.find((t) => t.id === tenantId);
+  if (!tenant) return;
 
-  if (!confirm(`คุณต้องการเชื่อมต่อกับ Admin Backend ของ "${tenant.name}" หรือไม่?\n\nระบบจะทำการ Login และดึงรายชื่อบัญชีธนาคารมาเก็บไว้`)) {
+  currentLoginTenant = tenant;
+  
+  // เปิด login modal
+  const modal = document.getElementById('adminLoginModal');
+  const tenantNameEl = document.getElementById('loginTenantName');
+  const usernameEl = document.getElementById('loginUsername');
+  const passwordEl = document.getElementById('loginPassword');
+  const captchaInputEl = document.getElementById('captchaInput');
+  
+  tenantNameEl.textContent = `เชื่อมต่อ: ${tenant.name}`;
+  usernameEl.value = tenant.admin_username || '';
+  passwordEl.value = tenant.admin_password || '';
+  captchaInputEl.value = '';
+  
+  modal.style.display = 'flex';
+  lucide.createIcons();
+  
+  // โหลด captcha
+  await loadCaptcha(tenant);
+}
+
+function closeAdminLoginModal() {
+  const modal = document.getElementById('adminLoginModal');
+  modal.style.display = 'none';
+  currentLoginTenant = null;
+  currentCaptchaKey = null;
+}
+
+async function loadCaptcha(tenant) {
+  const container = document.getElementById('captchaImageContainer');
+  
+  // แสดง loading
+  container.innerHTML = `
+    <div class="captcha-loading">
+      <i data-lucide="loader" class="spin-icon"></i>
+      <p>กำลังโหลด captcha...</p>
+    </div>
+  `;
+  lucide.createIcons();
+  
+  try {
+    // เรียก captcha จาก admin API
+    const response = await api.getCaptcha(tenant.id);
+    
+    if (response.success && response.data) {
+      currentCaptchaKey = response.data.captcha_key;
+      
+      // แสดงรูป captcha
+      container.innerHTML = `
+        <img src="${response.data.captcha_image}" alt="Captcha" />
+      `;
+    } else {
+      throw new Error('โหลด captcha ล้มเหลว');
+    }
+  } catch (error) {
+    container.innerHTML = `
+      <div class="captcha-loading">
+        <i data-lucide="alert-circle"></i>
+        <p>ไม่สามารถโหลด captcha ได้</p>
+      </div>
+    `;
+    lucide.createIcons();
+    addNotification('❌ ไม่สามารถโหลด captcha: ' + error.message);
+  }
+}
+
+async function refreshCaptcha() {
+  if (!currentLoginTenant) return;
+  await loadCaptcha(currentLoginTenant);
+  document.getElementById('captchaInput').value = '';
+}
+
+async function submitAdminLogin() {
+  if (!currentLoginTenant || !currentCaptchaKey) {
+    addNotification('❌ ข้อมูลไม่ครบถ้วน');
     return;
   }
-
+  
+  const captchaInput = document.getElementById('captchaInput').value.trim();
+  
+  if (!captchaInput) {
+    addNotification('❌ กรุณากรอกรหัส captcha');
+    return;
+  }
+  
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i data-lucide="loader" class="spin-icon"></i> กำลังเข้าสู่ระบบ...';
+  lucide.createIcons();
+  
   try {
-    addNotification('⏳ กำลังเชื่อมต่อ...');
-    const response = await api.connectAdmin(tenantId);
-    addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count} บัญชี`);
-    await loadTenants();
+    const response = await api.loginAdmin(currentLoginTenant.id, {
+      captcha_key: currentCaptchaKey,
+      captcha_code: captchaInput,
+    });
+    
+    if (response.success) {
+      addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count || 0} บัญชี`);
+      closeAdminLoginModal();
+      await loadTenants();
+    } else {
+      throw new Error(response.error || 'เข้าสู่ระบบล้มเหลว');
+    }
   } catch (error) {
-    addNotification('❌ เชื่อมต่อล้มเหลว: ' + error.message);
+    addNotification('❌ เข้าสู่ระบบล้มเหลว: ' + error.message);
+    // โหลด captcha ใหม่
+    await refreshCaptcha();
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i data-lucide="log-in"></i> เข้าสู่ระบบ';
+    lucide.createIcons();
   }
 }
 
