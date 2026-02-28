@@ -6,12 +6,12 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "atslip_db"
-database_id = "YOUR_DATABASE_ID"
+database_id = "5638e087-63c2-4fb6-95ad-66c864fdfa95"
 
 # KV for Bank Accounts Cache
 [[kv_namespaces]]
 binding = "BANK_KV"
-id = "YOUR_KV_ID"
+id = "4bdbda645df643df91bd042bd176b24d"
 
 # Environment Variables (set via Cloudflare dashboard or wrangler secret)
 # EASYSLIP_API_KEY = "your-easyslip-key"
