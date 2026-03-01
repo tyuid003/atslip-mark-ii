@@ -313,7 +313,7 @@
 }
 
 .workbench-card {
-  min-height: 1040px;
+  min-height: 840px;
   height: 100%;
 }
 
@@ -379,7 +379,7 @@
 }
 
 .pending-list {
-  max-height: 410px;
+  max-height: 820px;
   overflow-y: auto;
   overflow-x: visible;
   display: flex;
