@@ -1248,6 +1248,11 @@ function handleSelectedSlip(file) {
   if (file.type.startsWith('image/') && dropzone) {
     const reader = new FileReader();
     reader.onload = (e) => {
+      // ป้องกัน race condition: ถ้า upload เสร็จแล้ว (isUploading = false) ไม่ต้องแสดง preview
+      if (!isUploading) {
+        return;
+      }
+      
       dropzone.innerHTML = `
         <div class="upload-preview">
           <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
