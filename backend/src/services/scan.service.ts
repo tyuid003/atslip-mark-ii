@@ -467,20 +467,32 @@ export class ScanService {
     for (const name of names) {
       log(`[ScanService] 🔍 Searching for: "${name}"`);
       
-      // Try member first
-      let searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=member`;
+      // ค้นหาทั้ง member และ non-member พร้อมกัน (parallel)
+      const memberUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=member`;
+      const nonMemberUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=non-member`;
 
-      log('[ScanService] 👥 Trying MEMBER category...');
-      let response = await fetch(searchUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Accept': 'application/json',
-        },
-      });
+      log('[ScanService] 👥👤 Trying MEMBER and NON-MEMBER categories in parallel...');
+      
+      const [memberResponse, nonMemberResponse] = await Promise.all([
+        fetch(memberUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'Accept': 'application/json',
+          },
+        }),
+        fetch(nonMemberUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'Accept': 'application/json',
+          },
+        })
+      ]);
 
-      if (response.ok) {
-        const data = await response.json() as any;
+      // Process member results
+      if (memberResponse.ok) {
+        const data = await memberResponse.json() as any;
         if (data.list && data.list.length > 0) {
           log(`[ScanService] ✅ Found ${data.list.length} MEMBER(s)`);
           allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'member' })));
@@ -488,23 +500,12 @@ export class ScanService {
           log('[ScanService] ❌ No members found');
         }
       } else {
-        log(`[ScanService] ⚠️ Member search failed: ${response.status}`);
+        log(`[ScanService] ⚠️ Member search failed: ${memberResponse.status}`);
       }
 
-      // Try non-member
-      searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=non-member`;
-
-      log('[ScanService] 👤 Trying NON-MEMBER category...');
-      response = await fetch(searchUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json() as any;
+      // Process non-member results
+      if (nonMemberResponse.ok) {
+        const data = await nonMemberResponse.json() as any;
         if (data.list && data.list.length > 0) {
           log(`[ScanService] ✅ Found ${data.list.length} NON-MEMBER(s)`);
           allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'non-member' })));
@@ -512,7 +513,7 @@ export class ScanService {
           log('[ScanService] ❌ No non-members found');
         }
       } else {
-        log(`[ScanService] ⚠️ Non-member search failed: ${response.status}`);
+        log(`[ScanService] ⚠️ Non-member search failed: ${nonMemberResponse.status}`);
       }
     }
 
