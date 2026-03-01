@@ -18,6 +18,7 @@ let pendingFilterTenant = null; // Filter by tenant ID
 let pendingFilterStatus = null; // Filter by status
 let pendingSortBy = 'created_at'; // Sort by field
 let pendingSortOrder = 'DESC'; // Sort order (ASC/DESC)
+let pendingSearchQuery = ''; // Search query
 let allPendingTransactions = []; // Store all pending data before filtering/sorting
 
 // ============================================================
@@ -835,6 +836,22 @@ async function loadPendingTransactions() {
 function applyPendingFiltersAndSort() {
   // Start with all data
   let filtered = [...allPendingTransactions];
+  
+  // Apply search filter
+  if (pendingSearchQuery.trim()) {
+    const query = pendingSearchQuery.toLowerCase();
+    filtered = filtered.filter(item => {
+      const senderName = (item.sender_name || '').toLowerCase();
+      const matchedUsername = (item.matched_username || '').toLowerCase();
+      const amount = String(item.amount || '');
+      const slipRef = (item.slip_ref || '').toLowerCase();
+      
+      return senderName.includes(query) || 
+             matchedUsername.includes(query) || 
+             amount.includes(query) ||
+             slipRef.includes(query);
+    });
+  }
   
   // Apply tenant filter
   if (pendingFilterTenant) {
@@ -1703,190 +1720,53 @@ async function toggleAutoDeposit(tenantId, enabled) {
   }
 }
 
-function openPendingFilter() {
-  const modal = document.createElement('div');
-  modal.className = 'filter-modal';
-  modal.innerHTML = `
-    <div class="filter-modal-content">
-      <div class="filter-modal-header">
-        <h3>กรอง รายการสแกน</h3>
-        <button class="filter-modal-close" onclick="this.closest('.filter-modal').remove()">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
-      
-      <div class="filter-modal-body">
-        <div class="filter-group">
-          <label class="filter-label">เลือกเว็บ (Tenant)</label>
-          <select id="filterTenantSelect" class="form-input">
-            <option value="">-- ทั้งหมด --</option>
-            ${currentTenants.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-          </select>
-        </div>
-        
-        <div class="filter-group">
-          <label class="filter-label">สถานะ</label>
-          <select id="filterStatusSelect" class="form-input">
-            <option value="">-- ทั้งหมด --</option>
-            <option value="pending">รอจับคู่</option>
-            <option value="matched">จับคู่แล้ว</option>
-            <option value="credited">เติมแล้ว</option>
-            <option value="duplicate">ยอดซ้ำ</option>
-            <option value="failed">ล้มเหลว</option>
-          </select>
-        </div>
-      </div>
-      
-      <div class="filter-modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.filter-modal').remove()">
-          ยกเลิก
-        </button>
-        <button class="btn btn-primary" onclick="applyPendingFilter()">
-          <i data-lucide="check"></i>
-          ใช้งาน
-        </button>
-      </div>
-    </div>
-  `;
+function toggleFilterDropdown() {
+  const dropdown = document.getElementById('filterDropdown');
+  const isVisible = dropdown.style.display === 'block';
+  dropdown.style.display = isVisible ? 'none' : 'block';
   
-  document.body.appendChild(modal);
-  lucide.createIcons();
+  // Populate tenants if not already set
+  const filterTenantDropdown = document.getElementById('filterTenantDropdown');
+  if (filterTenantDropdown.options.length === 1) {
+    currentTenants.forEach(tenant => {
+      const option = document.createElement('option');
+      option.value = tenant.id;
+      option.textContent = tenant.name;
+      filterTenantDropdown.appendChild(option);
+    });
+  }
   
-  // Set current filter values
-  const tenantSelect = document.getElementById('filterTenantSelect');
-  const statusSelect = document.getElementById('filterStatusSelect');
-  if (pendingFilterTenant) tenantSelect.value = pendingFilterTenant;
-  if (pendingFilterStatus) statusSelect.value = pendingFilterStatus;
-  
-  // Close on outside click
-  modal.onclick = (e) => {
-    if (e.target === modal) modal.remove();
-  };
+  // Set current values
+  filterTenantDropdown.value = pendingFilterTenant || '';
+  document.getElementById('filterStatusDropdown').value = pendingFilterStatus || '';
 }
 
 function applyPendingFilter() {
-  const tenantSelect = document.getElementById('filterTenantSelect');
-  const statusSelect = document.getElementById('filterStatusSelect');
+  const tenantSelect = document.getElementById('filterTenantDropdown');
+  const statusSelect = document.getElementById('filterStatusDropdown');
   
   pendingFilterTenant = tenantSelect.value || null;
   pendingFilterStatus = statusSelect.value || null;
   
-  // Close modal
-  document.querySelector('.filter-modal').remove();
-  
   // Apply filter
   applyPendingFiltersAndSort();
-  
-  // Show notification
-  const filterTexts = [];
-  if (pendingFilterTenant) {
-    const tenant = currentTenants.find(t => t.id === pendingFilterTenant);
-    filterTexts.push(`เว็บ: ${tenant?.name}`);
-  }
-  if (pendingFilterStatus) {
-    const statusLabels = {
-      pending: 'รอจับคู่',
-      matched: 'จับคู่แล้ว',
-      credited: 'เติมแล้ว',
-      duplicate: 'ยอดซ้ำ',
-      failed: 'ล้มเหลว'
-    };
-    filterTexts.push(`สถานะ: ${statusLabels[pendingFilterStatus]}`);
-  }
-  
-  const msg = filterTexts.length > 0 
-    ? `✅ กรอง: ${filterTexts.join(', ')}` 
-    : '✅ ลบการกรอง';
-  addNotification(msg);
 }
 
-function openPendingSortMenu() {
-  const modal = document.createElement('div');
-  modal.className = 'filter-modal';
-  modal.innerHTML = `
-    <div class="filter-modal-content">
-      <div class="filter-modal-header">
-        <h3>เซิร์ท รายการสแกน</h3>
-        <button class="filter-modal-close" onclick="this.closest('.filter-modal').remove()">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
-      
-      <div class="filter-modal-body">
-        <div class="filter-group">
-          <label class="filter-label">เซิร์ทตาม</label>
-          <select id="sortBySelect" class="form-input">
-            <option value="created_at">วันที่ (ใหม่ที่สุด)</option>
-            <option value="sender_name">ชื่อผู้โอน</option>
-            <option value="matched_username">ยูสเซอร์ที่จับคู่</option>
-            <option value="amount">จำนวนเงิน</option>
-            <option value="status">สถานะ</option>
-          </select>
-        </div>
-        
-        <div class="filter-group">
-          <label class="filter-label">ลำดับ</label>
-          <div style="display: flex; gap: var(--space-sm);">
-            <label style="display: flex; align-items: center; gap: var(--space-xs);">
-              <input type="radio" name="sortOrder" value="DESC" ${pendingSortOrder === 'DESC' ? 'checked' : ''}>
-              <span>จากมากไปน้อย</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: var(--space-xs);">
-              <input type="radio" name="sortOrder" value="ASC" ${pendingSortOrder === 'ASC' ? 'checked' : ''}>
-              <span>จากน้อยไปมาก</span>
-            </label>
-          </div>
-        </div>
-      </div>
-      
-      <div class="filter-modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.filter-modal').remove()">
-          ยกเลิก
-        </button>
-        <button class="btn btn-primary" onclick="applyPendingSort()">
-          <i data-lucide="check"></i>
-          ใช้งาน
-        </button>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  lucide.createIcons();
-  
-  // Set current sort values
-  document.getElementById('sortBySelect').value = pendingSortBy;
-  
-  // Close on outside click
-  modal.onclick = (e) => {
-    if (e.target === modal) modal.remove();
-  };
-}
-
-function applyPendingSort() {
-  const sortBySelect = document.getElementById('sortBySelect');
-  const sortOrderRadio = document.querySelector('input[name="sortOrder"]:checked');
-  
-  pendingSortBy = sortBySelect.value;
-  pendingSortOrder = sortOrderRadio?.value || 'DESC';
-  
-  // Close modal
-  document.querySelector('.filter-modal').remove();
-  
-  // Apply sort
+function applyPendingSearch() {
+  const searchInput = document.getElementById('pendingSearchInput');
+  pendingSearchQuery = searchInput?.value || '';
   applyPendingFiltersAndSort();
-  
-  // Show notification
-  const sortLabels = {
-    created_at: 'วันที่',
-    sender_name: 'ชื่อผู้โอน',
-    matched_username: 'ยูสเซอร์',
-    amount: 'จำนวนเงิน',
-    status: 'สถานะ'
-  };
-  const orderLabel = pendingSortOrder === 'DESC' ? '(มากไปน้อย)' : '(น้อยไปมาก)';
-  addNotification(`✅ เซิร์ท: ${sortLabels[pendingSortBy]} ${orderLabel}`);
 }
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+  const dropdown = document.getElementById('filterDropdown');
+  const filterBtn = event.target.closest('.filter-btn');
+  
+  if (dropdown && !filterBtn && dropdown.style.display === 'block') {
+    dropdown.style.display = 'none';
+  }
+});
 
 // ============================================================
 // START APPLICATION

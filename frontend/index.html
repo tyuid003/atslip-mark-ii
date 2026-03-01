@@ -108,13 +108,45 @@
       <section class="card workbench-card">
         <div class="card-header">
           <h3 class="card-title">รายการสแกน</h3>
-          <div style="display: flex; gap: var(--space-sm); margin-left: auto;">
-            <button class="filter-btn" onclick="openPendingFilter()" aria-label="Filter pending transactions" title="กรอง">
-              <i data-lucide="filter"></i>
-            </button>
-            <button class="filter-btn" onclick="openPendingSortMenu()" aria-label="Sort pending transactions" title="เซิร์ท">
-              <i data-lucide="arrow-up-down"></i>
-            </button>
+          <div style="display: flex; gap: var(--space-sm); margin-left: auto; align-items: center;">
+            <!-- Search Bar (moved to left) -->
+            <div style="position: relative; display: flex; align-items: center;">
+              <input 
+                type="text" 
+                id="pendingSearchInput" 
+                placeholder="ค้นหา..." 
+                class="form-input" 
+                style="padding-left: var(--space-lg); width: 200px; height: 32px; font-size: 0.875rem;"
+                onkeyup="applyPendingSearch()"
+              >
+              <i data-lucide="search" size="16" style="position: absolute; left: var(--space-sm); color: var(--color-gray-500);"></i>
+            </div>
+            
+            <!-- Filter Dropdown (changed from button to dropdown) -->
+            <div style="position: relative;">
+              <button class="filter-btn" onclick="toggleFilterDropdown()" aria-label="Filter pending transactions" title="กรอง">
+                <i data-lucide="filter"></i>
+              </button>
+              <div id="filterDropdown" class="filter-dropdown" style="display: none;">
+                <div class="filter-dropdown-group">
+                  <label class="filter-dropdown-label">เลือกเว็บ</label>
+                  <select id="filterTenantDropdown" class="form-input" style="width: 100%; max-width: 200px;" onchange="applyPendingFilter()">
+                    <option value="">-- ทั้งหมด --</option>
+                  </select>
+                </div>
+                <div class="filter-dropdown-group">
+                  <label class="filter-dropdown-label">สถานะ</label>
+                  <select id="filterStatusDropdown" class="form-input" style="width: 100%; max-width: 200px;" onchange="applyPendingFilter()">
+                    <option value="">-- ทั้งหมด --</option>
+                    <option value="pending">รอจับคู่</option>
+                    <option value="matched">จับคู่แล้ว</option>
+                    <option value="credited">เติมแล้ว</option>
+                    <option value="duplicate">ยอดซ้ำ</option>
+                    <option value="failed">ล้มเหลว</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="card-body pending-body">
