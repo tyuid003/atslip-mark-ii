@@ -15,7 +15,7 @@ id = "4bdbda645df643df91bd042bd176b24d"
 
 # Scheduled Jobs (Cron)
 [triggers]
-crons = ["*/5 * * * *"]  # ทุก 5 นาที
+crons = ["*/30 * * * *"]  # ทุก 30 นาที
 
 # Environment Variables (set via Cloudflare dashboard or wrangler secret)
 # EASYSLIP_API_KEY = "your-easyslip-key"

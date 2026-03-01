@@ -13,11 +13,15 @@ export interface Env {
 
 export interface Tenant {
   id: string;
+  team_id: string;
   name: string;
+  slug?: string;
   admin_api_url: string;
   admin_username: string;
   admin_password: string;
   easyslip_token: string;
+  line_oa_id?: string | null;
+  auto_deposit_enabled: number;
   status: 'active' | 'inactive';
   created_at: number;
   updated_at: number;

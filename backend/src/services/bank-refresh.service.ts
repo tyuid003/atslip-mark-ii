@@ -13,11 +13,8 @@ export class BankRefreshService {
   static async refreshAllTenantBankAccounts(env: Env): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
 
-    // ดึง TTL จาก system_settings
-    const ttlSetting = await env.DB.prepare(
-      `SELECT value FROM system_settings WHERE key = 'bank_account_cache_ttl'`
-    ).first();
-    const cacheTtl = ttlSetting ? parseInt(ttlSetting.value as string) : 3600;
+    // Hard-coded TTL (30 นาที = 1800 วินาที)
+    const cacheTtl = 1800;
 
     // ดึงรายการ tenant ที่มี active session
     const tenants = await env.DB.prepare(

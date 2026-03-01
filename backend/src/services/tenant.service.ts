@@ -1,4 +1,4 @@
-import type { Env } from '../types';
+import type { Env, Tenant, TenantWithStats } from '../types';
 import { generateId, currentTimestamp } from '../utils/helpers';
 
 // ============================================================
@@ -58,17 +58,22 @@ export async function createTenant(
 // GET TENANT BY ID
 // ============================================================
 
-export async function getTenantById(env: Env, id: string) {
+export async function getTenantById(env: Env, id: string): Promise<TenantWithStats | null> {
   const result = await env.DB.prepare(
     `SELECT 
-      t.*,
-      (SELECT COUNT(*) FROM line_oas WHERE tenant_id = t.id) as line_oa_count,
-      (SELECT COUNT(*) FROM pending_transactions WHERE tenant_id = t.id AND status = 'pending') as pending_count
+      t.id, t.team_id, t.name, t.slug, t.admin_api_url, t.line_oa_id,
+      t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
+      t.admin_username, t.admin_password, t.easyslip_token,
+      COUNT(DISTINCT lo.id) as line_oa_count,
+      COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
     FROM tenants t
-    WHERE t.id = ?`
+    LEFT JOIN line_oas lo ON lo.tenant_id = t.id
+    LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
+    WHERE t.id = ?
+    GROUP BY t.id`
   )
     .bind(id)
-    .first();
+    .first() as any;
 
   if (!result) {
     return null;
@@ -83,8 +88,10 @@ export async function getTenantById(env: Env, id: string) {
   const admin_connected = bank_account_count > 0;
 
   return {
-    ...result,
+    ...(result as Tenant),
+    line_oa_count: result.line_oa_count || 0,
     bank_account_count,
+    pending_count: result.pending_count || 0,
     admin_connected,
   };
 }
@@ -109,11 +116,16 @@ export async function getAllTenants(env: Env, teamSlug: string = 'default') {
 
   const results = await env.DB.prepare(
     `SELECT 
-      t.*,
-      (SELECT COUNT(*) FROM line_oas WHERE tenant_id = t.id AND status = 'active') as line_oa_count,
-      (SELECT COUNT(*) FROM pending_transactions WHERE tenant_id = t.id AND status = 'pending') as pending_count
+      t.id, t.team_id, t.name, t.slug, t.admin_api_url, t.line_oa_id,
+      t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
+      t.admin_username, t.admin_password,
+      COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
+      COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
     FROM tenants t
+    LEFT JOIN line_oas lo ON lo.tenant_id = t.id
+    LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
     WHERE t.team_id = ?
+    GROUP BY t.id
     ORDER BY t.created_at DESC`
   )
     .bind(teamId)

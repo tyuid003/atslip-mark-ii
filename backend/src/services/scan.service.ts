@@ -243,16 +243,9 @@ export class ScanService {
   ): Promise<MatchedTenant | null> {
     const now = Math.floor(Date.now() / 1000);
 
-    // ดึง settings
-    const nameMinChars = await env.DB.prepare(
-      `SELECT value FROM system_settings WHERE key = 'name_match_min_chars'`
-    ).first();
-    const accountMinDigits = await env.DB.prepare(
-      `SELECT value FROM system_settings WHERE key = 'account_match_min_digits'`
-    ).first();
-
-    const minNameChars = nameMinChars ? parseInt(nameMinChars.value as string) : 4;
-    const minAccountDigits = accountMinDigits ? parseInt(accountMinDigits.value as string) : 3;
+    // Hard-coded matching settings
+    const minNameChars = 4;
+    const minAccountDigits = 3;
 
     // ดึงรายการ tenant ที่ active และมี session
     const tenants = await env.DB.prepare(

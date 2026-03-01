@@ -148,11 +148,8 @@ export const AdminLoginAPI = {
         .bind(now, tenantId)
         .run();
 
-      // ดึง TTL จาก system_settings
-      const ttlSetting = await env.DB.prepare(
-        `SELECT value FROM system_settings WHERE key = 'bank_account_cache_ttl'`
-      ).first();
-      const cacheTtl = ttlSetting ? parseInt(ttlSetting.value as string) : 3600;
+      // Hard-coded TTL (30 นาที = 1800 วินาที)
+      const cacheTtl = 1800;
 
       // ดึงรายชื่อบัญชีธนาคาร
       const accountsResponse = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
@@ -229,11 +226,8 @@ export const AdminLoginAPI = {
 
       const adminApiUrl = tenant.admin_api_url as string;
 
-      // ดึง TTL จาก system_settings
-      const ttlSetting = await env.DB.prepare(
-        `SELECT value FROM system_settings WHERE key = 'bank_account_cache_ttl'`
-      ).first();
-      const cacheTtl = ttlSetting ? parseInt(ttlSetting.value as string) : 3600;
+      // Hard-coded TTL (30 นาที = 1800 วินาที)
+      const cacheTtl = 1800;
 
       // ดึงรายชื่อบัญชีธนาคาร
       const accountsResponse = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
