@@ -8,6 +8,8 @@ let currentTenantId = null;
 let currentLineOAs = [];
 let notifications = [];
 let unreadCount = 0;
+let toastEnabled = true; // สถานะการแสดง toast notification
+let toastEnabled = true; // สถานะการแสดง toast notification
 
 // ============================================================
 // INITIALIZATION
@@ -345,6 +347,18 @@ async function submitAdminLogin() {
     if (response.success) {
       addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count || 0} บัญชี`);
       closeAdminLoginModal();
+      
+      // รีเฟรชบัญชีทันทีเพื่ออัพเดทสถานะการเชื่อมต่อ
+      try {
+        await api.refreshBankAccounts(currentLoginTenant.id);
+        addNotification(`✅ รีเฟรชรายชื่อบัญชีสำเร็จ`);
+      } catch (refreshError) {
+        console.warn('Auto-refresh failed:', refreshError);
+      }
+      
+      // Clear cache และโหลดรายการ tenant ใหม่
+      sessionStorage.removeItem('tenants_cache');
+      tenantCache = null;
       await loadTenants();
     } else {
       throw new Error(response.error || 'เข้าสู่ระบบล้มเหลว');
@@ -1373,6 +1387,17 @@ function initializeNotifications() {
     notifications = [];
   }
   
+  // โหลดสถานะ toast notification จาก localStorage
+  try {
+    const savedToastState = localStorage.getItem('atslip_toast_enabled');
+    if (savedToastState !== null) {
+      toastEnabled = savedToastState === 'true';
+    }
+    updateToastToggleIcon();
+  } catch (e) {
+    console.warn('ไม่สามารถโหลดสถานะ toast จาก localStorage:', e);
+  }
+  
   unreadCount = 0;
   UI.renderNotifications(notifications);
   updateNotificationBadge();
@@ -1397,6 +1422,9 @@ function addNotification(title) {
   unreadCount = Math.min(unreadCount + 1, 99);
   UI.renderNotifications(notifications);
   updateNotificationBadge();
+  
+  // แสดง toast notification (ถ้าเปิดใช้งาน)
+  showToastNotification(title);
 }
 
 function updateNotificationBadge() {
@@ -1427,6 +1455,100 @@ function toggleNotificationDropdown() {
     unreadCount = 0;
     updateNotificationBadge();
   }
+}
+
+function showToastNotification(message) {
+  // ถ้า toast ถูกปิดใช้งาน ไม่แสดง
+  if (!toastEnabled) {
+    return;
+  }
+
+  const container = document.getElementById('toastContainer');
+  if (!container) {
+    return;
+  }
+
+  // สร้าง toast element
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  
+  // กำหนดสีตามประเภทข้อความ
+  if (message.startsWith('✅') || message.startsWith('✔')) {
+    toast.classList.add('toast-success');
+  } else if (message.startsWith('❌') || message.startsWith('⛔')) {
+    toast.classList.add('toast-error');
+  } else if (message.startsWith('⚠') || message.startsWith('⚡')) {
+    toast.classList.add('toast-warning');
+  } else if (message.startsWith('ℹ') || message.startsWith('📊')) {
+    toast.classList.add('toast-info');
+  } else {
+    toast.classList.add('toast-error'); // default
+  }
+
+  const content = document.createElement('div');
+  content.className = 'toast-content';
+  content.textContent = message;
+  
+  toast.appendChild(content);
+  container.appendChild(toast);
+
+  // แสดง toast ด้วย animation
+  requestAnimationFrame(() => {
+    toast.classList.add('show');
+  });
+
+  // ลบ toast หลัง 3 วินาที
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      toast.remove();
+    }, 300); // รอ animation เสร็จ
+  }, 3000);
+}
+
+function toggleToastNotifications() {
+  toastEnabled = !toastEnabled;
+  
+  // บันทึกสถานะลง localStorage
+  try {
+    localStorage.setItem('atslip_toast_enabled', String(toastEnabled));
+  } catch (e) {
+    console.warn('ไม่สามารถบันทึกสถานะ toast ลง localStorage:', e);
+  }
+  
+  // อัพเดท icon
+  updateToastToggleIcon();
+  
+  // แสดงการแจ้งเตือน
+  const statusText = toastEnabled ? 'เปิด' : 'ปิด';
+  showToastNotification(`${toastEnabled ? '🔔' : '🔕'} การแจ้งเตือนแบบป๊อปอัพ: ${statusText}`);
+  
+  // รีเฟรช icons
+  setTimeout(() => {
+    lucide.createIcons();
+  }, 10);
+}
+
+function updateToastToggleIcon() {
+  const icon = document.getElementById('toastToggleIcon');
+  const btn = icon?.closest('.toast-toggle-btn');
+  
+  if (!icon || !btn) {
+    return;
+  }
+  
+  // อัพเดท icon
+  icon.setAttribute('data-lucide', toastEnabled ? 'bell' : 'bell-off');
+  
+  // อัพเดท class
+  if (toastEnabled) {
+    btn.classList.remove('disabled');
+  } else {
+    btn.classList.add('disabled');
+  }
+  
+  // รีเฟรช icon
+  lucide.createIcons();
 }
 
 // ============================================================

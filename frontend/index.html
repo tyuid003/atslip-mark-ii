@@ -37,6 +37,9 @@
         <div id="notificationDropdown" class="notification-dropdown" style="display: none;">
           <div class="notification-dropdown-header">
             <h4>การแจ้งเตือน</h4>
+            <button class="toast-toggle-btn" onclick="toggleToastNotifications()" aria-label="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ" title="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ">
+              <i id="toastToggleIcon" data-lucide="bell"></i>
+            </button>
           </div>
           <div id="notificationList" class="notification-list"></div>
         </div>
@@ -368,6 +371,10 @@
     </div>
   </div>
 <div style="height: 500px;"></div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
   <!-- Scripts -->
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
