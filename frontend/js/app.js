@@ -11,6 +11,7 @@ let unreadCount = 0;
 let toastEnabled = true; // สถานะการแสดง toast notification
 let toastQueue = []; // คิวสำหรับ toast notifications
 let isShowingToast = false; // สถานะการแสดง toast
+let isUploading = false; // ป้องกันการอัพโหลดซ้อน
 
 // ============================================================
 // INITIALIZATION
@@ -1229,6 +1230,12 @@ function handleSelectedSlip(file) {
     return;
   }
 
+  // ป้องกันการอัพโหลดซ้อน
+  if (isUploading) {
+    addNotification('⏳ กรุณารอให้สแกนสลิปปัจจุบันเสร็จก่อน');
+    return;
+  }
+
   // แสดงชื่อไฟล์ (ตัดถ้ายาวเกิน)
   const hint = document.getElementById('slipUploadHint');
   if (hint) {
@@ -1269,6 +1276,9 @@ async function uploadAndScanSlip(file) {
   const loadingIcon = document.getElementById('uploadLoadingIcon');
   
   try {
+    // ตั้งค่า flag ว่ากำลังอัพโหลด
+    isUploading = true;
+    
     // แสดง loading icon
     if (loadingIcon) {
       loadingIcon.style.display = 'block';
@@ -1323,6 +1333,9 @@ async function uploadAndScanSlip(file) {
     addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
     console.error('Upload error:', error);
   } finally {
+    // ปลดล็อค flag เพื่อให้สามารถอัพโหลดใหม่ได้
+    isUploading = false;
+    
     // ซ่อน loading icon เสมอ (แม้เกิด error) + ลบ animation
     if (loadingIcon) {
       loadingIcon.style.display = 'none';

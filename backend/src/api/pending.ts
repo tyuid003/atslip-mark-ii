@@ -13,6 +13,7 @@ export async function handleGetPendingTransactions(
     const results = await env.DB.prepare(
       `SELECT 
         pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, 
+        pt.receiver_name, pt.receiver_account,
         pt.status, pt.slip_data, pt.matched_user_id, pt.matched_username, 
         pt.created_at,
         t.name as tenant_name
