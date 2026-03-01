@@ -156,16 +156,6 @@ const UI = {
       .map((item) => {
         const amount = Number(item.amount || 0).toLocaleString('th-TH');
         
-        // Debug: แสดงข้อมูลที่ได้รับ
-        console.log('[Pending Item Debug]', {
-          id: item.id,
-          slip_data_type: typeof item.slip_data,
-          slip_data: item.slip_data,
-          matched_user_id: item.matched_user_id,
-          matched_username: item.matched_username,
-          status: item.status
-        });
-        
         // ใช้วันที่จากสลิป (slip_data.date) แทน created_at
         let slipDate = '-';
         try {
