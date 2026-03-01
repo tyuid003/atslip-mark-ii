@@ -156,13 +156,35 @@ const UI = {
       .map((item) => {
         const amount = Number(item.amount || 0).toLocaleString('th-TH');
         
+        // Debug: แสดงข้อมูลที่ได้รับ
+        console.log('[Pending Item Debug]', {
+          id: item.id,
+          slip_data_type: typeof item.slip_data,
+          slip_data: item.slip_data,
+          matched_user_id: item.matched_user_id,
+          matched_username: item.matched_username,
+          status: item.status
+        });
+        
         // ใช้วันที่จากสลิป (slip_data.date) แทน created_at
         let slipDate = '-';
         try {
           if (item.slip_data) {
-            const slipData = typeof item.slip_data === 'string' 
-              ? JSON.parse(item.slip_data) 
-              : item.slip_data;
+            let slipData;
+            
+            // Parse JSON ถ้าเป็น string
+            if (typeof item.slip_data === 'string') {
+              try {
+                slipData = JSON.parse(item.slip_data);
+              } catch (parseError) {
+                console.error('[Pending] Error parsing slip_data JSON:', parseError);
+                slipData = null;
+              }
+            } else {
+              slipData = item.slip_data;
+            }
+            
+            // ดึงวันที่จาก slip_data.date
             if (slipData && slipData.date) {
               const date = new Date(slipData.date);
               if (!isNaN(date.getTime())) {
@@ -174,15 +196,22 @@ const UI = {
                   minute: '2-digit',
                   second: '2-digit'
                 });
+                console.log('[Pending] Slip date from slip_data:', slipDate);
+              } else {
+                console.warn('[Pending] Invalid date from slip_data:', slipData.date);
               }
+            } else {
+              console.warn('[Pending] No date field in slip_data:', slipData);
             }
           }
+          
           // Fallback to created_at if slip_data parsing failed
           if (slipDate === '-' && item.created_at) {
             slipDate = new Date(item.created_at * 1000).toLocaleString('th-TH');
+            console.log('[Pending] Using created_at as fallback:', slipDate);
           }
         } catch (e) {
-          console.warn('Error parsing slip date:', e);
+          console.error('[Pending] Error in date parsing:', e);
           slipDate = item.created_at 
             ? new Date(item.created_at * 1000).toLocaleString('th-TH')
             : '-';
@@ -192,8 +221,13 @@ const UI = {
         let matchedUserText = '';
         if (item.matched_username && item.matched_user_id) {
           matchedUserText = `${item.matched_username} (${item.matched_user_id})`;
+          console.log('[Pending] Matched user text:', matchedUserText);
         } else if (item.matched_username) {
           matchedUserText = item.matched_username;
+          console.log('[Pending] Matched username only:', matchedUserText);
+        } else if (item.matched_user_id) {
+          matchedUserText = `(${item.matched_user_id})`;
+          console.log('[Pending] Matched user ID only:', matchedUserText);
         }
 
         // กำหนดสีตาม status
