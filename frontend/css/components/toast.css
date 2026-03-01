@@ -4,7 +4,7 @@
 
 .toast-container {
   position: fixed;
-  top: 80px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
@@ -40,6 +40,10 @@
   gap: var(--space-md);
   font-size: 0.875rem;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .toast-success {

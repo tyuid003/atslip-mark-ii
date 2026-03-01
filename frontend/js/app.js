@@ -9,6 +9,8 @@ let currentLineOAs = [];
 let notifications = [];
 let unreadCount = 0;
 let toastEnabled = true; // สถานะการแสดง toast notification
+let toastQueue = []; // คิวสำหรับ toast notifications
+let isShowingToast = false; // สถานะการแสดง toast
 
 // ============================================================
 // INITIALIZATION
@@ -1462,10 +1464,34 @@ function showToastNotification(message) {
     return;
   }
 
+  // เพิ่มข้อความลงคิว
+  toastQueue.push(message);
+  
+  // ถ้ากำลังแสดง toast อยู่ ให้รอ
+  if (isShowingToast) {
+    return;
+  }
+  
+  // แสดง toast จากคิว
+  processToastQueue();
+}
+
+function processToastQueue() {
+  // ถ้าไม่มีในคิว หรือกำลังแสดงอยู่ ให้หยุด
+  if (toastQueue.length === 0 || isShowingToast) {
+    return;
+  }
+  
   const container = document.getElementById('toastContainer');
   if (!container) {
     return;
   }
+  
+  // ตั้งสถานะว่ากำลังแสดง
+  isShowingToast = true;
+  
+  // ดึงข้อความแรกจากคิว
+  const message = toastQueue.shift();
 
   // สร้าง toast element
   const toast = document.createElement('div');
@@ -1487,6 +1513,7 @@ function showToastNotification(message) {
   const content = document.createElement('div');
   content.className = 'toast-content';
   content.textContent = message;
+  content.title = message; // เพิ่ม tooltip เพื่อดูข้อความเต็มเมื่อ hover
   
   toast.appendChild(content);
   container.appendChild(toast);
@@ -1501,6 +1528,10 @@ function showToastNotification(message) {
     toast.classList.remove('show');
     setTimeout(() => {
       toast.remove();
+      // เสร็จแล้ว ตั้งสถานะว่าไม่ได้แสดงแล้ว
+      isShowingToast = false;
+      // แสดง toast ถัดไปในคิว (ถ้ามี)
+      processToastQueue();
     }, 300); // รอ animation เสร็จ
   }, 3000);
 }
