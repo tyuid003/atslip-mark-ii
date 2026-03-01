@@ -186,22 +186,15 @@ const UI = {
                   minute: '2-digit',
                   second: '2-digit'
                 });
-                console.log('[Pending] Slip date from slip_data:', slipDate);
-              } else {
-                console.warn('[Pending] Invalid date from slip_data:', slipData.date);
               }
-            } else {
-              console.warn('[Pending] No date field in slip_data:', slipData);
             }
           }
           
           // Fallback to created_at if slip_data parsing failed
           if (slipDate === '-' && item.created_at) {
             slipDate = new Date(item.created_at * 1000).toLocaleString('th-TH');
-            console.log('[Pending] Using created_at as fallback:', slipDate);
           }
         } catch (e) {
-          console.error('[Pending] Error in date parsing:', e);
           slipDate = item.created_at 
             ? new Date(item.created_at * 1000).toLocaleString('th-TH')
             : '-';
