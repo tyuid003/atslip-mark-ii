@@ -1288,9 +1288,15 @@ async function uploadAndScanSlip(file) {
     if (result.success) {
       const data = result.data;
       
-      if (data.status === 'matched') {
+      // แสดงข้อความตามสถานะ
+      if (data.status === 'credited') {
+        addNotification(`✅ เติมเครดิตสำเร็จ! ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
+      } else if (data.status === 'duplicate') {
+        addNotification(`⚠️ ยอดซ้ำ! ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท - เคยเติมแล้ว`);
+      } else if (data.status === 'matched') {
         addNotification(`✅ สแกนสำเร็จ! จับคู่กับ ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
       } else {
+        // status = 'pending'
         addNotification(`⚠️ สแกนสำเร็จ แต่ไม่พบผู้ใช้ในระบบ (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
       }
       

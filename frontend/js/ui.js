@@ -19,8 +19,8 @@ const UI = {
     setTimeout(() => toast.classList.add('show'), 10);
     setTimeout(() => {
       toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
+      setTimeout(() => toast.remove(), 200);
+    }, 500);
   },
 
   getToastIcon(type) {
