@@ -115,13 +115,15 @@ export const ScanAPI = {
       console.log('[ScanAPI] Slip scanned successfully:', slip.transRef);
 
       // Match receiver (บัญชีรับ)
+      console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING START =====');
+      
       const receiverBank = slip.receiver.bank;
       const receiverAccount = slip.receiver.account.bank?.account || slip.receiver.account.proxy?.account || '';
       const receiverNameTh = slip.receiver.account.name.th;
       const receiverNameEn = slip.receiver.account.name.en;
 
-      console.log('[ScanAPI] Matching receiver...', {
-        bank: receiverBank.name,
+      console.log('[ScanAPI] 📥 Receiver Info from SLIP:', {
+        bank: receiverBank?.name || receiverBank?.short || receiverBank?.id || 'N/A',
         account: receiverAccount,
         nameTh: receiverNameTh,
         nameEn: receiverNameEn,
@@ -136,11 +138,17 @@ export const ScanAPI = {
       );
 
       if (!matchedTenant) {
-        console.log('[ScanAPI] ❌ No matching tenant found');
+        console.log('[ScanAPI] ❌ RESULT: No matching tenant found');
+        console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
         return errorResponse('No matching tenant found for this slip', 404);
       }
 
-      console.log('[ScanAPI] ✅ Matched tenant:', matchedTenant.name);
+      console.log('[ScanAPI] ✅ MATCHED TENANT:', {
+        id: matchedTenant.id,
+        name: matchedTenant.name,
+        admin_api_url: matchedTenant.admin_api_url,
+      });
+      console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
 
       // Match sender (ผู้โอน)
       const senderNameTh = slip.sender.account.name.th;
@@ -148,11 +156,12 @@ export const ScanAPI = {
       const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
       const senderBank = slip.sender.bank; // { id, name, short }
 
-      console.log('[ScanAPI] Matching sender...', {
+      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING START =====');
+      console.log('[ScanAPI] 📥 Sender Info from SLIP:', {
         nameTh: senderNameTh,
         nameEn: senderNameEn,
         account: senderAccount,
-        bank: senderBank?.name || senderBank?.short || '',
+        bank: senderBank?.name || senderBank?.short || senderBank?.id || 'N/A',
       });
 
       // ดึง session token ของ tenant ที่ match ได้
@@ -167,6 +176,7 @@ export const ScanAPI = {
       let matchedUser = null;
 
       if (session) {
+        console.log('[ScanAPI] ✅ Session found, calling matchSender...');
         const sessionToken = session.session_token as string;
         matchedUser = await ScanService.matchSender(
           matchedTenant.admin_api_url,
@@ -178,11 +188,21 @@ export const ScanAPI = {
         );
 
         if (matchedUser) {
-          console.log('[ScanAPI] ✅ Matched user:', matchedUser.fullname);
+          console.log('[ScanAPI] ✅ MATCHED USER:', {
+            id: matchedUser.id,
+            memberCode: matchedUser.memberCode,
+            fullname: matchedUser.fullname,
+            category: matchedUser.category,
+            bankAccount: matchedUser.bankAccount || matchedUser.bank_account || 'N/A',
+          });
         } else {
           console.log('[ScanAPI] ❌ No matching user found');
         }
       } else {
+        console.log('[ScanAPI] ❌ No active session for tenant, cannot search users');
+      }
+
+      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING END ====='); else {
         console.log('[ScanAPI] ⚠️ No active session for tenant');
       }
 

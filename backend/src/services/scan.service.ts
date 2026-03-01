@@ -243,9 +243,22 @@ export class ScanService {
   ): Promise<MatchedTenant | null> {
     const now = Math.floor(Date.now() / 1000);
 
+    console.log('[ScanService] 🏦 ===== RECEIVER MATCHING START =====');
+    console.log('[ScanService] 📥 Input:', {
+      bank: receiverBank?.name || receiverBank?.short || receiverBank?.id || 'N/A',
+      account: receiverAccount,
+      nameTh: receiverNameTh,
+      nameEn: receiverNameEn,
+    });
+
     // Hard-coded matching settings
     const minNameChars = 4;
     const minAccountDigits = 3;
+
+    console.log('[ScanService] ⚙️ Matching Settings:', {
+      minNameChars,
+      minAccountDigits,
+    });
 
     // ดึงรายการ tenant ที่ active และมี session
     const tenants = await env.DB.prepare(
@@ -258,23 +271,38 @@ export class ScanService {
       .all();
 
     if (!tenants.results || tenants.results.length === 0) {
+      console.log('[ScanService] ❌ No active tenants with sessions found');
+      console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (NO TENANTS) =====');
       return null;
     }
+
+    console.log(`[ScanService] 🔍 Checking ${tenants.results.length} tenant(s)...`);
 
     // Loop แต่ละ tenant และเช็ค bank accounts
     for (const tenant of tenants.results) {
       const tenantId = tenant.id as string;
+      const tenantName = tenant.name as string;
       const bankKey = `tenant:${tenantId}:banks`;
+
+      console.log(`[ScanService] 🔎 Checking tenant: "${tenantName}" (${tenantId})`);
 
       // ดึงข้อมูลบัญชีจาก KV
       const bankData = await env.BANK_KV.get(bankKey);
-      if (!bankData) continue;
+      if (!bankData) {
+        console.log(`[ScanService]   ⚠️ No bank accounts in cache for this tenant`);
+        continue;
+      }
 
       const cache = JSON.parse(bankData);
       const accounts = cache.accounts || [];
 
+      console.log(`[ScanService]   📋 Found ${accounts.length} bank account(s)`);
+
       // ค้นหาบัญชีที่ตรงกัน
-      for (const account of accounts) {
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
+        console.log(`[ScanService]   🔍 Checking account ${i + 1}/${accounts.length}...`);
+        
         let bankMatched = false;
         let accountMatched = false;
         let nameMatched = false;
@@ -367,11 +395,13 @@ export class ScanService {
 
         // ถ้า match ธนาคาร AND (เลขบัญชี OR ชื่อ) ให้ return tenant นี้
         if (bankMatched && (accountMatched || nameMatched)) {
-          console.log('[ScanService] ✅ Matched tenant:', {
-            tenantId,
-            bankMatched,
-            accountMatched,
-            nameMatched,
+          console.log(`[ScanService]     ✅ MATCH! Bank: ✓ | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
+          console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
+          console.log('[ScanService] ✅ Matched Tenant:', {
+            id: tenantId,
+            team_id: tenant.team_id as string,
+            name: tenantName,
+            admin_api_url: tenant.admin_api_url as string,
           });
           return {
             id: tenantId,
@@ -379,10 +409,14 @@ export class ScanService {
             name: tenant.name as string,
             admin_api_url: tenant.admin_api_url as string,
           };
+        } else {
+          console.log(`[ScanService]     ❌ No match - Bank: ${bankMatched ? '✓' : '✗'} | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
         }
       }
     }
 
+    console.log('[ScanService] ❌ No tenant matched');
+    console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
     return null;
   }
 
@@ -398,14 +432,27 @@ export class ScanService {
     senderAccount?: string,
     senderBank?: { id?: string; name?: string; short?: string }
   ): Promise<any | null> {
+    console.log('[ScanService] 🔍 ===== SENDER MATCHING START =====');
+    console.log('[ScanService] 📥 Input:', {
+      nameTh: senderNameTh,
+      nameEn: senderNameEn,
+      account: senderAccount,
+      bank: senderBank?.name || senderBank?.short || senderBank?.id || 'N/A',
+    });
+
     const names = [senderNameTh, senderNameEn].filter(Boolean);
     let allCandidates: any[] = [];
 
     // ขั้นที่ 1: ค้นหาจากชื่อก่อน
+    console.log('[ScanService] 🔎 STEP 1: Searching by name...');
+    
     for (const name of names) {
+      console.log(`[ScanService] 🔍 Searching for: "${name}"`);
+      
       // Try member first
       let searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=member`;
 
+      console.log('[ScanService] 👥 Trying MEMBER category...');
       let response = await fetch(searchUrl, {
         method: 'GET',
         headers: {
@@ -417,13 +464,19 @@ export class ScanService {
       if (response.ok) {
         const data = await response.json() as any;
         if (data.list && data.list.length > 0) {
+          console.log(`[ScanService] ✅ Found ${data.list.length} MEMBER(s)`);
           allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'member' })));
+        } else {
+          console.log('[ScanService] ❌ No members found');
         }
+      } else {
+        console.log(`[ScanService] ⚠️ Member search failed: ${response.status}`);
       }
 
       // Try non-member
       searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=non-member`;
 
+      console.log('[ScanService] 👤 Trying NON-MEMBER category...');
       response = await fetch(searchUrl, {
         method: 'GET',
         headers: {
@@ -435,52 +488,108 @@ export class ScanService {
       if (response.ok) {
         const data = await response.json() as any;
         if (data.list && data.list.length > 0) {
+          console.log(`[ScanService] ✅ Found ${data.list.length} NON-MEMBER(s)`);
           allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'non-member' })));
+        } else {
+          console.log('[ScanService] ❌ No non-members found');
         }
+      } else {
+        console.log(`[ScanService] ⚠️ Non-member search failed: ${response.status}`);
       }
     }
 
     // ถ้าไม่เจอเลย
     if (allCandidates.length === 0) {
+      console.log('[ScanService] ❌ RESULT: No candidates found by name');
+      console.log('[ScanService] 🔍 ===== SENDER MATCHING END (NO MATCH) =====');
       return null;
     }
 
-    console.log(`[ScanService] Found ${allCandidates.length} candidates by name`);
+    console.log(`[ScanService] ✅ Total candidates found: ${allCandidates.length}`);
+    console.log('[ScanService] 📋 Candidates:', allCandidates.map(u => ({
+      category: u.category,
+      fullname: u.fullname,
+      memberCode: u.memberCode,
+      bankAccount: u.bankAccount || u.bank_account || 'N/A',
+    })));
 
     // ถ้าเจอคนเดียว return เลย
     if (allCandidates.length === 1) {
+      console.log('[ScanService] ✅ RESULT: Only 1 candidate, auto-matched!', {
+        fullname: allCandidates[0].fullname,
+        memberCode: allCandidates[0].memberCode,
+        category: allCandidates[0].category,
+      });
+      console.log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
       return allCandidates[0];
     }
 
     // ขั้นที่ 2: Filter ด้วยเลขบัญชี (ถ้ามี)
+    console.log('[ScanService] 🔎 STEP 2: Filtering by account number...');
+    
     if (senderAccount && senderAccount.length >= 4) {
+      const senderAccountClean = senderAccount.replace(/[^0-9]/g, '');
+      const last4Sender = senderAccountClean.slice(-4);
+      
+      console.log(`[ScanService] 💳 Sender account (last 4): ${last4Sender}`);
+
       const accountMatched = allCandidates.filter(user => {
         const userAccount = user.bankAccount || user.bank_account || '';
-        if (!userAccount) return false;
+        if (!userAccount) {
+          console.log(`[ScanService]   ❌ ${user.fullname}: No bank account`);
+          return false;
+        }
         
-        // เอาเฉพาะ 4 หลักท้าย
-        const last4Sender = senderAccount.replace(/[^0-9]/g, '').slice(-4);
-        const last4User = userAccount.replace(/[^0-9]/g, '').slice(-4);
+        const userAccountClean = userAccount.replace(/[^0-9]/g, '');
+        const last4User = userAccountClean.slice(-4);
         
-        return last4Sender === last4User;
+        const matched = last4Sender === last4User;
+        console.log(`[ScanService]   ${matched ? '✅' : '❌'} ${user.fullname}: ${last4User} ${matched ? '(MATCH!)' : '(no match)'}`);
+        
+        return matched;
       });
 
       if (accountMatched.length > 0) {
-        console.log(`[ScanService] Filtered by account: ${accountMatched.length} matches`);
+        console.log(`[ScanService] ✅ Filtered by account: ${accountMatched.length} match(es)`);
         allCandidates = accountMatched;
         
         if (allCandidates.length === 1) {
+          console.log('[ScanService] ✅ RESULT: Matched by name + account!', {
+            fullname: allCandidates[0].fullname,
+            memberCode: allCandidates[0].memberCode,
+            category: allCandidates[0].category,
+            account: allCandidates[0].bankAccount || allCandidates[0].bank_account,
+          });
+          console.log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
           return allCandidates[0];
         }
+      } else {
+        console.log('[ScanService] ⚠️ No account matches, keeping all name matches');
       }
+    } else {
+      console.log('[ScanService] ⏭️ Skipped: No sender account or too short');
     }
 
     // ขั้นที่ 3: Filter ด้วยธนาคาร (ถ้ามี) - เช็คว่าตรงกับ tenant หรือไม่
     // เนื่องจากผู้ใช้อาจมีหลายธนาคาร เราไม่ filter ตรงนี้
     // เพราะอาจทำให้พลาด user ที่ถูกต้อง
+    console.log('[ScanService] 🔎 STEP 3: Bank filtering skipped (users may have multiple banks)');
 
     // Return คนแรกที่ match ดีที่สุด
-    console.log(`[ScanService] Returning best match from ${allCandidates.length} candidates`);
+    console.log('[ScanService] ⚠️ RESULT: Multiple candidates remain, selecting first one:', {
+      totalCandidates: allCandidates.length,
+      selected: {
+        fullname: allCandidates[0].fullname,
+        memberCode: allCandidates[0].memberCode,
+        category: allCandidates[0].category,
+        account: allCandidates[0].bankAccount || allCandidates[0].bank_account || 'N/A',
+      },
+      otherCandidates: allCandidates.slice(1).map(u => ({
+        fullname: u.fullname,
+        memberCode: u.memberCode,
+      })),
+    });
+    console.log('[ScanService] 🔍 ===== SENDER MATCHING END (BEST MATCH) =====');
     return allCandidates[0];
   }
 }
