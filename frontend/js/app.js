@@ -843,13 +843,19 @@ function applyPendingFiltersAndSort() {
     filtered = filtered.filter(item => {
       const senderName = (item.sender_name || '').toLowerCase();
       const matchedUsername = (item.matched_username || '').toLowerCase();
+      const matchedUserId = (item.matched_user_id || '').toLowerCase();
       const amount = String(item.amount || '');
       const slipRef = (item.slip_ref || '').toLowerCase();
+      const senderAccount = (item.sender_account || '').toLowerCase();
+      const receiverName = (item.receiver_name || '').toLowerCase();
       
       return senderName.includes(query) || 
              matchedUsername.includes(query) || 
+             matchedUserId.includes(query) ||
              amount.includes(query) ||
-             slipRef.includes(query);
+             slipRef.includes(query) ||
+             senderAccount.includes(query) ||
+             receiverName.includes(query);
     });
   }
   
@@ -1762,11 +1768,19 @@ function applyPendingSearch() {
 document.addEventListener('click', function(event) {
   const dropdown = document.getElementById('filterDropdown');
   const filterBtn = event.target.closest('.filter-btn');
+  const dropdownContent = event.target.closest('.filter-dropdown');
   
-  if (dropdown && !filterBtn && dropdown.style.display === 'block') {
+  // Only close if clicking outside both the button and the dropdown content
+  if (dropdown && !filterBtn && !dropdownContent && dropdown.style.display === 'block') {
     dropdown.style.display = 'none';
   }
 });
+
+// Prevent dropdown from closing when interacting with selects inside it
+document.addEventListener('change', function(event) {
+  // Don't propagate to click handler
+  event.stopPropagation();
+}, true);
 
 // ============================================================
 // START APPLICATION
