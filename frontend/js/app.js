@@ -370,6 +370,10 @@ async function disconnectAdmin(tenantId) {
   try {
     await api.disconnectAdmin(tenantId);
     addNotification(`✅ ยกเลิกการเชื่อมต่อ: ${tenant.name}`);
+    
+    // Clear cache และโหลดใหม่เพื่ออัพเดทสถานะ
+    sessionStorage.removeItem('tenants_cache');
+    tenantCache = null;
     await loadTenants();
   } catch (error) {
     addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
@@ -512,15 +516,21 @@ async function refreshBankAccountsNow() {
     
     renderBankAccountsList(accounts, metadata);
 
-    // รีเฟรชรายการ tenant เพื่ออัพเดทสถานะ
+    // รีเฟรชรายการ tenant เพื่ออัพเดทสถานะ (clear cache ก่อน)
+    sessionStorage.removeItem('tenants_cache');
+    tenantCache = null;
     await loadTenants();
   } catch (error) {
     addNotification('❌ ไม่สามารถรีเฟรชข้อมูลได้: ' + error.message);
     
     // ถ้า error แสดงว่า session หมดอายุ ให้อัพเดทสถานะเป็นไม่เชื่อมต่อ
-    if (error.message.includes('Session expired') || error.message.includes('401')) {
-      listContainer.innerHTML = '<div class="bank-accounts-empty"><i data-lucide="alert-circle" size="48" style="color: var(--color-error); margin-bottom: var(--space-md);"></i><p>เซสชันหมดอายุ</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณา Login ใหม่</p></div>';
-      await loadTenants(); // รีเฟรชเพื่ออัพเดทสถานะเชื่อมต่อ
+    if (error.message.includes('Session expired') || error.message.includes('401') || error.message.includes('No active session')) {
+      listContainer.innerHTML = '<div class="bank-accounts-empty"><i data-lucide="alert-circle" size="48" style="color: var(--color-error); margin-bottom: var(--space-md);"></i><p>เซสชันหมดอายุหรือไม่เชื่อมต่อ</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณา Login ใหม่</p></div>';
+      
+      // Clear cache และรีเฟรชเพื่ออัพเดทสถานะเชื่อมต่อ
+      sessionStorage.removeItem('tenants_cache');
+      tenantCache = null;
+      await loadTenants();
     } else {
       // แสดงบัญชีเดิมที่มีอยู่
       const accountsResponse = await api.getBankAccounts(currentTenantId);

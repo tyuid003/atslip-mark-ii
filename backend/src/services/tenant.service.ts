@@ -134,12 +134,23 @@ export async function getAllTenants(env: Env, teamSlug: string = 'default') {
   const tenants = [];
 
   for (const tenant of results.results || []) {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // เช็คว่ามี session ที่ยังไม่หมดอายุหรือไม่
+    const session = await env.DB.prepare(
+      `SELECT id FROM admin_sessions 
+       WHERE tenant_id = ? AND expires_at > ? 
+       LIMIT 1`
+    )
+      .bind(tenant.id, now)
+      .first();
+    
     const bankKey = `tenant:${tenant.id}:banks`;
     const bankData = await env.BANK_KV.get(bankKey);
     const bank_account_count = bankData ? JSON.parse(bankData).accounts.length : 0;
 
-    // สถานะเชื่อมต่อขึ้่นอยู่กับการมีบัญชีธนาคาร
-    const admin_connected = bank_account_count > 0;
+    // สถานะเชื่อมต่อต้องมีทั้ง session ที่ยังไม่หมดอายุ และมีข้อมูลบัญชีธนาคาร
+    const admin_connected = !!session && bank_account_count > 0;
 
     tenants.push({
       ...tenant,
