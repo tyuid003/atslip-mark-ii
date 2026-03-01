@@ -374,6 +374,7 @@
 
 .pending-body {
   padding-top: 0;
+  overflow: visible;
 }
 
 .pending-list {
@@ -383,6 +384,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  padding: 2px;
 }
 
 .pending-list::-webkit-scrollbar {
@@ -458,14 +460,21 @@
 .slip-date {
   font-size: 0.7rem;
   color: var(--color-gray-500);
+  display: inline;
 }
 
 .tenant-name {
   font-size: 0.68rem;
   color: var(--color-primary);
   font-weight: 500;
-  display: block;
-  margin-top: 2px;
+  display: inline;
+  margin-left: 6px;
+}
+
+.tenant-name::before {
+  content: "•";
+  margin-right: 6px;
+  color: var(--color-gray-400);
 }
 
 .amount {

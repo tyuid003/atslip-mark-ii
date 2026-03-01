@@ -256,8 +256,9 @@ const UI = {
             <div class="pending-item-bottom">
               <div class="pending-info">
                 <span class="sender-name">${item.sender_name || 'ไม่ระบุชื่อ'}</span>
-                <span class="slip-date">${slipDate}</span>
-                ${item.tenant_name ? `<span class="tenant-name">เว็บ: ${item.tenant_name}</span>` : ''}
+                <div>
+                  <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
+                </div>
               </div>
               <span class="amount">${amount} บาท</span>
             </div>
