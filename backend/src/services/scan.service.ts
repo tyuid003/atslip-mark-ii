@@ -198,7 +198,11 @@ export class ScanService {
    * ตัดคำนำหน้าออกจากชื่อ
    */
   static removeTitlePrefix(name: string): string {
-    const prefixes = ['นาย', 'นาง', 'นางสาว', 'น.ส.', 'เด็กชาย', 'เด็กหญิง', 'mr.', 'mrs.', 'miss', 'ms.'];
+    const prefixes = [
+      'นาย', 'นาง', 'นางสาว', 'น.ส.', 'น.ส', 
+      'เด็กชาย', 'เด็กหญิง', 'ด.ช.', 'ด.ญ.', 'ด.ช', 'ด.ญ',
+      'mr.', 'mrs.', 'miss', 'ms.', 'mr', 'mrs', 'ms'
+    ];
     let cleaned = name.trim();
 
     for (const prefix of prefixes) {
@@ -443,7 +447,18 @@ export class ScanService {
       bank: senderBank?.name || senderBank?.short || senderBank?.id || 'N/A',
     });
 
-    const names = [senderNameTh, senderNameEn].filter(Boolean);
+    // ตัดคำนำหน้าออกก่อนค้นหา
+    const cleanedNameTh = senderNameTh ? this.removeTitlePrefix(senderNameTh) : null;
+    const cleanedNameEn = senderNameEn ? this.removeTitlePrefix(senderNameEn) : null;
+    
+    log('[ScanService] 🔧 Cleaned names (removed title prefix):', {
+      originalTh: senderNameTh,
+      cleanedTh: cleanedNameTh,
+      originalEn: senderNameEn,
+      cleanedEn: cleanedNameEn,
+    });
+
+    const names = [cleanedNameTh, cleanedNameEn].filter(Boolean);
     let allCandidates: any[] = [];
 
     // ขั้นที่ 1: ค้นหาจากชื่อก่อน
