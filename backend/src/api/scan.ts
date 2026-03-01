@@ -12,6 +12,14 @@ export const ScanAPI = {
    */
   async handleUploadSlip(request: Request, env: Env): Promise<Response> {
     try {
+      // Debug logs array to send back to frontend
+      const debugLogs: string[] = [];
+      const log = (...args: any[]) => {
+        const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+        debugLogs.push(message);
+        console.log(...args);
+      };
+
       // รับ form data
       const formData = await request.formData();
       const file = formData.get('file') as File;
@@ -25,7 +33,7 @@ export const ScanAPI = {
         return errorResponse('File must be an image', 400);
       }
 
-      console.log('[ScanAPI] Received slip upload:', file.name, file.type, file.size);
+      log('[ScanAPI] Received slip upload:', file.name, file.type, file.size);
 
       // ส่งไปสแกนที่ EASYSLIP (ใช้ token ของ tenant ใดก็ได้ที่ active)
       // หรืออาจจะส่งมา tenant_id ใน form data
@@ -42,12 +50,12 @@ export const ScanAPI = {
           .first();
 
         if (!tenant) {
-          console.error('[ScanAPI] ❌ Tenant not found:', tenantId);
+          log('[ScanAPI] ❌ Tenant not found:', tenantId);
           return errorResponse('Tenant not found or inactive', 404);
         }
 
         easyslipToken = tenant.easyslip_token as string;
-        console.log('[ScanAPI] Using tenant-specific token:', {
+        log('[ScanAPI] Using tenant-specific token:', {
           tenantId,
           hasToken: !!easyslipToken,
           tokenLength: easyslipToken?.length || 0,
@@ -61,12 +69,12 @@ export const ScanAPI = {
           .first();
 
         if (!tenant) {
-          console.error('[ScanAPI] ❌ No active tenant with EASYSLIP token found');
+          log('[ScanAPI] ❌ No active tenant with EASYSLIP token found');
           return errorResponse('No active tenant with EASYSLIP token found. Please configure EASYSLIP token in tenant settings.', 404);
         }
 
         easyslipToken = tenant.easyslip_token as string;
-        console.log('[ScanAPI] Using default tenant token:', {
+        log('[ScanAPI] Using default tenant token:', {
           tenantId: tenant.id,
           tenantName: tenant.name,
           hasToken: !!easyslipToken,
@@ -76,7 +84,7 @@ export const ScanAPI = {
 
       // ตรวจสอบว่า token มีค่าหรือไม่
       if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
-        console.error('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
+        log('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
         return errorResponse('EASYSLIP token is not configured or invalid. Please update tenant settings with a valid EASYSLIP API token.', 400);
       }
 
@@ -84,45 +92,45 @@ export const ScanAPI = {
       let slipData: any;
       try {
         slipData = await ScanService.scanSlip(file, easyslipToken);
-        console.log('[ScanAPI] ScanService.scanSlip() returned:', {
+        log('[ScanAPI] ScanService.scanSlip() returned:', {
           success: slipData?.success,
           hasData: !!slipData?.data,
           dataKeys: slipData?.data ? Object.keys(slipData.data) : [],
         });
       } catch (scanError: any) {
-        console.error('[ScanAPI] ❌ ScanService.scanSlip() threw exception:', scanError.message);
+        log('[ScanAPI] ❌ ScanService.scanSlip() threw exception:', scanError.message);
         return errorResponse(`EASYSLIP error: ${scanError.message}`, 400);
       }
 
-      console.log('[ScanAPI] EASYSLIP response:', {
-        success: slipData.success,
-        status: slipData.data?.status,
+      log('[ScanAPI] EASYSLIP response:', {
+        success: slipData?.success,
+        status: slipData?.data?.status,
         message: slipData.data?.message,
         hasData: !!slipData.data?.data,
       });
 
       if (!slipData.success) {
-        console.error('[ScanAPI] ❌ EASYSLIP API call failed:', JSON.stringify(slipData, null, 2));
+        log('[ScanAPI] ❌ EASYSLIP API call failed:', JSON.stringify(slipData, null, 2));
         return errorResponse(`EASYSLIP error: ${slipData.data?.message || 'API request failed'}`, 400);
       }
 
       if (slipData.data.status !== 200) {
-        console.error('[ScanAPI] ❌ EASYSLIP returned non-200 status:', JSON.stringify(slipData.data, null, 2));
+        log('[ScanAPI] ❌ EASYSLIP returned non-200 status:', JSON.stringify(slipData.data, null, 2));
         return errorResponse(`EASYSLIP error (${slipData.data.status}): ${slipData.data?.message || 'Scan failed'}`, 400);
       }
 
       const slip = slipData.data.data;
-      console.log('[ScanAPI] Slip scanned successfully:', slip.transRef);
+      log('[ScanAPI] Slip scanned successfully:', slip.transRef);
 
       // Match receiver (บัญชีรับ)
-      console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING START =====');
+      log('[ScanAPI] 🏦 ===== RECEIVER MATCHING START =====');
       
       const receiverBank = slip.receiver.bank;
       const receiverAccount = slip.receiver.account.bank?.account || slip.receiver.account.proxy?.account || '';
       const receiverNameTh = slip.receiver.account.name.th;
       const receiverNameEn = slip.receiver.account.name.en;
 
-      console.log('[ScanAPI] 📥 Receiver Info from SLIP:', {
+      log('[ScanAPI] 📥 Receiver Info from SLIP:', {
         bank: receiverBank?.name || receiverBank?.short || receiverBank?.id || 'N/A',
         account: receiverAccount,
         nameTh: receiverNameTh,
@@ -138,17 +146,17 @@ export const ScanAPI = {
       );
 
       if (!matchedTenant) {
-        console.log('[ScanAPI] ❌ RESULT: No matching tenant found');
-        console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
+        log('[ScanAPI] ❌ RESULT: No matching tenant found');
+        log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
         return errorResponse('No matching tenant found for this slip', 404);
       }
 
-      console.log('[ScanAPI] ✅ MATCHED TENANT:', {
+      log('[ScanAPI] ✅ MATCHED TENANT:', {
         id: matchedTenant.id,
         name: matchedTenant.name,
         admin_api_url: matchedTenant.admin_api_url,
       });
-      console.log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
+      log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
 
       // Match sender (ผู้โอน)
       const senderNameTh = slip.sender.account.name.th;
@@ -156,8 +164,8 @@ export const ScanAPI = {
       const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
       const senderBank = slip.sender.bank; // { id, name, short }
 
-      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING START =====');
-      console.log('[ScanAPI] 📥 Sender Info from SLIP:', {
+      log('[ScanAPI] 🔍 ===== SENDER MATCHING START =====');
+      log('[ScanAPI] 📥 Sender Info from SLIP:', {
         nameTh: senderNameTh,
         nameEn: senderNameEn,
         account: senderAccount,
@@ -176,7 +184,7 @@ export const ScanAPI = {
       let matchedUser = null;
 
       if (session) {
-        console.log('[ScanAPI] ✅ Session found, calling matchSender...');
+        log('[ScanAPI] ✅ Session found, calling matchSender...');
         const sessionToken = session.session_token as string;
         matchedUser = await ScanService.matchSender(
           matchedTenant.admin_api_url,
@@ -188,7 +196,7 @@ export const ScanAPI = {
         );
 
         if (matchedUser) {
-          console.log('[ScanAPI] ✅ MATCHED USER:', {
+          log('[ScanAPI] ✅ MATCHED USER:', {
             id: matchedUser.id,
             memberCode: matchedUser.memberCode,
             fullname: matchedUser.fullname,
@@ -196,13 +204,13 @@ export const ScanAPI = {
             bankAccount: matchedUser.bankAccount || matchedUser.bank_account || 'N/A',
           });
         } else {
-          console.log('[ScanAPI] ❌ No matching user found');
+          log('[ScanAPI] ❌ No matching user found');
         }
       } else {
-        console.log('[ScanAPI] ❌ No active session for tenant, cannot search users');
+        log('[ScanAPI] ❌ No active session for tenant, cannot search users');
       }
 
-      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING END =====');
+      log('[ScanAPI] 🔍 ===== SENDER MATCHING END =====');
 
       // ตรวจสอบสลิปซ้ำก่อนบันทึก
       const existingSlip = await env.DB.prepare(
@@ -212,7 +220,7 @@ export const ScanAPI = {
         .first();
 
       if (existingSlip) {
-        console.log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
+        log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
         return errorResponse('สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)', 400);
       }
 
@@ -248,9 +256,10 @@ export const ScanAPI = {
         )
         .run();
 
-      console.log('[ScanAPI] ✅ Transaction saved:', transactionId);
+      log('[ScanAPI] ✅ Transaction saved:', transactionId);
 
       return successResponse({
+        debug: debugLogs,
         transaction_id: transactionId,
         tenant: {
           id: matchedTenant.id,
@@ -274,8 +283,12 @@ export const ScanAPI = {
         status: matchedUser ? 'matched' : 'pending',
       }, 'Slip scanned and saved successfully');
     } catch (error: any) {
-      console.error('[ScanAPI] Error:', error);
-      return errorResponse(error.message, 500);
+      log('[ScanAPI] ❌ Error:', error.message || error);
+      return jsonResponse({
+        success: false,
+        error: error.message || 'Internal server error',
+        debug: debugLogs,
+      }, 500);
     }
   },
 };

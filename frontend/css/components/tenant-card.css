@@ -397,14 +397,14 @@
   border-radius: var(--radius-md);
   padding: var(--space-sm);
   background: var(--color-white);
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
   cursor: pointer;
   position: relative;
   z-index: 1;
 }
 
 .pending-item:hover {
-  transform: scale(1.005);
+  transform: translateX(2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   border-color: var(--color-primary);
   z-index: 10;

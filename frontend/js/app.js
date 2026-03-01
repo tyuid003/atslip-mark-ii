@@ -1253,6 +1253,13 @@ async function uploadAndScanSlip(file) {
     
     const result = await api.uploadSlip(file);
     
+    // Display debug logs in console
+    if (result.data && result.data.debug) {
+      console.log('🔍 ===== BACKEND MATCHING PROCESS =====');
+      result.data.debug.forEach(log => console.log(log));
+      console.log('🔍 ===== END OF BACKEND PROCESS =====');
+    }
+    
     if (result.success) {
       const data = result.data;
       
@@ -1273,6 +1280,20 @@ async function uploadAndScanSlip(file) {
       addNotification(`❌ สแกนสลิปไม่สำเร็จ: ${result.message || 'Unknown error'}`);
     }
   } catch (error) {
+    // Display debug logs even in error case
+    if (error.response) {
+      try {
+        const errorData = await error.response.json();
+        if (errorData.debug) {
+          console.log('🔍 ===== BACKEND MATCHING PROCESS (ERROR) =====');
+          errorData.debug.forEach(log => console.log(log));
+          console.log('🔍 ===== END OF BACKEND PROCESS =====');
+        }
+      } catch (e) {
+        // Ignore JSON parse errors
+      }
+    }
+    
     addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
     console.error('Upload error:', error);
     
