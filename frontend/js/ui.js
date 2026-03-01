@@ -240,12 +240,12 @@ const UI = {
         const status = statusConfig[item.status] || statusConfig.pending;
 
         return `
-          <div class="pending-item" data-item-id="${item.id}">
+          <div class="pending-item" data-item-id="${item.id}" data-tenant-id="${item.tenant_id}">
             <div class="pending-item-top">
               <span class="status-badge status-${status.color}">${status.label}</span>
               <div class="matched-user-info">
                 ${matchedUserText ? `<span class="matched-user-text">${matchedUserText}</span>` : ''}
-                <button class="pending-search-btn" onclick="openUserSearch('${item.id}')" title="ค้นหาและจับคู่ผู้ใช้">
+                <button class="pending-search-btn" onclick="openUserSearch('${item.id}', '${item.tenant_id}')" title="ค้นหาและจับคู่ผู้ใช้">
                   <i data-lucide="search"></i>
                 </button>
                 <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">

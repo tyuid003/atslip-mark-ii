@@ -50,7 +50,7 @@
   overflow-x: auto;
   overflow-y: visible;
   scroll-behavior: smooth;
-  padding: var(--space-xs) 0 var(--space-md);
+  padding: var(--space-xs) 0 5px;
 }
 
 .tenant-grid::-webkit-scrollbar {
@@ -379,9 +379,14 @@
 .pending-list {
   max-height: 410px;
   overflow-y: auto;
+  overflow-x: visible;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+}
+
+.pending-list::-webkit-scrollbar {
+  display: none;
 }
 
 .pending-item {
@@ -391,12 +396,15 @@
   background: var(--color-white);
   transition: all 0.2s ease;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
 }
 
 .pending-item:hover {
-  transform: scale(1.02);
+  transform: scale(1.01);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   border-color: var(--color-primary);
+  z-index: 10;
 }
 
 .pending-item-top {

@@ -239,8 +239,17 @@ class API {
   // USER SEARCH APIs
   // ============================================================
 
-  async searchUsers(query, category = 'member') {
-    return this.request(`/api/users/search?q=${encodeURIComponent(query)}&category=${category}`);
+  async searchUsers(query, category = 'member', tenantId = null) {
+    const params = new URLSearchParams({
+      q: query,
+      category: category
+    });
+    
+    if (tenantId) {
+      params.append('tenant_id', tenantId);
+    }
+    
+    return this.request(`/api/users/search?${params.toString()}`);
   }
 }
 

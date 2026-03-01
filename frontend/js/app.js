@@ -845,10 +845,12 @@ async function deletePendingItem(transactionId) {
 // ============================================================
 
 let currentSearchTransactionId = null;
+let currentSearchTenantId = null;
 let searchDebounceTimer = null;
 
-async function openUserSearch(transactionId) {
+async function openUserSearch(transactionId, tenantId) {
   currentSearchTransactionId = transactionId;
+  currentSearchTenantId = tenantId;
   
   // Create modal
   const modal = document.createElement('div');
@@ -960,15 +962,15 @@ async function performUserSearch(query) {
   
   try {
     // Try member first
-    console.log('[User Search] Searching member:', query);
-    let response = await api.searchUsers(query, 'member');
+    console.log('[User Search] Searching member:', query, 'tenant:', currentSearchTenantId);
+    let response = await api.searchUsers(query, 'member', currentSearchTenantId);
     let users = response.data.users || [];
     let category = 'member';
     
     // If no results, try non-member
     if (users.length === 0) {
       console.log('[User Search] No member found, trying non-member:', query);
-      response = await api.searchUsers(query, 'non-member');
+      response = await api.searchUsers(query, 'non-member', currentSearchTenantId);
       users = response.data.users || [];
       category = 'non-member';
     }

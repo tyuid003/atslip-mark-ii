@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { successResponse, errorResponse } from '../utils/helpers';
 
 /**
- * GET /api/users/search?q=<term>&category=<member|non-member>
+ * GET /api/users/search?q=<term>&category=<member|non-member>&tenant_id=<id>
  * Proxy search to Admin API
  */
 export async function handleUserSearch(
@@ -13,26 +13,25 @@ export async function handleUserSearch(
     const url = new URL(request.url);
     const searchTerm = url.searchParams.get('q');
     const category = url.searchParams.get('category') || 'member';
+    const tenantId = url.searchParams.get('tenant_id');
 
     if (!searchTerm || searchTerm.trim().length === 0) {
       return errorResponse('Search term is required', 400);
+    }
+
+    if (!tenantId) {
+      return errorResponse('tenant_id parameter is required', 400);
     }
 
     if (category !== 'member' && category !== 'non-member') {
       return errorResponse('Invalid category. Must be "member" or "non-member"', 400);
     }
 
-    // Get tenant from header
-    const tenantSlug = request.headers.get('X-Team-Slug');
-    if (!tenantSlug) {
-      return errorResponse('X-Team-Slug header is required', 400);
-    }
-
-    // Get tenant info
+    // Get tenant info by ID
     const tenant = await env.DB.prepare(
-      `SELECT id, admin_api_url FROM tenants WHERE slug = ?`
+      `SELECT id, admin_api_url FROM tenants WHERE id = ?`
     )
-      .bind(tenantSlug)
+      .bind(tenantId)
       .first<{ id: string; admin_api_url: string }>();
 
     if (!tenant) {
