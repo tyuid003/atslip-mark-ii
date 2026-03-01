@@ -1302,11 +1302,6 @@ async function uploadAndScanSlip(file) {
       
       // รีเฟรช pending list
       await loadPendingTransactions();
-      
-      // รีเซ็ต upload zone
-      setTimeout(() => {
-        resetSlipUpload();
-      }, 1500);
     } else {
       addNotification(`❌ สแกนสลิปไม่สำเร็จ: ${result.message || 'Unknown error'}`);
     }
@@ -1327,11 +1322,6 @@ async function uploadAndScanSlip(file) {
     
     addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
     console.error('Upload error:', error);
-    
-    // รีเซ็ต upload zone เมื่อเกิด error
-    setTimeout(() => {
-      resetSlipUpload();
-    }, 1500);
   } finally {
     // ซ่อน loading icon เสมอ (แม้เกิด error) + ลบ animation
     if (loadingIcon) {
@@ -1339,6 +1329,9 @@ async function uploadAndScanSlip(file) {
       loadingIcon.classList.remove('spin-icon'); // ลบ class animation เพื่อหยุดหมุน
       lucide.createIcons();
     }
+    
+    // รีเซ็ต upload zone ทันทีเพื่อให้สามารถอัพโหลดต่อได้
+    resetSlipUpload();
   }
 }
 
