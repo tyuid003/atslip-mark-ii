@@ -452,7 +452,7 @@
   min-width: 0;
 }
 
-.transfer-names {
+.transfer-info {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -466,10 +466,9 @@
 }
 
 .receiver-name {
-  font-size: 0.75rem;
-  color: var(--color-gray-600);
+  font-size: 0.72rem;
+  color: var(--color-gray-500);
   font-weight: 400;
-  font-style: italic;
 }
 
 .slip-date {
