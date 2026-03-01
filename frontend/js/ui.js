@@ -163,14 +163,37 @@ const UI = {
             const slipData = typeof item.slip_data === 'string' 
               ? JSON.parse(item.slip_data) 
               : item.slip_data;
-            if (slipData.date) {
-              slipDate = new Date(slipData.date).toLocaleString('th-TH');
+            if (slipData && slipData.date) {
+              const date = new Date(slipData.date);
+              if (!isNaN(date.getTime())) {
+                slipDate = date.toLocaleString('th-TH', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                });
+              }
             }
           }
+          // Fallback to created_at if slip_data parsing failed
+          if (slipDate === '-' && item.created_at) {
+            slipDate = new Date(item.created_at * 1000).toLocaleString('th-TH');
+          }
         } catch (e) {
+          console.warn('Error parsing slip date:', e);
           slipDate = item.created_at 
             ? new Date(item.created_at * 1000).toLocaleString('th-TH')
             : '-';
+        }
+
+        // สร้างข้อความแสดงผู้ใช้ที่จับคู่ได้ (ถ้ามี)
+        let matchedUserText = '';
+        if (item.matched_username && item.matched_user_id) {
+          matchedUserText = `${item.matched_username} (${item.matched_user_id})`;
+        } else if (item.matched_username) {
+          matchedUserText = item.matched_username;
         }
 
         // กำหนดสีตาม status
@@ -186,9 +209,12 @@ const UI = {
           <div class="pending-item">
             <div class="pending-item-top">
               <span class="status-badge status-${status.color}">${status.label}</span>
-              <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
-                <i data-lucide="x"></i>
-              </button>
+              <div class="matched-user-info">
+                ${matchedUserText ? `<span class="matched-user-text">${matchedUserText}</span>` : ''}
+                <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
             </div>
             <div class="pending-item-bottom">
               <div class="pending-info">

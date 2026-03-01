@@ -217,7 +217,7 @@ export const ScanAPI = {
           receiverNameTh || receiverNameEn || '',
           receiverAccount,
           JSON.stringify(slip),
-          matchedUser?.id || null,
+          matchedUser?.memberCode || null,
           matchedUser?.fullname || null,
           matchedUser ? 'matched' : 'pending',
           'upload',

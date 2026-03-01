@@ -399,6 +399,25 @@
   margin-bottom: 6px;
 }
 
+.matched-user-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+  flex: 1;
+  min-width: 0;
+}
+
+.matched-user-text {
+  font-size: 0.7rem;
+  color: var(--color-gray-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: right;
+}
+
 .pending-item-bottom {
   display: flex;
   justify-content: space-between;
