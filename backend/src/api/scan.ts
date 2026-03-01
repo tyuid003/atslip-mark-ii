@@ -192,7 +192,8 @@ export const ScanAPI = {
           senderNameTh,
           senderNameEn,
           senderAccount,
-          senderBank
+          senderBank,
+          log
         );
 
         if (matchedUser) {
