@@ -388,15 +388,20 @@ export class ScanService {
 
   /**
    * Match sender (ผู้โอน) โดยค้นหาจาก Admin API
+   * ค้นหาจากชื่อก่อน แล้ว filter ด้วยเลขบัญชีและธนาคาร (ถ้ามี)
    */
   static async matchSender(
     adminApiUrl: string,
     sessionToken: string,
     senderNameTh?: string,
-    senderNameEn?: string
+    senderNameEn?: string,
+    senderAccount?: string,
+    senderBank?: { id?: string; name?: string; short?: string }
   ): Promise<any | null> {
     const names = [senderNameTh, senderNameEn].filter(Boolean);
+    let allCandidates: any[] = [];
 
+    // ขั้นที่ 1: ค้นหาจากชื่อก่อน
     for (const name of names) {
       // Try member first
       let searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=member`;
@@ -412,7 +417,7 @@ export class ScanService {
       if (response.ok) {
         const data = await response.json() as any;
         if (data.list && data.list.length > 0) {
-          return data.list[0]; // ส่งคืน user แรกที่เจอ
+          allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'member' })));
         }
       }
 
@@ -430,11 +435,52 @@ export class ScanService {
       if (response.ok) {
         const data = await response.json() as any;
         if (data.list && data.list.length > 0) {
-          return data.list[0];
+          allCandidates.push(...data.list.map((u: any) => ({ ...u, category: 'non-member' })));
         }
       }
     }
 
-    return null;
+    // ถ้าไม่เจอเลย
+    if (allCandidates.length === 0) {
+      return null;
+    }
+
+    console.log(`[ScanService] Found ${allCandidates.length} candidates by name`);
+
+    // ถ้าเจอคนเดียว return เลย
+    if (allCandidates.length === 1) {
+      return allCandidates[0];
+    }
+
+    // ขั้นที่ 2: Filter ด้วยเลขบัญชี (ถ้ามี)
+    if (senderAccount && senderAccount.length >= 4) {
+      const accountMatched = allCandidates.filter(user => {
+        const userAccount = user.bankAccount || user.bank_account || '';
+        if (!userAccount) return false;
+        
+        // เอาเฉพาะ 4 หลักท้าย
+        const last4Sender = senderAccount.replace(/[^0-9]/g, '').slice(-4);
+        const last4User = userAccount.replace(/[^0-9]/g, '').slice(-4);
+        
+        return last4Sender === last4User;
+      });
+
+      if (accountMatched.length > 0) {
+        console.log(`[ScanService] Filtered by account: ${accountMatched.length} matches`);
+        allCandidates = accountMatched;
+        
+        if (allCandidates.length === 1) {
+          return allCandidates[0];
+        }
+      }
+    }
+
+    // ขั้นที่ 3: Filter ด้วยธนาคาร (ถ้ามี) - เช็คว่าตรงกับ tenant หรือไม่
+    // เนื่องจากผู้ใช้อาจมีหลายธนาคาร เราไม่ filter ตรงนี้
+    // เพราะอาจทำให้พลาด user ที่ถูกต้อง
+
+    // Return คนแรกที่ match ดีที่สุด
+    console.log(`[ScanService] Returning best match from ${allCandidates.length} candidates`);
+    return allCandidates[0];
   }
 }

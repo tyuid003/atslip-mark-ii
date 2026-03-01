@@ -146,11 +146,13 @@ export const ScanAPI = {
       const senderNameTh = slip.sender.account.name.th;
       const senderNameEn = slip.sender.account.name.en;
       const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
+      const senderBank = slip.sender.bank; // { id, name, short }
 
       console.log('[ScanAPI] Matching sender...', {
         nameTh: senderNameTh,
         nameEn: senderNameEn,
         account: senderAccount,
+        bank: senderBank?.name || senderBank?.short || '',
       });
 
       // ดึง session token ของ tenant ที่ match ได้
@@ -170,7 +172,9 @@ export const ScanAPI = {
           matchedTenant.admin_api_url,
           sessionToken,
           senderNameTh,
-          senderNameEn
+          senderNameEn,
+          senderAccount,
+          senderBank
         );
 
         if (matchedUser) {

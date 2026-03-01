@@ -68,17 +68,49 @@ window.addEventListener('hashchange', () => {
 // TENANT MANAGEMENT
 // ============================================================
 
+let tenantCache = null; // Cache รายชื่อ tenant ในหน่วยความจำ
+
 async function loadTenants() {
   try {
     UI.showLoading();
+    
+    // ลองโหลดจาก sessionStorage ก่อน
+    const cachedData = sessionStorage.getItem('tenants_cache');
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        currentTenants = parsed;
+        tenantCache = parsed;
+        UI.renderTenants(currentTenants);
+        console.log('[Tenants] Loaded from sessionStorage cache');
+        return;
+      } catch (e) {
+        console.warn('[Tenants] Failed to parse cache:', e);
+      }
+    }
+    
+    // ถ้าไม่มี cache หรือ parse ไม่ได้ ให้โหลดจาก API
     const response = await api.getTenants();
     currentTenants = response.data || [];
+    tenantCache = currentTenants;
+    
+    // บันทึกลง sessionStorage
+    sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
+    console.log('[Tenants] Loaded from API and cached');
+    
     UI.renderTenants(currentTenants);
   } catch (error) {
     addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   } finally {
     UI.hideLoading();
   }
+}
+
+// ฟังก์ชันสำหรับ clear cache และโหลดใหม่
+function refreshTenants() {
+  sessionStorage.removeItem('tenants_cache');
+  tenantCache = null;
+  return loadTenants();
 }
 
 function openCreateTenantModal() {
@@ -853,13 +885,33 @@ async function openUserSearch(transactionId, tenantId) {
   currentSearchTransactionId = transactionId;
   currentSearchTenantId = tenantId;
   
-  // Load available tenants
-  try {
-    const response = await api.getTenants();
-    availableTenants = response.data || [];
-  } catch (error) {
-    console.error('[User Search] Failed to load tenants:', error);
-    availableTenants = [];
+  // ใช้ cache ที่โหลดไว้แล้ว หรือโหลดจาก sessionStorage
+  if (tenantCache && tenantCache.length > 0) {
+    availableTenants = tenantCache;
+  } else {
+    const cachedData = sessionStorage.getItem('tenants_cache');
+    if (cachedData) {
+      try {
+        availableTenants = JSON.parse(cachedData);
+        tenantCache = availableTenants;
+      } catch (e) {
+        console.warn('[User Search] Failed to parse tenant cache');
+        availableTenants = [];
+      }
+    }
+  }
+  
+  // ถ้ายังไม่มี ให้โหลดจาก API
+  if (!availableTenants || availableTenants.length === 0) {
+    try {
+      const response = await api.getTenants();
+      availableTenants = response.data || [];
+      tenantCache = availableTenants;
+      sessionStorage.setItem('tenants_cache', JSON.stringify(availableTenants));
+    } catch (error) {
+      console.error('[User Search] Failed to load tenants:', error);
+      availableTenants = [];
+    }
   }
   
   // Create modal
