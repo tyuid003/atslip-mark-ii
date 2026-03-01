@@ -224,6 +224,24 @@ class API {
       method: 'DELETE',
     });
   }
+
+  async matchPendingTransaction(transactionId, userData) {
+    return this.request(`/api/pending-transactions/${transactionId}/match`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        matched_user_id: userData.matched_user_id,
+        matched_username: userData.matched_username
+      }),
+    });
+  }
+
+  // ============================================================
+  // USER SEARCH APIs
+  // ============================================================
+
+  async searchUsers(query, category = 'member') {
+    return this.request(`/api/users/search?q=${encodeURIComponent(query)}&category=${category}`);
+  }
 }
 
 // Create API instance

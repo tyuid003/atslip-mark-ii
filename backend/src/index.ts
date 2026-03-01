@@ -9,6 +9,8 @@ import { AdminLoginAPI } from './api/admin-login';
 import { BankRefreshService } from './services/bank-refresh.service';
 import { ScanAPI } from './api/scan';
 import { BankAccountsAPI } from './api/bank-accounts';
+import { handleUserSearch } from './api/user-search';
+import { handleMatchPendingTransaction } from './api/match-pending';
 
 // ============================================================
 // MAIN ROUTER
@@ -218,6 +220,15 @@ export default {
     }
 
     // ============================================================
+    // USER SEARCH ROUTES
+    // ============================================================
+
+    // GET /api/users/search?q=<term>&category=<member|non-member> - ค้นหาผู้ใช้
+    if (method === 'GET' && pathname === '/api/users/search') {
+      return await handleUserSearch(env, request);
+    }
+
+    // ============================================================
     // PENDING ROUTES
     // ============================================================
 
@@ -231,6 +242,13 @@ export default {
     if (method === 'DELETE' && deletePendingMatch) {
       const transactionId = decodeURIComponent(deletePendingMatch[1]);
       return await PendingAPI.handleDeletePendingTransaction(env, transactionId);
+    }
+
+    // PATCH /api/pending-transactions/:id/match - จับคู่รายการแบบ manual
+    const matchPendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)\/match$/);
+    if (method === 'PATCH' && matchPendingMatch) {
+      const transactionId = decodeURIComponent(matchPendingMatch[1]);
+      return await handleMatchPendingTransaction(env, transactionId, request);
     }
 
     // ============================================================

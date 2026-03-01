@@ -841,6 +841,201 @@ async function deletePendingItem(transactionId) {
 }
 
 // ============================================================
+// USER SEARCH & MANUAL MATCHING
+// ============================================================
+
+let currentSearchTransactionId = null;
+let searchDebounceTimer = null;
+
+async function openUserSearch(transactionId) {
+  currentSearchTransactionId = transactionId;
+  
+  // Create modal
+  const modal = document.createElement('div');
+  modal.className = 'user-search-modal';
+  modal.innerHTML = `
+    <div class="user-search-content">
+      <div class="user-search-header">
+        <h3>ค้นหาและจับคู่ผู้ใช้</h3>
+        <button class="user-search-close" onclick="closeUserSearch()">
+          <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+        </button>
+      </div>
+      <div class="user-search-input-wrapper">
+        <input 
+          type="text" 
+          class="user-search-input" 
+          id="userSearchInput"
+          placeholder="พิมพ์ชื่อหรือรหัสสมาชิกเพื่อค้นหา..."
+          autocomplete="off"
+        />
+        <i data-lucide="search" class="user-search-icon" style="width: 16px; height: 16px;"></i>
+      </div>
+      <div class="user-search-results" id="userSearchResults">
+        <div class="user-search-empty">
+          พิมพ์ในช่องค้นหาเพื่อเริ่มค้นหาผู้ใช้
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  lucide.createIcons();
+  
+  // Focus input
+  const input = document.getElementById('userSearchInput');
+  setTimeout(() => input.focus(), 100);
+  
+  // Bind search event
+  input.addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    
+    // Clear previous timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+    
+    // Debounce search (300ms)
+    searchDebounceTimer = setTimeout(async () => {
+      if (query.length >= 2) {
+        await performUserSearch(query);
+      } else if (query.length === 0) {
+        document.getElementById('userSearchResults').innerHTML = `
+          <div class="user-search-empty">
+            พิมพ์ในช่องค้นหาเพื่อเริ่มค้นหาผู้ใช้
+          </div>
+        `;
+      }
+    }, 300);
+  });
+  
+  // Enter to search
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      performUserSearch(e.target.value.trim());
+    } else if (e.key === 'Escape') {
+      closeUserSearch();
+    }
+  });
+  
+  // Click outside to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      closeUserSearch();
+    }
+  };
+}
+
+window.openUserSearch = openUserSearch;
+
+function closeUserSearch() {
+  const modal = document.querySelector('.user-search-modal');
+  if (modal) {
+    modal.remove();
+  }
+  currentSearchTransactionId = null;
+}
+
+window.closeUserSearch = closeUserSearch;
+
+async function performUserSearch(query) {
+  const resultsDiv = document.getElementById('userSearchResults');
+  
+  if (!query || query.length < 2) {
+    resultsDiv.innerHTML = `
+      <div class="user-search-empty">
+        กรุณาพิมพ์อย่างน้อย 2 ตัวอักษร
+      </div>
+    `;
+    return;
+  }
+  
+  // Show loading
+  resultsDiv.innerHTML = `
+    <div class="user-search-loading">
+      <div class="loading"></div>
+      กำลังค้นหา...
+    </div>
+  `;
+  
+  try {
+    // Try member first
+    console.log('[User Search] Searching member:', query);
+    let response = await api.searchUsers(query, 'member');
+    let users = response.data.users || [];
+    let category = 'member';
+    
+    // If no results, try non-member
+    if (users.length === 0) {
+      console.log('[User Search] No member found, trying non-member:', query);
+      response = await api.searchUsers(query, 'non-member');
+      users = response.data.users || [];
+      category = 'non-member';
+    }
+    
+    console.log(`[User Search] Found ${users.length} users (${category})`);
+    
+    if (users.length === 0) {
+      resultsDiv.innerHTML = `
+        <div class="user-search-empty">
+          ไม่พบผู้ใช้ที่ตรงกับ "${query}"
+        </div>
+      `;
+      return;
+    }
+    
+    // Display results
+    resultsDiv.innerHTML = users.map(user => {
+      const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
+      const userId = user.memberCode || user.username || user.id;
+      
+      return `
+        <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
+          <div class="user-result-name">${displayName}</div>
+          <div class="user-result-id">รหัส: ${userId}</div>
+          <span class="user-result-category ${category}">${category === 'member' ? 'สมาชิก' : 'ไม่ใช่สมาชิก'}</span>
+        </div>
+      `;
+    }).join('');
+    
+  } catch (error) {
+    console.error('[User Search] Error:', error);
+    resultsDiv.innerHTML = `
+      <div class="user-search-empty" style="color: var(--color-red-600);">
+        เกิดข้อผิดพลาด: ${error.message}
+      </div>
+    `;
+  }
+}
+
+async function selectUser(userId, userName) {
+  if (!currentSearchTransactionId) {
+    addNotification('❌ ไม่พบข้อมูลรายการ');
+    closeUserSearch();
+    return;
+  }
+  
+  try {
+    console.log('[Manual Match] Matching transaction', currentSearchTransactionId, 'to user', userId, userName);
+    
+    await api.matchPendingTransaction(currentSearchTransactionId, {
+      matched_user_id: userId,
+      matched_username: userName
+    });
+    
+    addNotification(`✅ จับคู่กับ ${userName} สำเร็จ`);
+    closeUserSearch();
+    await loadPendingTransactions();
+    
+  } catch (error) {
+    console.error('[Manual Match] Error:', error);
+    addNotification('❌ ไม่สามารถจับคู่ได้: ' + error.message);
+  }
+}
+
+window.selectUser = selectUser;
+
+// ============================================================
 // SLIP UPLOAD (UI ONLY)
 // ============================================================
 
