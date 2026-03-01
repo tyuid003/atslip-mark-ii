@@ -202,9 +202,7 @@ export const ScanAPI = {
         console.log('[ScanAPI] ❌ No active session for tenant, cannot search users');
       }
 
-      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING END ====='); else {
-        console.log('[ScanAPI] ⚠️ No active session for tenant');
-      }
+      console.log('[ScanAPI] 🔍 ===== SENDER MATCHING END =====');
 
       // ตรวจสอบสลิปซ้ำก่อนบันทึก
       const existingSlip = await env.DB.prepare(
