@@ -185,7 +185,7 @@ const UI = {
         return `
           <div class="pending-item">
             <div class="pending-item-top">
-              <span class="status-badge status-${status.color}" title="${status.label}"></span>
+              <span class="status-badge status-${status.color}">${status.label}</span>
               <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
                 <i data-lucide="x"></i>
               </button>

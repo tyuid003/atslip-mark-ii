@@ -432,32 +432,37 @@
   white-space: nowrap;
 }
 
-/* Status Badge */
+/* Status Badge - Capsule Style */
 .status-badge {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .status-yellow {
-  background: #fbbf24;
-  box-shadow: 0 0 0 2px #fef3c7;
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .status-blue {
-  background: #3b82f6;
-  box-shadow: 0 0 0 2px #dbeafe;
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .status-green {
-  background: #10b981;
-  box-shadow: 0 0 0 2px #d1fae5;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .status-red {
-  background: #ef4444;
-  box-shadow: 0 0 0 2px #fee2e2;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .pending-delete-btn {
