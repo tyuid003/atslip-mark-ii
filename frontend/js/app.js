@@ -847,14 +847,29 @@ async function deletePendingItem(transactionId) {
 let currentSearchTransactionId = null;
 let currentSearchTenantId = null;
 let searchDebounceTimer = null;
+let availableTenants = [];
 
 async function openUserSearch(transactionId, tenantId) {
   currentSearchTransactionId = transactionId;
   currentSearchTenantId = tenantId;
   
+  // Load available tenants
+  try {
+    const response = await api.getTenants();
+    availableTenants = response.data || [];
+  } catch (error) {
+    console.error('[User Search] Failed to load tenants:', error);
+    availableTenants = [];
+  }
+  
   // Create modal
   const modal = document.createElement('div');
   modal.className = 'user-search-modal';
+  
+  const tenantOptions = availableTenants
+    .map(t => `<option value="${t.id}" ${t.id === tenantId ? 'selected' : ''}>${t.name}</option>`)
+    .join('');
+  
   modal.innerHTML = `
     <div class="user-search-content">
       <div class="user-search-header">
@@ -862,6 +877,12 @@ async function openUserSearch(transactionId, tenantId) {
         <button class="user-search-close" onclick="closeUserSearch()">
           <i data-lucide="x" style="width: 20px; height: 20px;"></i>
         </button>
+      </div>
+      <div class="user-search-tenant-selector">
+        <label for="tenantSelect">เลือกเว็บที่ต้องการค้นหา:</label>
+        <select id="tenantSelect" class="user-search-tenant-select">
+          ${tenantOptions}
+        </select>
       </div>
       <div class="user-search-input-wrapper">
         <input 
@@ -883,6 +904,13 @@ async function openUserSearch(transactionId, tenantId) {
   
   document.body.appendChild(modal);
   lucide.createIcons();
+  
+  // Get selected tenant from dropdown
+  const tenantSelect = document.getElementById('tenantSelect');
+  tenantSelect.addEventListener('change', (e) => {
+    currentSearchTenantId = e.target.value;
+    console.log('[User Search] Tenant changed to:', currentSearchTenantId);
+  });
   
   // Focus input
   const input = document.getElementById('userSearchInput');
@@ -961,23 +989,23 @@ async function performUserSearch(query) {
   `;
   
   try {
-    // Try member first
-    console.log('[User Search] Searching member:', query, 'tenant:', currentSearchTenantId);
-    let response = await api.searchUsers(query, 'member', currentSearchTenantId);
-    let users = response.data.users || [];
-    let category = 'member';
+    // Search both member and non-member in parallel
+    console.log('[User Search] Searching in parallel:', query, 'tenant:', currentSearchTenantId);
     
-    // If no results, try non-member
-    if (users.length === 0) {
-      console.log('[User Search] No member found, trying non-member:', query);
-      response = await api.searchUsers(query, 'non-member', currentSearchTenantId);
-      users = response.data.users || [];
-      category = 'non-member';
-    }
+    const [memberResponse, nonMemberResponse] = await Promise.all([
+      api.searchUsers(query, 'member', currentSearchTenantId).catch(err => ({ data: { users: [] } })),
+      api.searchUsers(query, 'non-member', currentSearchTenantId).catch(err => ({ data: { users: [] } }))
+    ]);
     
-    console.log(`[User Search] Found ${users.length} users (${category})`);
+    const memberUsers = (memberResponse.data?.users || []).map(u => ({ ...u, category: 'member' }));
+    const nonMemberUsers = (nonMemberResponse.data?.users || []).map(u => ({ ...u, category: 'non-member' }));
     
-    if (users.length === 0) {
+    // Combine results: members first, then non-members
+    const allUsers = [...memberUsers, ...nonMemberUsers];
+    
+    console.log(`[User Search] Found ${memberUsers.length} members + ${nonMemberUsers.length} non-members = ${allUsers.length} total`);
+    
+    if (allUsers.length === 0) {
       resultsDiv.innerHTML = `
         <div class="user-search-empty">
           ไม่พบผู้ใช้ที่ตรงกับ "${query}"
@@ -986,19 +1014,42 @@ async function performUserSearch(query) {
       return;
     }
     
-    // Display results
-    resultsDiv.innerHTML = users.map(user => {
-      const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
-      const userId = user.memberCode || user.username || user.id;
-      
-      return `
-        <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
-          <div class="user-result-name">${displayName}</div>
-          <div class="user-result-id">รหัส: ${userId}</div>
-          <span class="user-result-category ${category}">${category === 'member' ? 'สมาชิก' : 'ไม่ใช่สมาชิก'}</span>
-        </div>
-      `;
-    }).join('');
+    // Display results with category headers
+    let html = '';
+    
+    if (memberUsers.length > 0) {
+      html += `<div class="user-search-category-header">สมาชิก (${memberUsers.length})</div>`;
+      html += memberUsers.map(user => {
+        const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
+        const userId = user.memberCode || user.username || user.id;
+        
+        return `
+          <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
+            <div class="user-result-name">${displayName}</div>
+            <div class="user-result-id">รหัส: ${userId}</div>
+            <span class="user-result-category member">สมาชิก</span>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    if (nonMemberUsers.length > 0) {
+      html += `<div class="user-search-category-header">ไม่ใช่สมาชิก (${nonMemberUsers.length})</div>`;
+      html += nonMemberUsers.map(user => {
+        const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
+        const userId = user.memberCode || user.username || user.id;
+        
+        return `
+          <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
+            <div class="user-result-name">${displayName}</div>
+            <div class="user-result-id">รหัส: ${userId}</div>
+            <span class="user-result-category non-member">ไม่ใช่สมาชิก</span>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    resultsDiv.innerHTML = html;
     
   } catch (error) {
     console.error('[User Search] Error:', error);
