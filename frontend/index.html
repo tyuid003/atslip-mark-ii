@@ -108,9 +108,14 @@
       <section class="card workbench-card">
         <div class="card-header">
           <h3 class="card-title">รายการสแกน</h3>
-          <button class="filter-btn" onclick="openPendingFilter()" aria-label="Filter pending transactions">
-            <i data-lucide="filter"></i>
-          </button>
+          <div style="display: flex; gap: var(--space-sm); margin-left: auto;">
+            <button class="filter-btn" onclick="openPendingFilter()" aria-label="Filter pending transactions" title="กรอง">
+              <i data-lucide="filter"></i>
+            </button>
+            <button class="filter-btn" onclick="openPendingSortMenu()" aria-label="Sort pending transactions" title="เซิร์ท">
+              <i data-lucide="arrow-up-down"></i>
+            </button>
+          </div>
         </div>
         <div class="card-body pending-body">
           <div id="pendingList" class="pending-list"></div>

@@ -240,7 +240,7 @@ const UI = {
               <div class="pending-info">
                 <div class="transfer-info">
                   <span class="sender-name">${item.sender_name || 'ไม่ระบุชื่อ'}</span>
-                  ${item.receiver_name ? `<i data-lucide="arrow-right" size="14" style="color: var(--color-gray-400); flex-shrink: 0;"></i><span class="receiver-name">${item.receiver_name}</span>` : ''}
+                  ${item.receiver_name ? `<i data-lucide="arrow-right" size="10"; style="width: 13px; height: 13px; "color: var(--color-gray-400); flex-shrink: 0;"></i><span class="receiver-name">${item.receiver_name}</span>` : ''}
                 </div>
                 <div>
                   <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
