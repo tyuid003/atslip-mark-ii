@@ -313,7 +313,8 @@
 }
 
 .workbench-card {
-  min-height: 340px;
+  min-height: 1040px;
+  height: 100%;
 }
 
 .upload-dropzone {

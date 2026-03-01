@@ -61,7 +61,7 @@ export async function createTenant(
 export async function getTenantById(env: Env, id: string): Promise<TenantWithStats | null> {
   const result = await env.DB.prepare(
     `SELECT 
-      t.id, t.team_id, t.name, t.slug, t.admin_api_url, t.line_oa_id,
+      t.id, t.team_id, t.name, t.admin_api_url, t.line_oa_id,
       t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
       t.admin_username, t.admin_password, t.easyslip_token,
       COUNT(DISTINCT lo.id) as line_oa_count,
@@ -116,7 +116,7 @@ export async function getAllTenants(env: Env, teamSlug: string = 'default') {
 
   const results = await env.DB.prepare(
     `SELECT 
-      t.id, t.team_id, t.name, t.slug, t.admin_api_url, t.line_oa_id,
+      t.id, t.team_id, t.name, t.admin_api_url, t.line_oa_id,
       t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
       t.admin_username, t.admin_password,
       COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
