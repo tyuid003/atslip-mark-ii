@@ -3,6 +3,7 @@
 
 import { jsonResponse, errorResponse, successResponse } from '../utils/helpers';
 import { ScanService } from '../services/scan.service';
+import { CreditService } from '../services/credit.service';
 import type { Env } from '../types';
 
 export const ScanAPI = {
@@ -11,15 +12,15 @@ export const ScanAPI = {
    * อัพโหลดและสแกนสลิป
    */
   async handleUploadSlip(request: Request, env: Env): Promise<Response> {
-    try {
-      // Debug logs array to send back to frontend
-      const debugLogs: string[] = [];
-      const log = (...args: any[]) => {
-        const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
-        debugLogs.push(message);
-        console.log(...args);
-      };
+    // Debug logs array to send back to frontend
+    const debugLogs: string[] = [];
+    const log = (...args: any[]) => {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      debugLogs.push(message);
+      console.log(...args);
+    };
 
+    try {
       // รับ form data
       const formData = await request.formData();
       const file = formData.get('file') as File;
@@ -259,6 +260,55 @@ export const ScanAPI = {
 
       log('[ScanAPI] ✅ Transaction saved:', transactionId);
 
+      // ถ้า matched user และ auto-deposit เปิดอยู่ → ทำการเติมเครดิตอัตโนมัติ
+      let creditResult = null;
+      if (matchedUser && matchedTenant.accountId) {
+        // ตรวจสอบว่า auto-deposit เปิดอยู่หรือไม่
+        const autoDepositEnabled = await CreditService.isAutoDepositEnabled(env, matchedTenant.id);
+        
+        if (autoDepositEnabled) {
+          log('[ScanAPI] 🎯 Auto-deposit is ENABLED - triggering credit submission...');
+          
+          creditResult = await CreditService.submitCredit(
+            env,
+            {
+              tenantId: matchedTenant.id,
+              slipData: slip,
+              user: matchedUser,
+              toAccountId: matchedTenant.accountId,
+            },
+            log
+          );
+
+          if (creditResult.success) {
+            if (creditResult.isDuplicate) {
+              log('[ScanAPI] ⚠️ Credit submission: DUPLICATE');
+              // อัพเดทสถานะเป็น duplicate
+              await env.DB.prepare(
+                `UPDATE pending_transactions SET status = ?, updated_at = ? WHERE id = ?`
+              )
+                .bind('duplicate', now, transactionId)
+                .run();
+            } else {
+              log('[ScanAPI] ✅ Credit submission: SUCCESS');
+              // อัพเดทสถานะเป็น credited
+              await env.DB.prepare(
+                `UPDATE pending_transactions SET status = ?, credited_at = ?, updated_at = ? WHERE id = ?`
+              )
+                .bind('credited', now, now, transactionId)
+                .run();
+            }
+          } else {
+            log('[ScanAPI] ❌ Credit submission FAILED:', creditResult.message);
+            // สถานะยังคงเป็น matched (ไม่เปลี่ยน)
+          }
+        } else {
+          log('[ScanAPI] ⏭️ Auto-deposit is DISABLED - skipping credit submission');
+        }
+      } else {
+        log('[ScanAPI] ⏭️ No matched user or account - skipping credit submission');
+      }
+
       return successResponse({
         debug: debugLogs,
         transaction_id: transactionId,
@@ -281,7 +331,15 @@ export const ScanAPI = {
               name: senderNameTh || senderNameEn || 'Unknown',
               matched: false,
             },
-        status: matchedUser ? 'matched' : 'pending',
+        status: creditResult?.success 
+          ? (creditResult.isDuplicate ? 'duplicate' : 'credited')
+          : (matchedUser ? 'matched' : 'pending'),
+        credit: creditResult ? {
+          attempted: true,
+          success: creditResult.success,
+          duplicate: creditResult.isDuplicate || false,
+          message: creditResult.message,
+        } : null,
       }, 'Slip scanned and saved successfully');
     } catch (error: any) {
       log('[ScanAPI] ❌ Error:', error.message || error);

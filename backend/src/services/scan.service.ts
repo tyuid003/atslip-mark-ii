@@ -74,6 +74,7 @@ interface MatchedTenant {
   team_id: string;
   name: string;
   admin_api_url: string;
+  accountId?: string; // ID ของบัญชีธนาคารที่ match (สำหรับใช้ใน credit submission)
 }
 
 export class ScanService {
@@ -399,6 +400,7 @@ export class ScanService {
 
         // ถ้า match ธนาคาร AND (เลขบัญชี OR ชื่อ) ให้ return tenant นี้
         if (bankMatched && (accountMatched || nameMatched)) {
+          const matchedAccountId = account.id || account.accountId || account.accountNumber || account.account_number || '';
           console.log(`[ScanService]     ✅ MATCH! Bank: ✓ | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
           console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
           console.log('[ScanService] ✅ Matched Tenant:', {
@@ -406,12 +408,14 @@ export class ScanService {
             team_id: tenant.team_id as string,
             name: tenantName,
             admin_api_url: tenant.admin_api_url as string,
+            accountId: matchedAccountId,
           });
           return {
             id: tenantId,
             team_id: tenant.team_id as string,
             name: tenant.name as string,
             admin_api_url: tenant.admin_api_url as string,
+            accountId: matchedAccountId,
           };
         } else {
           console.log(`[ScanService]     ❌ No match - Bank: ${bankMatched ? '✓' : '✗'} | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
