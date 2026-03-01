@@ -238,7 +238,10 @@ const UI = {
             </div>
             <div class="pending-item-bottom">
               <div class="pending-info">
-                <span class="sender-name">${item.sender_name || 'ไม่ระบุชื่อ'}</span>
+                <div class="transfer-names">
+                  <span class="sender-name">${item.sender_name || 'ไม่ระบุชื่อ'}</span>
+                  ${item.receiver_name ? `<i data-lucide="arrow-right" size="14" style="color: var(--color-gray-400); margin: 0 4px;"></i><span class="receiver-name">${item.receiver_name}</span>` : ''}
+                </div>
                 <div>
                   <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
                 </div>

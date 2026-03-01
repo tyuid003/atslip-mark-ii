@@ -452,10 +452,24 @@
   min-width: 0;
 }
 
+.transfer-names {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .sender-name {
   font-size: 0.75rem;
   color: var(--color-gray-700);
   font-weight: 500;
+}
+
+.receiver-name {
+  font-size: 0.75rem;
+  color: var(--color-gray-600);
+  font-weight: 400;
+  font-style: italic;
 }
 
 .slip-date {

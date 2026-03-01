@@ -9,7 +9,6 @@ let currentLineOAs = [];
 let notifications = [];
 let unreadCount = 0;
 let toastEnabled = true; // สถานะการแสดง toast notification
-let toastEnabled = true; // สถานะการแสดง toast notification
 
 // ============================================================
 // INITIALIZATION
