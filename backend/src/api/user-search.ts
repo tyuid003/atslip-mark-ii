@@ -27,31 +27,35 @@ export async function handleUserSearch(
       return errorResponse('Invalid category. Must be "member" or "non-member"', 400);
     }
 
-    // Get tenant info by ID
+    // Get tenant info and session token
     const tenant = await env.DB.prepare(
-      `SELECT id, admin_api_url FROM tenants WHERE id = ?`
+      `SELECT t.id, t.admin_api_url, s.session_token
+       FROM tenants t
+       LEFT JOIN admin_sessions s ON s.tenant_id = t.id AND s.expires_at > ?
+       WHERE t.id = ?
+       LIMIT 1`
     )
-      .bind(tenantId)
-      .first<{ id: string; admin_api_url: string }>();
+      .bind(Math.floor(Date.now() / 1000), tenantId)
+      .first();
 
     if (!tenant) {
       return errorResponse('Tenant not found', 404);
     }
 
-    // Get session token from KV
-    const sessionData = await env.BANK_KV.get(`session:${tenant.id}`, { type: 'json' }) as { token?: string } | null;
-    if (!sessionData || !sessionData.token) {
+    // Check session token
+    const sessionToken = tenant.session_token as string | null;
+    if (!sessionToken) {
       return errorResponse('Admin session not found. Please login first.', 401);
     }
 
     // Call Admin API
-    const adminApiUrl = tenant.admin_api_url;
+    const adminApiUrl = tenant.admin_api_url as string;
     const searchUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(searchTerm)}&userCategory=${category}`;
 
     const response = await fetch(searchUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${sessionData.token}`,
+        'Authorization': `Bearer ${sessionToken}`,
         'Accept': 'application/json',
       },
     });
