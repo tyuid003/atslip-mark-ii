@@ -39,7 +39,7 @@ export async function handleUserSearch(
     }
 
     // Get session token from KV
-    const sessionData = await env.BANK_KV.get(`session:${tenant.id}`, { type: 'json' });
+    const sessionData = await env.BANK_KV.get(`session:${tenant.id}`, { type: 'json' }) as { token?: string } | null;
     if (!sessionData || !sessionData.token) {
       return errorResponse('Admin session not found. Please login first.', 401);
     }
