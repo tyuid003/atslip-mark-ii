@@ -235,6 +235,37 @@ export async function handleCreditPendingTransaction(
       )
       .run();
 
+    // 🔔 Broadcast realtime notification for credit completion
+    try {
+      const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
+      const doStub = env.PENDING_NOTIFICATIONS.get(doId);
+
+      const broadcastPayload = {
+        type: 'transaction_updated',
+        data: {
+          id: transactionId,
+          status: newStatus,
+          matched_user_id: creditResult.resolvedMemberCode || null,
+          matched_username: creditResult.resolvedUsername || null,
+          message: creditResult.message || (newStatus === 'credited' ? 'เติมเครดิตสำเร็จ' : 'ซ้ำ'),
+          updated_at: now,
+        },
+      };
+
+      console.log('[PendingCredit] 📡 Broadcasting credit update:', JSON.stringify(broadcastPayload).substring(0, 200));
+
+      const broadcastResponse = await doStub.fetch('https://internal/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(broadcastPayload),
+      });
+
+      const broadcastResult = await broadcastResponse.json();
+      console.log('[PendingCredit] ✅ Credit update broadcasted:', broadcastResult);
+    } catch (broadcastError) {
+      console.log('[PendingCredit] ⚠️ Failed to broadcast credit update:', broadcastError instanceof Error ? broadcastError.message : String(broadcastError));
+    }
+
     return successResponse({
       id: transactionId,
       status: newStatus,

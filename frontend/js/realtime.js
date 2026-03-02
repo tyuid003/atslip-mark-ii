@@ -131,6 +131,10 @@ class RealtimeClient {
       console.log('[Realtime] Detected new_pending message, calling onNewPending');
       // New pending transaction received
       this.onNewPending(message.data);
+    } else if (message.type === 'transaction_updated') {
+      console.log('[Realtime] Detected transaction_updated message, calling onTransactionUpdated');
+      // Transaction status changed (credit applied, etc)
+      this.onTransactionUpdated(message.data);
     } else {
       console.log('[Realtime] Unknown message type:', message.type);
     }
@@ -145,7 +149,15 @@ class RealtimeClient {
 
     // Add to allPendingTransactions array without reloading
     if (typeof allPendingTransactions !== 'undefined') {
+      // Check if this transaction already exists (prevent duplicates on refresh)
+      const isDuplicate = allPendingTransactions.some(item => item.id === data.id);
+      if (isDuplicate) {
+        console.log('[Realtime] ⚠️ Transaction already exists, skipping duplicate:', data.id);
+        return;
+      }
+
       allPendingTransactions.unshift(data);
+      console.log('[Realtime] ✅ Transaction added. Total:', allPendingTransactions.length);
 
       // Show toast notification
       if (typeof showToast === 'function') {
@@ -159,6 +171,54 @@ class RealtimeClient {
 
       // Optionally play a sound notification
       this.playNotificationSound();
+    }
+  }
+
+  /**
+   * Called when a transaction status is updated (credit applied, duplicate detected, etc)
+   * @param {object} data 
+   */
+  onTransactionUpdated(data) {
+    console.log('[Realtime] Transaction updated:', data);
+
+    if (typeof allPendingTransactions !== 'undefined') {
+      // Find and update the transaction
+      const index = allPendingTransactions.findIndex(item => item.id === data.id);
+      if (index !== -1) {
+        // Update the transaction with new status and data
+        allPendingTransactions[index] = {
+          ...allPendingTransactions[index],
+          ...data,
+        };
+        console.log('[Realtime] ✅ Transaction updated:', data.id, 'new status:', data.status);
+
+        // Show appropriate toast message
+        if (typeof showToast === 'function') {
+          let message = '';
+          if (data.status === 'credited') {
+            message = `✅ เติมเครดิตสำเร็จ: ${data.message || 'ธุรกรรมเสร็จสมบูรณ์'}`;
+          } else if (data.status === 'duplicate') {
+            message = `⚠️ ซ้ำ: ${data.message || 'ธุรกรรมซ้ำกับระบบ'}`;
+          } else if (data.status === 'failed') {
+            message = `❌ เติมเครดิตล้มเหลว: ${data.message || 'เกิดข้อผิดพลาด'}`;
+          } else if (data.status === 'matched') {
+            message = `🔗 จับคู่: ${data.matched_username || 'ไม่พบชื่อ'}`;
+          } else {
+            message = `📋 สถานะเปลี่ยน: ${data.status}`;
+          }
+          showToast(message, data.status === 'credited' ? 'success' : data.status === 'failed' ? 'error' : 'info');
+        }
+
+        // Re-apply filters and render
+        if (typeof applyPendingFiltersAndSort === 'function') {
+          applyPendingFiltersAndSort();
+        }
+
+        // Play notification sound
+        this.playNotificationSound();
+      } else {
+        console.log('[Realtime] ⚠️ Transaction not found in list:', data.id);
+      }
     }
   }
 
