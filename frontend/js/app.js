@@ -4,6 +4,7 @@
 
 let currentTeamSlug = null; // team slug จาก URL
 let currentPage = 'dashboard';
+let currentTeamId = null;
 let currentTenants = [];
 let currentTenantId = null;
 let currentLineOAs = [];
@@ -33,6 +34,7 @@ async function init() {
   currentPage = routeInfo.page || 'dashboard';
   window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
   window.currentPage = currentPage;
+  window.currentTeamId = null;
   console.log('Current Team Slug:', currentTeamSlug);
 
   if (typeof window.setLayoutForPage === 'function') {
@@ -45,6 +47,8 @@ async function init() {
       // ดึงข้อมูล team จาก API
       const response = await api.getTeamBySlug(currentTeamSlug);
       const teamData = response.data;
+      currentTeamId = teamData.id || null;
+      window.currentTeamId = currentTeamId;
       
       // อัพเดท page title ด้วยชื่อทีม
       document.title = `${teamData.name} - ATslip Auto Deposit`;
@@ -57,6 +61,8 @@ async function init() {
       }
     } catch (error) {
       console.error('Error loading team data:', error);
+      currentTeamId = null;
+      window.currentTeamId = null;
       // ถ้า error ใช้ slug แทน
       document.title = `${currentTeamSlug.toUpperCase()} - ATslip Auto Deposit`;
       const teamBadge = document.getElementById('teamBadge');
@@ -1065,10 +1071,6 @@ async function deletePendingItem(transactionId) {
 }
 
 async function creditPendingItem(transactionId) {
-  if (!confirm('ต้องการเติมเครดิตรายการนี้หรือไม่?')) {
-    return;
-  }
-
   try {
     const response = await api.creditPendingTransaction(transactionId);
 
@@ -1086,10 +1088,6 @@ async function creditPendingItem(transactionId) {
 }
 
 async function withdrawPendingCredit(transactionId) {
-  if (!confirm('ต้องการดึงเครดิตกลับรายการนี้หรือไม่?')) {
-    return;
-  }
-
   try {
     await api.withdrawPendingCredit(transactionId, {
       remark: 'Manual withdraw from pending list',
@@ -1177,7 +1175,7 @@ async function openUserSearch(transactionId, tenantId) {
           placeholder="พิมพ์ชื่อหรือรหัสสมาชิกเพื่อค้นหา..."
           autocomplete="off"
         />
-        <i data-lucide="search" class="user-search-icon" style="width: 16px; height: 16px;"></i>
+        <i data-lucide="search" class="user-search-icon" onclick="retryUserSearch()" style="width: 16px; height: 16px; cursor: pointer;" title="ค้นหาใหม่"></i>
       </div>
       <div class="user-search-results" id="userSearchResults">
         <div class="user-search-empty">
@@ -1253,6 +1251,15 @@ function closeUserSearch() {
 
 window.closeUserSearch = closeUserSearch;
 
+function retryUserSearch() {
+  const input = document.getElementById('userSearchInput');
+  if (input && input.value.trim().length >= 2) {
+    performUserSearch(input.value.trim());
+  }
+}
+
+window.retryUserSearch = retryUserSearch;
+
 async function performUserSearch(query) {
   const resultsDiv = document.getElementById('userSearchResults');
   
@@ -1306,12 +1313,13 @@ async function performUserSearch(query) {
       html += `<div class="user-search-category-header">สมาชิก (${memberUsers.length})</div>`;
       html += memberUsers.map(user => {
         const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
-        const userId = user.memberCode || user.username || user.id;
+        const selectUserId = String(user.memberCode || user.username || user.id || '').replace(/'/g, "\\'");
+        const displayUserCode = user.memberCode || user.username || user.id;
         
         return `
-          <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
+          <div class="user-result-item" onclick="selectUser('${selectUserId}', '${displayName.replace(/'/g, "\\'")}')">
             <div class="user-result-name">${displayName}</div>
-            <div class="user-result-id">รหัส: ${userId}</div>
+            <div class="user-result-id">รหัส: ${displayUserCode}</div>
             <span class="user-result-category member">สมาชิก</span>
           </div>
         `;
@@ -1322,12 +1330,13 @@ async function performUserSearch(query) {
       html += `<div class="user-search-category-header">ไม่ใช่สมาชิก (${nonMemberUsers.length})</div>`;
       html += nonMemberUsers.map(user => {
         const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
-        const userId = user.memberCode || user.username || user.id;
+        const selectUserId = String(user.memberCode || user.username || user.id || '').replace(/'/g, "\\'");
+        const displayUserCode = user.memberCode || user.username || user.id;
         
         return `
-          <div class="user-result-item" onclick="selectUser('${userId}', '${displayName.replace(/'/g, "\\'")}')">
+          <div class="user-result-item" onclick="selectUser('${selectUserId}', '${displayName.replace(/'/g, "\\'")}')">
             <div class="user-result-name">${displayName}</div>
-            <div class="user-result-id">รหัส: ${userId}</div>
+            <div class="user-result-id">รหัส: ${displayUserCode}</div>
             <span class="user-result-category non-member">ไม่ใช่สมาชิก</span>
           </div>
         `;
@@ -1353,25 +1362,85 @@ async function selectUser(userId, userName) {
     return;
   }
   
+  if (!currentSearchTenantId) {
+    addNotification('❌ กรุณาเลือกเว็บก่อนจับคู่');
+    return;
+  }
+  
   try {
-    console.log('[Manual Match] Matching transaction', currentSearchTransactionId, 'to user', userId, userName);
-    
-    await api.matchPendingTransaction(currentSearchTransactionId, {
-      matched_user_id: userId,
-      matched_username: userName
+    console.log('[Manual Match] Attempting to match transaction:', {
+      transactionId: currentSearchTransactionId,
+      userId: userId,
+      userName: userName,
+      tenantId: currentSearchTenantId
     });
     
+    const result = await api.matchPendingTransaction(currentSearchTransactionId, {
+      matched_user_id: userId,
+      matched_username: userName,
+      tenant_id: currentSearchTenantId
+    });
+    
+    console.log('[Manual Match] Success:', result);
     addNotification(`✅ จับคู่กับ ${userName} สำเร็จ`);
     closeUserSearch();
     await loadPendingTransactions();
     
   } catch (error) {
     console.error('[Manual Match] Error:', error);
-    addNotification('❌ ไม่สามารถจับคู่ได้: ' + error.message);
+    
+    const errorMsg = error.message || '';
+    addNotification('❌ ไม่สามารถจับคู่ได้: ' + errorMsg);
   }
 }
 
 window.selectUser = selectUser;
+
+// ============================================================
+// HELPER: Error Message Translation
+// ============================================================
+
+function translateErrorMessage(errorMsg) {
+  if (!errorMsg) return 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
+  
+  const errorLower = errorMsg.toLowerCase();
+  
+  // Tenant matching errors
+  if (errorLower.includes('no matching tenant') || errorLower.includes('not found for this slip')) {
+    return 'ไม่พบบัญชีปลายทางในระบบ อาจจะปลอมน๊าาา';
+  }
+  
+  // EASYSLIP API errors
+  if (errorLower.includes('qrcode_not_found') || errorLower.includes('qr code not found')) {
+    return 'ไม่พบ QR Code ในภาพ ขอภาพชัดๆหน่อยงับเตง';
+  }
+  if (errorLower.includes('invalid_qrcode') || errorLower.includes('invalid qr')) {
+    return 'QR Code ไม่ถูกต้อง กรุณาใช้สลิปที่มี QR Code ที่สมบูรณ์หน่อย';
+  }
+  if (errorLower.includes('image_too_large')) {
+    return 'ขนาดรูปภาพใหญ่เกินไปพี่ชาย';
+  }
+  if (errorLower.includes('unsupported_format') || errorLower.includes('invalid format')) {
+    return 'รูปแบบไฟล์ไม่รองรับ กรุณาใช้ไฟล์ JPG หรือ PNG';
+  }
+  if (errorLower.includes('quota') || errorLower.includes('rate limit')) {
+    return 'ใช้งานเกินโควต้า กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
+  }
+  if (errorLower.includes('authentication') || errorLower.includes('unauthorized')) {
+    return 'การยืนยันตัวตนล้มเหลว กรุณาตรวจสอบ Token';
+  }
+  
+  // Network errors
+  if (errorLower.includes('network') || errorLower.includes('fetch')) {
+    return 'เกิดปัญหาการเชื่อมต่อเครือข่าย กรุณาตรวจสอบอินเทอร์เน็ต';
+  }
+  if (errorLower.includes('timeout')) {
+    return 'หมดเวลาการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง';
+  }
+  
+  // Default: return original message
+  return errorMsg;
+}
 
 // ============================================================
 // SLIP UPLOAD (UI ONLY)
@@ -1439,7 +1508,7 @@ function handleSelectedSlip(file) {
 
   // ป้องกันการอัพโหลดซ้อน
   if (isUploading) {
-    addNotification('⏳ กรุณารอให้สแกนสลิปปัจจุบันเสร็จก่อน');
+    addNotification('⏳ กรุณารอให้สแกนสลิปปัจจุบันเสร็จก่อน อย่าฟ้าวๆ');
     return;
   }
 
@@ -1542,7 +1611,8 @@ async function uploadAndScanSlip(file) {
       }
     }
     
-    addNotification(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+    const translatedError = translateErrorMessage(error.message);
+    addNotification(`❌ ${translatedError}`);
     console.error('Upload error:', error);
   } finally {
     // ปลดล็อค flag เพื่อให้สามารถอัพโหลดใหม่ได้

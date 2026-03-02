@@ -80,6 +80,15 @@
   z-index: 1;
 }
 
+.tenant-card[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+.tenant-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .tenant-card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--color-primary);
@@ -506,9 +515,9 @@
 }
 
 .pending-credit-btn {
-  border: 1px solid var(--color-primary);
-  background: var(--color-white);
-  color: var(--color-primary);
+  border: 1px solid #4bf63b;
+  background: #00d324;
+  color: #ffffff;
   border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: 0.72rem;
@@ -519,16 +528,17 @@
 }
 
 .pending-credit-btn:hover {
-  background: var(--color-primary-light);
+  background: #3aff5b;
 }
 
 .pending-credit-btn-withdraw {
   border-color: var(--color-warning);
-  color: var(--color-warning);
+  color: #ffffff;
+  background: #f38700;
 }
 
 .pending-credit-btn-withdraw:hover {
-  background: var(--color-warning-light);
+  background: #ffbb68;
 }
 
 /* Status Badge - Capsule Style */

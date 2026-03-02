@@ -74,7 +74,7 @@ const UI = {
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
 
     return `
-      <div class="tenant-card" data-tenant-id="${tenant.id}">
+      <div class="tenant-card" data-tenant-id="${tenant.id}" draggable="true">
         <div class="tenant-card-header">
           <div class="tenant-card-info">
             <h3 class="tenant-card-name">
@@ -146,10 +146,99 @@ const UI = {
     }
 
     this.showTenantGrid();
-    const tenantCards = tenants.map((tenant) => this.createTenantCard(tenant)).join('');
+    
+    // โหลด custom order จาก localStorage
+    const customOrder = this.getTenantOrder();
+    const sortedTenants = this.sortTenantsByCustomOrder(tenants, customOrder);
+    
+    const tenantCards = sortedTenants.map((tenant) => this.createTenantCard(tenant)).join('');
     const addCard = this.createAddTenantCard();
     grid.innerHTML = tenantCards + addCard;
+    
+    // เปิดใช้งาน drag-and-drop
+    this.enableTenantDragDrop();
+    
     lucide.createIcons();
+  },
+
+  getTenantOrder() {
+    const order = localStorage.getItem('tenant_custom_order');
+    return order ? JSON.parse(order) : [];
+  },
+
+  saveTenantOrder(order) {
+    localStorage.setItem('tenant_custom_order', JSON.stringify(order));
+  },
+
+  sortTenantsByCustomOrder(tenants, customOrder) {
+    if (!customOrder || customOrder.length === 0) {
+      return tenants;
+    }
+    
+    const ordered = [];
+    const remaining = [...tenants];
+    
+    // เรียงตาม custom order ก่อน
+    customOrder.forEach(id => {
+      const index = remaining.findIndex(t => t.id === id);
+      if (index !== -1) {
+        ordered.push(remaining.splice(index, 1)[0]);
+      }
+    });
+    
+    // เพิ่มรายการที่ไม่มีใน custom order ต่อท้าย
+    return [...ordered, ...remaining];
+  },
+
+  enableTenantDragDrop() {
+    const cards = document.querySelectorAll('.tenant-card:not(.tenant-card-add)');
+    const grid = document.getElementById('tenantGrid');
+    let draggedElement = null;
+    
+    cards.forEach(card => {
+      card.draggable = true;
+      card.style.cursor = 'grab';
+      
+      card.addEventListener('dragstart', (e) => {
+        draggedElement = card;
+        card.style.opacity = '0.5';
+        card.style.cursor = 'grabbing';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      
+      card.addEventListener('dragend', () => {
+        card.style.opacity = '1';
+        card.style.cursor = 'grab';
+        draggedElement = null;
+      });
+      
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (draggedElement && draggedElement !== card) {
+          const rect = card.getBoundingClientRect();
+          const midpoint = rect.left + rect.width / 2;
+          
+          if (e.clientX < midpoint) {
+            grid.insertBefore(draggedElement, card);
+          } else {
+            grid.insertBefore(draggedElement, card.nextSibling);
+          }
+        }
+      });
+      
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        this.saveTenantOrderFromDOM();
+      });
+    });
+  },
+
+  saveTenantOrderFromDOM() {
+    const cards = document.querySelectorAll('.tenant-card:not(.tenant-card-add)');
+    const order = Array.from(cards).map(card => card.dataset.tenantId);
+    this.saveTenantOrder(order);
   },
 
   renderPendingTransactions(items) {
@@ -168,6 +257,21 @@ const UI = {
         // ใช้วันที่จากสลิป (slip_data.date) แทน created_at
         let slipDate = '-';
         try {
+          // ใช้ slip_date ที่มากับ realtime payload ก่อน
+          if (item.slip_date) {
+            const dateFromPayload = new Date(item.slip_date);
+            if (!isNaN(dateFromPayload.getTime())) {
+              slipDate = dateFromPayload.toLocaleString('th-TH', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              });
+            }
+          }
+
           if (item.slip_data) {
             let slipData;
             
@@ -213,13 +317,10 @@ const UI = {
         let matchedUserText = '';
         if (item.matched_username && item.matched_user_id) {
           matchedUserText = `${item.matched_username} (${item.matched_user_id})`;
-          console.log('[Pending] Matched user text:', matchedUserText);
         } else if (item.matched_username) {
           matchedUserText = item.matched_username;
-          console.log('[Pending] Matched username only:', matchedUserText);
         } else if (item.matched_user_id) {
           matchedUserText = `(${item.matched_user_id})`;
-          console.log('[Pending] Matched user ID only:', matchedUserText);
         }
 
         // กำหนดสีตาม status
