@@ -6,6 +6,126 @@ import { ScanService } from '../services/scan.service';
 import { CreditService } from '../services/credit.service';
 import type { Env } from '../types';
 
+interface BankAccountListItem {
+  id: number;
+  accountNumber?: string;
+  account_number?: string;
+}
+
+function pickAccountIdFromCandidates(
+  receiverAccount: string,
+  candidates: Array<{ id: number; accountNumber: string }>
+): number | null {
+  const rawReceiver = String(receiverAccount || '');
+  const normalizedReceiver = rawReceiver.replace(/[^0-9]/g, '');
+
+  if (!normalizedReceiver || candidates.length === 0) {
+    return null;
+  }
+
+  const exact = candidates.find((acc) => acc.accountNumber === normalizedReceiver);
+  if (exact && Number.isFinite(exact.id) && exact.id > 0) {
+    return exact.id;
+  }
+
+  const visibleChunks = rawReceiver
+    .split(/[^0-9]+/g)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 2);
+
+  if (visibleChunks.length > 0) {
+    const chunkMatched = candidates.find((acc) => {
+      let startAt = 0;
+      for (const chunk of visibleChunks) {
+        const idx = acc.accountNumber.indexOf(chunk, startAt);
+        if (idx < 0) return false;
+        startAt = idx + chunk.length;
+      }
+      return true;
+    });
+
+    if (chunkMatched && Number.isFinite(chunkMatched.id) && chunkMatched.id > 0) {
+      return chunkMatched.id;
+    }
+  }
+
+  for (const length of [6, 5, 4]) {
+    const suffix = normalizedReceiver.slice(-length);
+    if (suffix.length < 4) continue;
+    const suffixMatched = candidates.find((acc) => acc.accountNumber.endsWith(suffix));
+    if (suffixMatched && Number.isFinite(suffixMatched.id) && suffixMatched.id > 0) {
+      return suffixMatched.id;
+    }
+  }
+
+  return null;
+}
+
+// Helper function to resolve receiver account number to Account ID
+async function resolveToAccountId(
+  tenantId: string,
+  adminApiUrl: string,
+  sessionToken: string | null,
+  receiverAccount: string,
+  env: Env
+): Promise<number | null> {
+  // 1) ใช้ API จริงตาม contract: GET /api/accounting/bankaccounts/list?limit=100
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (sessionToken) {
+      headers.Authorization = `Bearer ${sessionToken}`;
+    }
+
+    const response = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (response.ok) {
+      const data = await response.json() as { list?: BankAccountListItem[] };
+      const list = data.list || [];
+      const candidates = list
+        .map((acc) => ({
+          id: Number(acc.id),
+          accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
+        }))
+        .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
+
+      const resolvedFromApi = pickAccountIdFromCandidates(receiverAccount, candidates);
+      if (resolvedFromApi) {
+        return resolvedFromApi;
+      }
+    }
+  } catch {
+    // fallback to KV below
+  }
+
+  // 2) Fallback เป็น KV cache ของ endpoint เดียวกัน
+  const accountListKey = `tenant:${tenantId}:bank-accounts-list`;
+  const bankAccountsData = await env.BANK_KV.get(accountListKey);
+  if (!bankAccountsData) {
+    return null;
+  }
+
+  const cache = JSON.parse(bankAccountsData) as { accounts?: BankAccountListItem[] };
+  const kvAccounts = cache.accounts || [];
+
+  if (kvAccounts.length === 0) {
+    return null;
+  }
+
+  const candidates = kvAccounts
+    .map((acc) => ({
+    id: Number(acc.id),
+    accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
+    }))
+    .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
+
+  return pickAccountIdFromCandidates(receiverAccount, candidates);
+}
+
 export const ScanAPI = {
   /**
    * POST /api/scan/upload
@@ -23,11 +143,13 @@ export const ScanAPI = {
     try {
       // รับ form data
       const formData = await request.formData();
-      const file = formData.get('file') as File;
+      const fileValue = formData.get('file');
 
-      if (!file) {
+      if (!fileValue || typeof fileValue === 'string') {
         return errorResponse('No file uploaded', 400);
       }
+
+      const file = fileValue as File;
 
       // ตรวจสอบว่าเป็นไฟล์รูปหรือไม่
       if (!file.type.startsWith('image/')) {
@@ -39,6 +161,11 @@ export const ScanAPI = {
       // ส่งไปสแกนที่ EASYSLIP (ใช้ token ของ tenant ใดก็ได้ที่ active)
       // หรืออาจจะส่งมา tenant_id ใน form data
       const tenantId = formData.get('tenant_id') as string | null;
+      const sourceRaw = String(formData.get('source') || '').trim().toLowerCase();
+      const source: 'webhook' | 'manual' | 'upload' =
+        sourceRaw === 'webhook' || sourceRaw === 'manual' ? (sourceRaw as 'webhook' | 'manual') : 'upload';
+      const lineOAIdRaw = String(formData.get('line_oa_id') || '').trim();
+      const lineOAId = lineOAIdRaw.length > 0 ? lineOAIdRaw : null;
 
       let easyslipToken = '';
 
@@ -223,51 +350,164 @@ export const ScanAPI = {
 
       if (existingSlip) {
         log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
-        return errorResponse('สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)', 400);
+        return jsonResponse({
+          success: false,
+          error: 'สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)',
+          data: {
+            status: 'duplicate',
+            slip: {
+              ref: slip.transRef,
+              amount: slip.amount?.amount || 0,
+              date: slip.date,
+            },
+            sender: {
+              id: null,
+              name: senderNameTh || senderNameEn || 'Unknown',
+              matched: false,
+            },
+          },
+        }, 400);
       }
 
       // บันทึกใน pending_transactions
       const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const now = Math.floor(Date.now() / 1000);
 
-      await env.DB.prepare(
-        `INSERT INTO pending_transactions 
-         (id, team_id, tenant_id, line_oa_id, slip_ref, amount, sender_name, sender_account, 
-          receiver_name, receiver_account, slip_data, matched_user_id, matched_username, 
-          status, source, created_at, updated_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          transactionId,
-          matchedTenant.team_id,
-          matchedTenant.id,
-          null, // line_oa_id (null สำหรับการอัพโหลด)
-          slip.transRef,
-          slip.amount.amount,
-          senderNameTh || senderNameEn || 'Unknown',
-          senderAccount,
-          receiverNameTh || receiverNameEn || '',
-          receiverAccount,
-          JSON.stringify(slip),
-          matchedUser?.memberCode || null,
-          matchedUser?.fullname || null,
-          matchedUser ? 'matched' : 'pending',
-          'upload',
-          now,
-          now
+      try {
+        const insertResult = await env.DB.prepare(
+          `INSERT INTO pending_transactions 
+           (id, team_id, tenant_id, line_oa_id, slip_ref, amount, sender_name, sender_account, 
+            receiver_name, receiver_account, slip_data, matched_user_id, matched_username, 
+            status, source, created_at, updated_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run();
+          .bind(
+            transactionId,
+            matchedTenant.team_id,
+            matchedTenant.id,
+            lineOAId,
+            slip.transRef,
+            slip.amount.amount,
+            senderNameTh || senderNameEn || 'Unknown',
+            senderAccount,
+            receiverNameTh || receiverNameEn || '',
+            receiverAccount,
+            JSON.stringify(slip),
+            matchedUser?.memberCode || matchedUser?.id || null,
+            matchedUser?.fullname || null,
+            matchedUser ? 'matched' : 'pending',
+            source,
+            now,
+            now
+          )
+          .run();
 
-      log('[ScanAPI] ✅ Transaction saved:', transactionId);
+        log('[ScanAPI] ✅ Transaction saved:', {
+          transactionId,
+          insertSuccess: true,
+          dbResponse: insertResult?.meta ?? 'unknown',
+        });
+
+        // 🔔 Broadcast realtime notification for new pending transaction
+        try {
+          const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
+          const doStub = env.PENDING_NOTIFICATIONS.get(doId);
+          
+          const broadcastPayload = {
+            type: 'new_pending',
+            data: {
+              id: transactionId,
+              tenant_id: matchedTenant.id,
+              team_id: matchedTenant.team_id,
+              amount: slip.amount.amount,
+              sender_name: senderNameTh || senderNameEn || 'Unknown',
+              status: matchedUser ? 'matched' : 'pending',
+              created_at: now,
+            },
+          };
+          
+          log('[ScanAPI] 📡 Broadcasting payload:', JSON.stringify(broadcastPayload));
+          
+          const broadcastResponse = await doStub.fetch('https://internal/broadcast', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(broadcastPayload),
+          });
+          
+          const broadcastResult = await broadcastResponse.json();
+          log('[ScanAPI] ✅ Realtime notification broadcasted:', broadcastResult);
+        } catch (broadcastError) {
+          log('[ScanAPI] ⚠️ Failed to broadcast realtime notification:', {
+            error: broadcastError instanceof Error ? broadcastError.message : String(broadcastError),
+            stack: broadcastError instanceof Error ? broadcastError.stack : undefined,
+          });
+        }
+      } catch (dbError) {
+        log('[ScanAPI] ❌ DB INSERT FAILED:', {
+          transactionId,
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+          slipRef: slip.transRef,
+          teamId: matchedTenant.team_id,
+          tenantId: matchedTenant.id,
+        });
+        return errorResponse(
+          `ไม่สามารถบันทึกสลิปได้ (DB Insert Error: ${dbError instanceof Error ? dbError.message : 'Unknown'})`,
+          500
+        );
+      }
 
       // ถ้า matched user และ auto-deposit เปิดอยู่ → ทำการเติมเครดิตอัตโนมัติ
       let creditResult = null;
-      if (matchedUser && matchedTenant.accountId) {
+      if (matchedUser) {
         // ตรวจสอบว่า auto-deposit เปิดอยู่หรือไม่
         const autoDepositEnabled = await CreditService.isAutoDepositEnabled(env, matchedTenant.id);
         
         if (autoDepositEnabled) {
           log('[ScanAPI] 🎯 Auto-deposit is ENABLED - triggering credit submission...');
+
+          const toAccountId = receiverAccount
+            ? await resolveToAccountId(
+                matchedTenant.id,
+                matchedTenant.admin_api_url,
+                session ? String((session as any).session_token || '') : null,
+                receiverAccount,
+                env
+              )
+            : null;
+
+          if (!toAccountId) {
+            log('[ScanAPI] ⚠️ toAccountId could not be resolved - skipping auto credit');
+            return successResponse({
+              debug: debugLogs,
+              transaction_id: transactionId,
+              tenant: {
+                id: matchedTenant.id,
+                name: matchedTenant.name,
+              },
+              slip: {
+                ref: slip.transRef,
+                amount: slip.amount.amount,
+                date: slip.date,
+              },
+              sender: matchedUser
+                ? {
+                    id: matchedUser.id,
+                    name: matchedUser.fullname,
+                    matched: true,
+                  }
+                : {
+                    name: senderNameTh || senderNameEn || 'Unknown',
+                    matched: false,
+                  },
+              status: matchedUser ? 'matched' : 'pending',
+              credit: {
+                attempted: false,
+                success: false,
+                duplicate: false,
+                message: 'Cannot resolve toAccountId',
+              },
+            }, 'Slip scanned and saved successfully');
+          }
           
           creditResult = await CreditService.submitCredit(
             env,
@@ -275,28 +515,71 @@ export const ScanAPI = {
               tenantId: matchedTenant.id,
               slipData: slip,
               user: matchedUser,
-              toAccountId: matchedTenant.accountId,
+              toAccountId,
             },
             log
           );
 
+          log('[ScanAPI] 🧾 Credit result summary:', {
+            success: creditResult.success,
+            isDuplicate: !!creditResult.isDuplicate,
+            resolvedMemberCode: creditResult.resolvedMemberCode || null,
+            resolvedUsername: creditResult.resolvedUsername || null,
+            message: creditResult.message || null,
+          });
+
           if (creditResult.success) {
+            const updateTs = Math.floor(Date.now() / 1000);
             if (creditResult.isDuplicate) {
               log('[ScanAPI] ⚠️ Credit submission: DUPLICATE');
               // อัพเดทสถานะเป็น duplicate
-              await env.DB.prepare(
-                `UPDATE pending_transactions SET status = ?, updated_at = ? WHERE id = ?`
+              const duplicateUpdate = await env.DB.prepare(
+                `UPDATE pending_transactions
+                 SET status = ?,
+                     matched_user_id = COALESCE(?, matched_user_id),
+                     matched_username = COALESCE(?, matched_username),
+                     error_message = NULL,
+                     updated_at = ?
+                 WHERE id = ?`
               )
-                .bind('duplicate', now, transactionId)
+                .bind(
+                  'duplicate',
+                  creditResult.resolvedMemberCode || matchedUser?.memberCode || matchedUser?.id || null,
+                  creditResult.resolvedUsername || null,
+                  updateTs,
+                  transactionId
+                )
                 .run();
+
+              log('[ScanAPI] 🗃️ DB status update (duplicate):', {
+                transactionId,
+                changes: duplicateUpdate?.meta?.changes ?? 0,
+              });
             } else {
               log('[ScanAPI] ✅ Credit submission: SUCCESS');
-              // อัพเดทสถานะเป็น credited
-              await env.DB.prepare(
-                `UPDATE pending_transactions SET status = ?, credited_at = ?, updated_at = ? WHERE id = ?`
+              // อัพเดทสถานะเป็น credited (ไม่ใช้ credited_at เพราะ schema ปัจจุบันไม่มีคอลัมน์นี้)
+              const creditedUpdate = await env.DB.prepare(
+                `UPDATE pending_transactions
+                 SET status = ?,
+                     matched_user_id = COALESCE(?, matched_user_id),
+                     matched_username = COALESCE(?, matched_username),
+                     error_message = NULL,
+                     updated_at = ?
+                 WHERE id = ?`
               )
-                .bind('credited', now, now, transactionId)
+                .bind(
+                  'credited',
+                  creditResult.resolvedMemberCode || matchedUser?.memberCode || matchedUser?.id || null,
+                  creditResult.resolvedUsername || null,
+                  updateTs,
+                  transactionId
+                )
                 .run();
+
+              log('[ScanAPI] 🗃️ DB status update (credited):', {
+                transactionId,
+                changes: creditedUpdate?.meta?.changes ?? 0,
+              });
             }
           } else {
             log('[ScanAPI] ❌ Credit submission FAILED:', creditResult.message);
@@ -306,12 +589,14 @@ export const ScanAPI = {
           log('[ScanAPI] ⏭️ Auto-deposit is DISABLED - skipping credit submission');
         }
       } else {
-        log('[ScanAPI] ⏭️ No matched user or account - skipping credit submission');
+        log('[ScanAPI] ⏭️ No matched user - skipping credit submission');
       }
 
       return successResponse({
         debug: debugLogs,
         transaction_id: transactionId,
+        matched_user_id: matchedUser?.id || null,
+        matched_username: matchedUser?.fullname || null,
         tenant: {
           id: matchedTenant.id,
           name: matchedTenant.name,
@@ -339,6 +624,7 @@ export const ScanAPI = {
           success: creditResult.success,
           duplicate: creditResult.isDuplicate || false,
           message: creditResult.message,
+          resolved_memberCode: creditResult.resolvedMemberCode || null,
         } : null,
       }, 'Slip scanned and saved successfully');
     } catch (error: any) {
@@ -351,3 +637,4 @@ export const ScanAPI = {
     }
   },
 };
+

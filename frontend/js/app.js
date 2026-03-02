@@ -3,9 +3,11 @@
 // ============================================================
 
 let currentTeamSlug = null; // team slug จาก URL
+let currentPage = 'dashboard';
 let currentTenants = [];
 let currentTenantId = null;
 let currentLineOAs = [];
+let currentEditingLineOAId = null;
 let notifications = [];
 let unreadCount = 0;
 let toastEnabled = true; // สถานะการแสดง toast notification
@@ -26,10 +28,16 @@ let allPendingTransactions = []; // Store all pending data before filtering/sort
 // ============================================================
 
 async function init() {
-  // ดึง team slug จาก URL
-  currentTeamSlug = window.getTeamFromURL();
+  const routeInfo = window.getRouteInfoFromURL();
+  currentTeamSlug = routeInfo.teamSlug;
+  currentPage = routeInfo.page || 'dashboard';
   window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
+  window.currentPage = currentPage;
   console.log('Current Team Slug:', currentTeamSlug);
+
+  if (typeof window.setLayoutForPage === 'function') {
+    window.setLayoutForPage(currentPage);
+  }
   
   // อัพเดท page title และ badge ถ้าไม่ใช่ default team
   if (currentTeamSlug !== 'default') {
@@ -59,6 +67,20 @@ async function init() {
     }
   }
   
+  if (currentPage === 'reply-message') {
+    if (typeof window.initReplyMessagePage === 'function') {
+      await window.initReplyMessagePage();
+    }
+    return;
+  }
+
+  // ถ้าเป็น default team (ไม่มี team slug ใน URL) แสดง empty state
+  if (currentTeamSlug === 'default') {
+    bindUploadEvents();
+    UI.showEmptyState();
+    return;
+  }
+
   bindUploadEvents();
   await loadTenants();
   await loadPendingTransactions();
@@ -67,11 +89,16 @@ async function init() {
 
 // รีเฟรชเมื่อ hash เปลี่ยน (สำหรับ team switching)
 window.addEventListener('hashchange', () => {
-  const newTeamSlug = window.getTeamFromURL();
-  if (newTeamSlug !== currentTeamSlug) {
+  const routeInfo = window.getRouteInfoFromURL();
+  const newTeamSlug = routeInfo.teamSlug;
+  const newPage = routeInfo.page || 'dashboard';
+
+  if (newTeamSlug !== currentTeamSlug || newPage !== currentPage) {
     currentTeamSlug = newTeamSlug;
+    currentPage = newPage;
     window.currentTeamSlug = currentTeamSlug;
-    console.log('Team changed to:', currentTeamSlug);
+    window.currentPage = currentPage;
+    console.log('Route changed to:', currentTeamSlug, currentPage);
     window.location.reload(); // reload หน้าใหม่เมื่อเปลี่ยน team
   }
 });
@@ -86,32 +113,41 @@ async function loadTenants() {
   try {
     UI.showLoading();
     
-    // ลองโหลดจาก sessionStorage ก่อน
+    // ลองโหลดจาก sessionStorage ก่อน และเช็คว่า cache ยังไม่หมดอายุ
     const cachedData = sessionStorage.getItem('tenants_cache');
-    if (cachedData) {
+    const cacheTime = sessionStorage.getItem('tenants_cache_time');
+    const now = Date.now();
+    const cacheMaxAge = 60000; // 1 นาที
+    
+    if (cachedData && cacheTime && (now - parseInt(cacheTime)) < cacheMaxAge) {
       try {
         const parsed = JSON.parse(cachedData);
-        currentTenants = parsed;
-        tenantCache = parsed;
-        UI.renderTenants(currentTenants);
-        console.log('[Tenants] Loaded from sessionStorage cache');
-        return;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          currentTenants = parsed;
+          tenantCache = parsed;
+          UI.renderTenants(currentTenants);
+          console.log('[Tenants] Loaded from sessionStorage cache');
+          return;
+        }
       } catch (e) {
         console.warn('[Tenants] Failed to parse cache:', e);
       }
     }
     
-    // ถ้าไม่มี cache หรือ parse ไม่ได้ ให้โหลดจาก API
+    // ถ้าไม่มี cache หรือ parse ไม่ได้ หรือหมดอายุ ให้โหลดจาก API
+    console.log('[Tenants] Loading from API...');
     const response = await api.getTenants();
     currentTenants = response.data || [];
     tenantCache = currentTenants;
     
-    // บันทึกลง sessionStorage
+    // บันทึกลง sessionStorage พร้อม timestamp
     sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
-    console.log('[Tenants] Loaded from API and cached');
+    sessionStorage.setItem('tenants_cache_time', now.toString());
+    console.log('[Tenants] Loaded from API and cached:', currentTenants.length, 'tenants');
     
     UI.renderTenants(currentTenants);
   } catch (error) {
+    console.error('[Tenants] Load error:', error);
     addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
   } finally {
     UI.hideLoading();
@@ -651,6 +687,8 @@ async function manageLineOAs(tenantId) {
     const response = await api.getLineOAs(tenantId);
     currentLineOAs = response.data || [];
 
+    validateLineOAConfiguration();
+
     renderLineOAList();
     document.getElementById('lineOAModal').style.display = 'flex';
     lucide.createIcons();
@@ -665,66 +703,41 @@ function renderLineOAList() {
   if (currentLineOAs.length === 0) {
     html = '<div class="text-center text-muted">ยังไม่มี LINE OA</div>';
   } else {
-    html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
+    html = '<div style="display: flex; flex-direction: column; gap: var(--space-sm);">';
     currentLineOAs.forEach((lineOA) => {
-      const statusBadge = lineOA.status === 'active'
-        ? '<span class="badge badge-success">ใช้งาน</span>'
-        : '<span class="badge badge-gray">ปิดใช้งาน</span>';
-
-      const webhookBadge = lineOA.webhook_enabled
-        ? '<span class="badge badge-info">Webhook ON</span>'
-        : '<span class="badge badge-gray">Webhook OFF</span>';
-
-      // สร้าง webhook URL
-      const webhookUrl = `${API_CONFIG.BASE_URL}/webhook/${currentTenantId}/${lineOA.id}`;
+      const webhookUrl = `${API_CONFIG.BASE_URL}/webhook/${encodeURIComponent(currentTenantId)}/${encodeURIComponent(lineOA.id)}`;
 
       html += `
-        <div class="card">
-          <div class="card-body">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-md);">
-              <div style="flex: 1;">
-                <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: var(--space-sm);">
-                  <i data-lucide="message-circle" size="16"></i>
-                  ${lineOA.name}
-                </div>
-                <div style="font-family: var(--font-mono); color: var(--color-gray-600); font-size: 0.875rem; margin-bottom: var(--space-sm);">
-                  ${lineOA.channel_id}
-                </div>
-                <div style="display: flex; gap: var(--space-sm);">
-                  ${statusBadge}
-                  ${webhookBadge}
-                </div>
+        <div class="lineoa-card">
+          <div class="lineoa-card-top">
+            <div class="lineoa-card-main">
+              <i data-lucide="message-circle" size="16"></i>
+              <div class="lineoa-card-info">
+                <div class="lineoa-card-name">${lineOA.name}</div>
+                <div class="lineoa-card-channel">${lineOA.channel_id}</div>
               </div>
-              <button class="btn btn-danger btn-sm" onclick="deleteLineOA('${lineOA.id}', '${lineOA.name}')">
-                <i data-lucide="trash-2" size="14"></i>
+            </div>
+            <div class="lineoa-card-actions">
+              <button class="btn btn-secondary lineoa-btn-compact lineoa-btn-icon" onclick="editLineOA('${lineOA.id}')" title="แก้ไข LINE OA">
+                <i data-lucide="pencil" size="13"></i>
+              </button>
+              <button class="btn btn-danger lineoa-btn-compact lineoa-btn-icon" onclick="deleteLineOA('${lineOA.id}')" title="ลบ LINE OA">
+                <i data-lucide="trash-2" size="13"></i>
               </button>
             </div>
-            
-            <!-- Webhook URL Section -->
-            <div style="background: var(--color-gray-50); padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
-              <div style="font-size: 0.75rem; font-weight: 500; color: var(--color-gray-600); margin-bottom: var(--space-xs); display: flex; align-items: center; gap: var(--space-xs);">
-                <i data-lucide="link" size="12"></i>
-                Webhook URL
-              </div>
-              <div style="display: flex; gap: var(--space-xs); align-items: center;">
-                <input 
-                  type="text" 
-                  value="${webhookUrl}" 
-                  readonly 
-                  id="webhook-${lineOA.id}"
-                  style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.75rem; background: white;"
-                >
-                <button 
-                  class="btn btn-sm" 
-                  onclick="copyWebhookUrl('${lineOA.id}')"
-                  style="padding: 6px var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap;"
-                  title="คัดลอก Webhook URL"
-                >
-                  <i data-lucide="copy" size="14"></i>
-                  คัดลอก
-                </button>
-              </div>
-            </div>
+          </div>
+          <div class="lineoa-webhook-row">
+            <input 
+              type="text" 
+              value="${webhookUrl}" 
+              readonly 
+              id="webhook-${lineOA.id}"
+              class="lineoa-webhook-input"
+            >
+            <button class="btn btn-secondary lineoa-btn-compact" onclick="copyWebhookUrl('${lineOA.id}')" title="คัดลอก Webhook URL">
+              <i data-lucide="copy" size="13"></i>
+              คัดลอก
+            </button>
           </div>
         </div>
       `;
@@ -736,22 +749,66 @@ function renderLineOAList() {
   lucide.createIcons();
 }
 
+function validateLineOAConfiguration() {
+  if (!currentLineOAs.length) {
+    return;
+  }
+
+  const invalidItems = currentLineOAs.filter((lineOA) => {
+    return !lineOA.name || !lineOA.channel_id || !lineOA.channel_secret || !lineOA.channel_access_token;
+  });
+
+  if (invalidItems.length > 0) {
+    addNotification(`⚠️ พบ LINE OA ที่ตั้งค่าไม่ครบ ${invalidItems.length} รายการ`);
+  }
+}
+
 function closeLineOAModal() {
   document.getElementById('lineOAModal').style.display = 'none';
-  // Reset form when closing
   cancelAddLineOA();
 }
 
-function showAddLineOAForm() {
+function showAddLineOAForm(lineOA = null) {
+  currentEditingLineOAId = lineOA?.id || null;
+
   document.getElementById('addLineOAForm').style.display = 'block';
   document.getElementById('showAddFormBtn').style.display = 'none';
+
+  const submitLabel = document.getElementById('submitLineOAFormBtnText');
+  if (submitLabel) {
+    submitLabel.textContent = currentEditingLineOAId ? 'บันทึกการแก้ไข' : 'เพิ่ม LINE OA';
+  }
+
+  if (lineOA) {
+    document.getElementById('lineOAName').value = lineOA.name || '';
+    document.getElementById('lineOAChannelId').value = lineOA.channel_id || '';
+    document.getElementById('lineOAChannelSecret').value = lineOA.channel_secret || '';
+    document.getElementById('lineOAAccessToken').value = lineOA.channel_access_token || '';
+  }
+
   lucide.createIcons();
 }
 
+function editLineOA(lineOAId) {
+  const lineOA = currentLineOAs.find((item) => item.id === lineOAId);
+  if (!lineOA) {
+    addNotification('❌ ไม่พบข้อมูล LINE OA สำหรับแก้ไข');
+    return;
+  }
+
+  showAddLineOAForm(lineOA);
+}
+
 function cancelAddLineOA() {
+  currentEditingLineOAId = null;
   document.getElementById('addLineOAForm').style.display = 'none';
   document.getElementById('showAddFormBtn').style.display = 'block';
   document.getElementById('lineOAFormElement').reset();
+
+  const submitLabel = document.getElementById('submitLineOAFormBtnText');
+  if (submitLabel) {
+    submitLabel.textContent = 'เพิ่ม LINE OA';
+  }
 }
 
 function submitLineOAForm(event) {
@@ -767,7 +824,14 @@ function submitLineOAForm(event) {
     return;
   }
 
-  createLineOA({ name, channel_id, channel_secret, channel_access_token });
+  const payload = { name, channel_id, channel_secret, channel_access_token };
+
+  if (currentEditingLineOAId) {
+    updateLineOA(currentEditingLineOAId, payload);
+    return;
+  }
+
+  createLineOA(payload);
 }
 
 function copyWebhookUrl(lineOAId) {
@@ -803,7 +867,22 @@ async function createLineOA(data) {
   }
 }
 
-async function deleteLineOA(lineOAId, lineOAName) {
+async function updateLineOA(lineOAId, data) {
+  try {
+    await api.updateLineOA(lineOAId, data);
+    addNotification('✅ บันทึกการแก้ไข LINE OA สำเร็จ');
+    cancelAddLineOA();
+    await manageLineOAs(currentTenantId);
+    await loadTenants();
+  } catch (error) {
+    addNotification('❌ บันทึกการแก้ไขไม่สำเร็จ: ' + error.message);
+  }
+}
+
+async function deleteLineOA(lineOAId) {
+  const target = currentLineOAs.find((item) => item.id === lineOAId);
+  const lineOAName = target?.name || lineOAId;
+
   if (!confirm(`คุณต้องการลบ LINE OA "${lineOAName}" หรือไม่?`)) {
     return;
   }
@@ -984,6 +1063,47 @@ async function deletePendingItem(transactionId) {
     };
   });
 }
+
+async function creditPendingItem(transactionId) {
+  if (!confirm('ต้องการเติมเครดิตรายการนี้หรือไม่?')) {
+    return;
+  }
+
+  try {
+    const response = await api.creditPendingTransaction(transactionId);
+
+    const status = response?.data?.status;
+    if (status === 'duplicate') {
+      addNotification('⚠️ รายการซ้ำในระบบแอดมิน');
+    } else {
+      addNotification('✅ เติมเครดิตสำเร็จ');
+    }
+
+    await loadPendingTransactions();
+  } catch (error) {
+    addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
+  }
+}
+
+async function withdrawPendingCredit(transactionId) {
+  if (!confirm('ต้องการดึงเครดิตกลับรายการนี้หรือไม่?')) {
+    return;
+  }
+
+  try {
+    await api.withdrawPendingCredit(transactionId, {
+      remark: 'Manual withdraw from pending list',
+    });
+
+    addNotification('✅ ดึงเครดิตกลับสำเร็จ');
+    await loadPendingTransactions();
+  } catch (error) {
+    addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + error.message);
+  }
+}
+
+window.creditPendingItem = creditPendingItem;
+window.withdrawPendingCredit = withdrawPendingCredit;
 
 // ============================================================
 // USER SEARCH & MANUAL MATCHING
@@ -1702,15 +1822,38 @@ async function toggleAutoDeposit(tenantId, enabled) {
   const toggle = document.getElementById(`toggle-${tenantId}`);
   
   try {
+    if (toggle) {
+      toggle.disabled = true;
+    }
+
     // จำสถานะที่ user เพิ่งกด
     pendingToggleStates.set(tenantId, enabled);
-    
-    // Optimistic update - แสดงผลทันที
+    // Optimistic update - แสดงผลทันทีโดยไม่ reload ทั้งหน้า
+    if (toggle) {
+      toggle.checked = enabled;
+    }
+
     const response = await api.toggleAutoDeposit(tenantId, enabled);
-    addNotification(`${enabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit สำหรับ tenant`);
-    
-    // Reload ในเบื้องหลังเพื่ออัพเดท UI ทั้งหมด
-    await loadTenants();
+
+    // ใช้ค่าจริงจาก DB ที่ backend ตอบกลับ
+    const serverEnabled = !!response?.data?.auto_deposit_enabled;
+
+    // อัพเดท state ในหน่วยความจำ
+    const tenant = currentTenants.find((item) => item.id === tenantId);
+    if (tenant) {
+      tenant.auto_deposit_enabled = serverEnabled ? 1 : 0;
+    }
+
+    // sync cache เพื่อให้ค่าไม่เด้งกลับตอนเปิดหน้าใหม่
+    sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
+    tenantCache = currentTenants;
+
+    // force UI ให้ตรงกับ DB จริง
+    if (toggle) {
+      toggle.checked = serverEnabled;
+    }
+
+    addNotification(`${serverEnabled ? '✅ เปิด' : '❌ ปิด'} Auto Deposit สำหรับ tenant`);
     
     // ลบสถานะที่จำไว้หลัง reload สำเร็จ
     pendingToggleStates.delete(tenantId);
@@ -1723,6 +1866,10 @@ async function toggleAutoDeposit(tenantId, enabled) {
       toggle.checked = !enabled;
     }
     addNotification('❌ ไม่สามารถเปลี่ยนสถานะ Auto Deposit: ' + error.message);
+  } finally {
+    if (toggle) {
+      toggle.disabled = false;
+    }
   }
 }
 
@@ -1775,12 +1922,6 @@ document.addEventListener('click', function(event) {
     dropdown.style.display = 'none';
   }
 });
-
-// Prevent dropdown from closing when interacting with selects inside it
-document.addEventListener('change', function(event) {
-  // Don't propagate to click handler
-  event.stopPropagation();
-}, true);
 
 // ============================================================
 // START APPLICATION

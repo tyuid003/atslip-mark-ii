@@ -5,6 +5,7 @@
 export interface Env {
   DB: D1Database;
   BANK_KV: KVNamespace;
+  PENDING_NOTIFICATIONS: DurableObjectNamespace;
 }
 
 // ============================================================

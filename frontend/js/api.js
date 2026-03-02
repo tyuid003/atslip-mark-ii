@@ -154,6 +154,17 @@ class API {
     });
   }
 
+  async getLineReplySettings(lineOAId) {
+    return this.request(`/api/line-oas/${lineOAId}/reply-settings`);
+  }
+
+  async updateLineReplySettings(lineOAId, data) {
+    return this.request(`/api/line-oas/${lineOAId}/reply-settings`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ============================================================
   // SCAN APIs
   // ============================================================
@@ -232,6 +243,20 @@ class API {
         matched_user_id: userData.matched_user_id,
         matched_username: userData.matched_username
       }),
+    });
+  }
+
+  async creditPendingTransaction(transactionId, payload = {}) {
+    return this.request(`/api/pending-transactions/${transactionId}/credit`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async withdrawPendingCredit(transactionId, payload = {}) {
+    return this.request(`/api/pending-transactions/${transactionId}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 

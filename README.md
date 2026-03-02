@@ -1,265 +1,306 @@
-# ATslip Mark-II - ระบบเติมเครดิตอัตโนมัติ
+# ATslipMark-II
 
-> **เวอร์ชั่น 3.0** - สร้างใหม่ทั้งหมดด้วย logic ที่แข็งแรงและยืดหยุ่นกว่าเดิม
+ระบบสแกนสลิปและเติมเครดิตอัตโนมัติแบบ Multi-tenant บน Cloudflare Workers โดยเชื่อมต่อ Admin API ของแต่ละ tenant เพื่อค้นหาผู้ใช้, จัดการบัญชีรับ, เติมเครดิต, และดึงเครดิตกลับ
 
-## 📋 ภาพรวม
+## โครงสร้างโปรเจกต์ (ปัจจุบัน)
 
-ATslip Mark-II เป็นระบบเติมเครดิตอัตโนมัติที่รองรับการทำงานแบบ Multi-tenant สามารถจัดการหลายเว็บพร้อมกันได้ แต่ละเว็บสามารถมี LINE OA หลายตัว และบัญชีธนาคารหลายบัญชี
+- `backend/` - Worker API + D1 + KV + Durable Object
+- `frontend/` - หน้าแอดมินสำหรับจัดการ tenant และรายการ pending
+- `document/OLDVERSION/` - โค้ดและเอกสารเวอร์ชันเก่า (archive)
 
-### ✨ คุณสมบัติหลัก
+## เทคโนโลยีหลัก
 
-- ✅ **Multi-Tenant Support** - รองรับหลายเว็บในระบบเดียว
-- ✅ **Multiple LINE OA** - แต่ละเว็บรองรับหลาย LINE Official Account
-- ✅ **Auto Admin Login** - เชื่อมต่อและดึงข้อมูลบัญชีธนาคารอัตโนมัติ
-- ✅ **Bank Account Caching** - เก็บ cache บัญชีธนาคารใน KV เพื่อความเร็ว
-- ✅ **Modern UI** - หน้าตาสวยงาม ธีมสว่าง พร้อม Lucide Icons
-- ✅ **RESTful API** - API ที่ออกแบบมาอย่างดี ง่ายต่อการขยาย
+- Cloudflare Workers (TypeScript)
+- D1 (ฐานข้อมูล)
+- KV (cache บัญชีธนาคาร)
+- Durable Objects (realtime pending notifications)
+- Frontend HTML/CSS/Vanilla JS
 
-## 🏗️ สถาปัตยกรรม
+## การทำงานหลักของระบบ
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   ATslip Mark-II                         │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐              ┌──────────────┐         │
-│  │   Frontend   │◄────────────►│   Backend    │         │
-│  │ (HTML/CSS/JS)│              │ (CF Workers) │         │
-│  └──────────────┘              └───────┬──────┘         │
-│                                        │                 │
-│                          ┌─────────────┼──────────────┐  │
-│                          │             │              │  │
-│                     ┌────▼────┐   ┌────▼────┐   ┌────▼──┤
-│                     │   D1    │   │   KV    │   │ APIs  │
-│                     │Database │   │ Storage │   │       │
-│                     └─────────┘   └─────────┘   └───────┘
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-
-External Services:
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Admin API   │  │ EasySlip    │  │ LINE API    │
-│ (Backend)   │  │ (OCR)       │  │ (Messaging) │
-└─────────────┘  └─────────────┘  └─────────────┘
-```
-
-## 📁 โครงสร้างโปรเจค
-
-```
-ATslipMark-II/
-├── backend/                    # Cloudflare Workers API
-│   ├── src/
-│   │   ├── index.ts           # Main router
-│   │   ├── types.ts           # TypeScript types
-│   │   ├── api/
-│   │   │   ├── tenants.ts     # Tenant API handlers
-│   │   │   └── lineoas.ts     # LINE OA API handlers
-│   │   ├── services/
-│   │   │   ├── tenant.service.ts     # Tenant business logic
-│   │   │   └── lineoa.service.ts     # LINE OA business logic
-│   │   └── utils/
-│   │       └── helpers.ts     # Utility functions
-│   ├── schema.sql             # D1 database schema
-│   ├── wrangler.toml          # Cloudflare config
-│   ├── package.json
-│   └── tsconfig.json
-│
-└── frontend/                   # Cloudflare Pages
-    ├── index.html             # หน้าหลัก
-    ├── css/
-    │   ├── global.css         # Global styles
-    │   ├── variables.css      # CSS variables
-    │   └── components/
-    │       ├── tenant-card.css
-    │       └── toast.css
-    └── js/
-        ├── config.js          # Configuration
-        ├── api.js             # API client
-        ├── ui.js              # UI helpers
-        └── app.js             # Main application
-```
-
-## 🗄️ Database Schema
-
-### Tables
-
-1. **tenants** - ข้อมูลเว็บ
-   - ชื่อเว็บ
-   - ข้อมูล Admin API (URL, username, password)
-   - EasySlip token
-
-2. **line_oas** - LINE Official Accounts
-   - เชื่อมกับ tenant
-   - Channel credentials
-   - Webhook settings
-
-3. **admin_sessions** - Session tokens จาก Admin Backend
-   - เก็บ token หลัง login
-   - มีวันหมดอายุ
-
-4. **pending_transactions** - สลิปที่รอดำเนินการ
-   - ข้อมูลสลิป
-   - สถานะการจับคู่
-   - ข้อมูล user ที่จับคู่ได้
-
-5. **credit_logs** - บันทึกการเติมเครดิต
-   - Log การเติมเครดิตทั้งหมด
-
-6. **system_settings** - ตั้งค่าระบบ
-
-## 🚀 การติดตั้งและใช้งาน
-
-### ขั้นตอนที่ 1: ติดตั้ง Backend
-
-```bash
-cd backend
-
-# ติดตั้ง dependencies
-npm install
-
-# สร้าง D1 database
-npx wrangler d1 create atslip_db
-
-# สร้าง KV namespace
-npx wrangler kv:namespace create "BANK_KV"
-
-# อัพเดท wrangler.toml ด้วย database_id และ KV id ที่ได้
-
-# สร้างตาราง
-npx wrangler d1 execute atslip_db --file=schema.sql
-
-# ทดสอบ local
-npm run dev
-
-# Deploy ไปยัง Cloudflare
-npm run deploy
-```
-
-### ขั้นตอนที่ 2: ติดตั้ง Frontend
-
-```bash
-cd frontend
-
-# แก้ไข js/config.js
-# เปลี่ยน BASE_URL เป็น URL ของ backend ที่ deploy แล้ว
-
-# Deploy ไปยัง Cloudflare Pages
-# 1. Push code ไปยัง GitHub
-# 2. ไปที่ Cloudflare Dashboard > Pages
-# 3. เลือก "Connect to Git"
-# 4. เลือก repository
-# 5. Build settings:
-#    - Framework: None
-#    - Build output directory: /
-#    - Root directory: frontend
-```
-
-### ขั้นตอนที่ 3: ใช้งาน
-
-1. เปิดหน้าเว็บ Frontend
-2. คลิก **"เพิ่มเว็บใหม่"**
-3. กรอกข้อมูล:
-   - ชื่อเว็บ
-   - Admin API Base URL
-   - Admin Username
-   - Admin Password
-   - EasySlip API Token
-4. บันทึก
-5. คลิกปุ่ม 3 จุด > **"เชื่อมต่อ Admin"** เพื่อดึงบัญชีธนาคาร
-6. คลิก **"จัดการ LINE OA"** เพื่อเพิ่ม LINE Official Account
-
-## 🎨 UI Features
-
-### การ์ดเว็บ (Tenant Card)
-
-แต่ละการ์ดแสดง:
-- ✅ ชื่อเว็บ และ Admin API URL
-- ✅ สถานะการเชื่อมต่อ (เชื่อมต่อแล้ว/ยังไม่เชื่อมต่อ)
-- ✅ สถานะการใช้งาน (ใช้งาน/ปิดใช้งาน)
-- ✅ จำนวน LINE OA
-- ✅ จำนวนบัญชีธนาคาร
-- ✅ จำนวนสลิปที่รอดำเนินการ
-
-### เมนูตัวเลือก (3 จุด)
-
-- ✏️ **แก้ไข** - แก้ไขข้อมูลเว็บ
-- 🏦 **ดูบัญชีธนาคาร** - แสดงรายชื่อบัญชีที่ดึงมา
-- 🔌 **เชื่อมต่อ Admin** - Login และดึงบัญชีธนาคาร
-- 🔌 **ยกเลิกการเชื่อมต่อ** - ลบ session และ cache
-- 💬 **จัดการ LINE OA** - เพิ่ม/ลบ LINE OA
-- 🗑️ **ลบ** - ลบเว็บและข้อมูลทั้งหมด
-
-## 🔧 API Endpoints
-
-### Tenant APIs
-
-```
-GET    /api/tenants              # ดูรายการเว็บทั้งหมด
-POST   /api/tenants              # สร้างเว็บใหม่
-GET    /api/tenants/:id          # ดูข้อมูลเว็บ
-PUT    /api/tenants/:id          # แก้ไขเว็บ
-DELETE /api/tenants/:id          # ลบเว็บ
-
-POST   /api/tenants/:id/connect    # เชื่อมต่อ admin และดึงบัญชี
-POST   /api/tenants/:id/disconnect # ยกเลิกการเชื่อมต่อ
-GET    /api/tenants/:id/accounts   # ดูบัญชีธนาคาร
-```
-
-### LINE OA APIs
-
-```
-GET    /api/tenants/:tenantId/line-oas  # ดู LINE OA ของเว็บ
-POST   /api/tenants/:tenantId/line-oas  # เพิ่ม LINE OA
-GET    /api/line-oas/:id                # ดูข้อมูล LINE OA
-PUT    /api/line-oas/:id                # แก้ไข LINE OA
-DELETE /api/line-oas/:id                # ลบ LINE OA
-```
-
-## 📝 สิ่งที่ทำเสร็จแล้ว (Step 4)
-
-✅ สร้างโครงสร้าง backend (Cloudflare Workers + TypeScript)
-✅ สร้าง database schema รองรับ multi-tenant
-✅ สร้าง API สำหรับจัดการ tenant
-✅ สร้าง API สำหรับจัดการ LINE OA
-✅ สร้างระบบ login admin และดึงบัญชีธนาคาร
-✅ เก็บบัญชีธนาคารใน KV พร้อม TTL
-✅ สร้าง frontend UI แบบสวยงาม (ธีมสว่าง)
-✅ ใช้ Lucide Icons (open source)
-✅ ระบบแสดงสถิติ (LINE OA, บัญชีธนาคาร, pending transactions)
-
-## 🔜 สิ่งที่จะทำต่อไป (Steps 1-3)
-
-### Step 1: LINE Webhook & Manual Upload
-- รับสลิปจาก LINE webhook
-- รับสลิปจากการอัพโหลดผ่านหน้าเว็บ
-- ส่งต่อให้ scan.ts
-
-### Step 2: Scan Algorithm
-- scan.ts - อัลกอริทึมการสแกนสลิป
-- จับคู่บัญชี tenant
-- จับคู่บัญชีผู้โอน
-- เรียก deposit.ts เมื่อพร้อม
-
-### Step 3: Auto Deposit
-- deposit.ts - เติมเครดิตอัตโนมัติ
-- เช็คยอดซ้ำ
-- ส่งผลกลับให้ webhook/admin
-
-## 🎯 Design Principles
-
-1. **Separation of Concerns** - แยก frontend/backend ชัดเจน
-2. **RESTful API** - API ออกแบบตาม REST principles
-3. **Type Safety** - ใช้ TypeScript สำหรับความปลอดภัย
-4. **Modern UI/UX** - UI สะอาด ใช้งานง่าย responsive
-5. **Scalability** - รองรับการขยายในอนาคต
-6. **Error Handling** - จัดการ error อย่างเหมาะสม
-
-## 📄 License
-
-MIT License
+1. รับสลิปผ่าน `POST /api/scan/upload`
+2. สแกนผ่าน EasySlip
+3. จับคู่ tenant จากบัญชีผู้รับ
+4. จับคู่ผู้โอนจาก Admin API (`/api/users/list`)
+5. บันทึก `pending_transactions`
+6. ถ้า tenant เปิด auto-deposit จะเรียกเติมเครดิตทันที
+7. ถ้าไม่สำเร็จ/ไม่ match จะให้จัดการจากหน้า pending แบบ manual
 
 ---
 
-**สร้างโดย:** ATslip Team  
-**เวอร์ชั่น:** 3.0  
-**วันที่อัพเดท:** February 2026
+## Internal API (Worker)
+
+อ้างอิงจาก router ปัจจุบันใน `backend/src/index.ts`
+
+### Teams
+
+- `GET /api/teams`
+- `GET /api/teams/:slug`
+
+### Tenants
+
+- `GET /api/tenants`
+  - Header/Query ที่รองรับ: `X-Team-Slug` หรือ `?team=`
+- `POST /api/tenants`
+  - Body:
+    - `name` (string)
+    - `admin_api_url` (string)
+    - `admin_username` (string)
+    - `admin_password` (string)
+    - `easyslip_token` (string)
+- `GET /api/tenants/:id`
+- `PUT /api/tenants/:id`
+  - Body (partial): `name`, `admin_api_url`, `admin_username`, `admin_password`, `easyslip_token`, `status`
+- `DELETE /api/tenants/:id`
+- `POST /api/tenants/:id/connect`
+- `POST /api/tenants/:id/disconnect`
+- `GET /api/tenants/:id/accounts`
+- `PATCH /api/tenants/:id/auto-deposit`
+  - Body: `{ "enabled": boolean }`
+
+### Admin Login / Session
+
+- `GET /api/tenants/:id/captcha`
+- `POST /api/tenants/:id/login`
+  - Body: `{ "captcha_key": string, "captcha_code": string }`
+- `POST /api/tenants/:id/refresh-accounts`
+
+### Tenant Bank Accounts Metadata
+
+- `GET /api/tenants/:id/bank-accounts/metadata`
+- `POST /api/tenants/:id/bank-accounts/sync`
+- `POST /api/tenants/:tenantId/bank-accounts/:accountId/metadata`
+- `PATCH /api/bank-accounts/:id/english-name`
+  - Body: `{ "english_name": string }`
+
+### LINE OA
+
+- `GET /api/tenants/:tenantId/line-oas`
+- `POST /api/tenants/:tenantId/line-oas`
+  - Body:
+    - `name`
+    - `channel_id`
+    - `channel_secret`
+    - `channel_access_token`
+- `GET /api/line-oas/:id`
+- `PUT /api/line-oas/:id`
+  - Body (partial): `name`, `channel_id`, `channel_secret`, `channel_access_token`, `webhook_enabled`, `status`
+- `DELETE /api/line-oas/:id`
+
+### Users
+
+- `GET /api/users/search?q=<term>&category=<member|non-member>&tenant_id=<id>`
+
+### Pending Transactions
+
+- `GET /api/pending-transactions?limit=<1..50>`
+- `DELETE /api/pending-transactions/:id`
+- `PATCH /api/pending-transactions/:id/match`
+  - Body: `{ "matched_user_id": string, "matched_username": string }`
+- `POST /api/pending-transactions/:id/credit`
+  - ใช้ resolver ฝั่ง backend เพื่อหา `toAccountId` จากเลขบัญชีผู้รับ (ไม่รับ override จาก client)
+- `POST /api/pending-transactions/:id/withdraw`
+  - Body (optional): `{ "remark": string }`
+
+### Scan
+
+- `POST /api/scan/upload`
+  - `multipart/form-data`
+  - Fields:
+    - `file` (image/*, required)
+    - `tenant_id` (optional)
+
+### Realtime
+
+- `GET /api/realtime/ws` (WebSocket Upgrade)
+- `GET /api/realtime/health`
+
+---
+
+## Admin API Integration (Complete from current code)
+
+Base URL = ค่า `tenant.admin_api_url`
+
+> หมายเหตุสำคัญ: `toAccountId` ที่ใช้เติมเครดิตต้องเป็น `id` ของรายการบัญชีจาก endpoint `/api/accounting/bankaccounts/list` (ไม่ใช่ `bankId`)
+
+### 1) Captcha
+
+- **Endpoint:** `GET /api/captcha`
+- **Used by:** `GET /api/tenants/:id/captcha`
+- **Headers:** `Accept: application/json`
+- **Expected response (used fields):**
+  - `id` -> map เป็น `captcha_key`
+  - `base64` -> map เป็น `captcha_image`
+
+### 2) Login (captcha flow)
+
+- **Endpoint:** `POST /api/login`
+- **Used by:** `POST /api/tenants/:id/login`
+- **Headers:** `Content-Type: application/json`, `Accept: application/json`
+- **Payload:**
+
+```json
+{
+  "username": "<admin_username>",
+  "password": "<admin_password>",
+  "captchaId": "<captcha_key>",
+  "captchaValue": "<captcha_code>",
+  "agent": "<user-agent>",
+  "ipAddress": "<client-ip>"
+}
+```
+
+- **Expected response (used fields):**
+  - `token` (หลัก)
+  - `refreshToken` (เก็บใช้งานต่อใน flow)
+
+### 3) Login (legacy connect flow)
+
+- **Endpoint:** `POST /api/login`
+- **Used by:** `POST /api/tenants/:id/connect` ผ่าน `tenant.service.ts`
+- **Headers:** `Content-Type: application/json`
+- **Payload:**
+
+```json
+{
+  "username": "<admin_username>",
+  "password": "<admin_password>"
+}
+```
+
+- **Expected response token fields:** `token` หรือ `access_token`
+
+### 4) Bank Account List (source of toAccountId)
+
+- **Endpoint:** `GET /api/accounting/bankaccounts/list?limit=100`
+- **Used by:**
+  - login refresh flow
+  - scheduled bank refresh
+  - scan auto-credit resolver
+  - pending manual credit resolver
+- **Headers:** `Authorization: Bearer <session_token>` (เมื่อมี session), `Accept: application/json`
+- **Expected response shape:**
+
+```json
+{
+  "list": [
+    {
+      "id": 123,
+      "accountNumber": "1234567890",
+      "bankId": 1
+    }
+  ],
+  "total": 1
+}
+```
+
+### 5) Bank Account List (sync route)
+
+- **Endpoint:** `GET /api/accounting/bankaccounts/list`
+- **Used by:** `POST /api/tenants/:id/bank-accounts/sync`
+- **Purpose:** cache account list ลง KV (`tenant:<id>:bank-accounts-list`) และ sync metadata ลง D1
+
+### 6) Master Banks List
+
+- **Endpoint:** `GET /api/accounting/banks/list`
+- **Used by:** `POST /api/tenants/:id/bank-accounts/sync`
+- **Purpose:** map `bankId -> bank code` เพื่อเติมค่า bank short/code
+
+### 7) User Search
+
+- **Endpoint:** `GET /api/users/list?page=1&limit=<n>&search=<term>&userCategory=<member|non-member>`
+- **Used by:**
+  - sender matching จากสลิป
+  - API `/api/users/search`
+  - memberCode resolve flow ก่อนเติมเครดิต
+- **Headers:** `Authorization: Bearer <session_token>`, `Accept: application/json`
+- **Expected response field:** `list`
+
+### 8) Generate Member Code
+
+- **Endpoint:** `GET /api/admin/gen-membercode/:userId`
+- **Used by:** credit flow เมื่อ user ไม่มี `memberCode`
+- **Headers:** `Authorization: Bearer <session_token>`, `Accept: application/json`
+- **Accepted response fields (any one):** `memberCode`, `member_code`, `username`, `user`, หรือ nested ใน `data`
+
+### 9) Deposit Record (credit)
+
+- **Endpoint:** `POST /api/banking/transactions/deposit-record`
+- **Used by:** auto credit + manual credit
+- **Headers:** `Authorization: Bearer <session_token>`, `Content-Type: application/json`
+- **Payload:**
+
+```json
+{
+  "memberCode": "MBR001",
+  "creditAmount": 100,
+  "depositChannel": "Mobile Banking (มือถือ)",
+  "toAccountId": 123,
+  "transferAt": "2026-01-01T10:00:00.000Z",
+  "auto": true,
+  "fromAccountNumber": "9876543210"
+}
+```
+
+- **Duplicate detection in current code:**
+  - message: `DUPLICATE_WITH_ADMIN_RECORD` หรือ `DUPLICATED`
+  - status: `DUPLICATED`
+
+### 10) Withdraw Credit Back
+
+- **Endpoint:** `POST /api/banking/transactions/withdraw-credit-back`
+- **Used by:** `POST /api/pending-transactions/:id/withdraw`
+- **Headers:** `Authorization: Bearer <session_token>`, `Content-Type: application/json`
+- **Payload:**
+
+```json
+{
+  "amount": 100,
+  "memberCode": "MBR001",
+  "remark": "Manual withdraw from pending list"
+}
+```
+
+### 11) Legacy Bank Accounts Endpoint
+
+- **Endpoint:** `GET /api/bank-accounts`
+- **Used by:** `POST /api/tenants/:id/connect` (legacy flow)
+- **Headers:** `Authorization: Bearer <session_token>`
+- **Expected response candidates:** `data` หรือ `accounts`
+
+---
+
+## การติดตั้งแบบย่อ
+
+### Backend
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+### Deploy
+
+```bash
+cd backend
+npm run deploy
+```
+
+### Frontend
+
+- ตั้งค่า backend base URL ในไฟล์ config ของ frontend
+- เปิด `frontend/index.html` หรือ deploy บน Cloudflare Pages
+
+---
+
+## หมายเหตุการใช้งานสำคัญ
+
+- ต้อง login admin ให้ tenant ก่อน เพื่อให้มี `admin_sessions.session_token`
+- ระบบจะ refresh bank accounts ผ่าน cron (`scheduled`) สำหรับ tenant ที่ session ยัง active
+- manual credit และ auto credit ใช้ logic resolve `toAccountId` เดียวกัน
+- status ของ pending transaction สำคัญต่อสิทธิ์การกดปุ่ม (credited/duplicate ถูก block)
+
+## Archive
+
+โค้ดและเอกสารเก่าอยู่ที่ `document/OLDVERSION/`

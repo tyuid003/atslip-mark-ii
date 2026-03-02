@@ -23,27 +23,31 @@ const API_CONFIG = {
  * 2. Query: index.html?team=hengdragon-ruayruay
  * 3. Default: ใช้ 'default-team'
  */
-function getTeamFromURL() {
-  // ลองดึงจาก hash ก่อน (#/team-slug)
-  const hash = window.location.hash;
-  if (hash && hash.startsWith('#/')) {
-    const teamSlug = hash.substring(2); // ตัด #/ ออก
-    if (teamSlug) {
-      return teamSlug;
-    }
+function getRouteInfoFromURL() {
+  const hash = window.location.hash || '';
+  if (hash.startsWith('#/')) {
+    const path = hash.substring(2).split('/').filter(Boolean);
+    const teamSlug = path[0] || 'default';
+    const page = path[1] || 'dashboard';
+    return { teamSlug, page };
   }
-  
-  // ลองดึงจาก query parameter (?team=xxx)
+
   const params = new URLSearchParams(window.location.search);
-  const teamParam = params.get('team');
-  if (teamParam) {
-    return teamParam;
-  }
-  
-  // ถ้าไม่มีใช้ default
-  return 'default';
+  const teamParam = params.get('team') || 'default';
+  const pageParam = params.get('page') || 'dashboard';
+  return { teamSlug: teamParam, page: pageParam };
+}
+
+function getTeamFromURL() {
+  return getRouteInfoFromURL().teamSlug;
+}
+
+function getPageFromURL() {
+  return getRouteInfoFromURL().page;
 }
 
 // Export for use in other files
 window.API_CONFIG = API_CONFIG;
 window.getTeamFromURL = getTeamFromURL;
+window.getPageFromURL = getPageFromURL;
+window.getRouteInfoFromURL = getRouteInfoFromURL;

@@ -100,36 +100,53 @@ export async function getTenantById(env: Env, id: string): Promise<TenantWithSta
 // GET ALL TENANTS
 // ============================================================
 
-export async function getAllTenants(env: Env, teamSlug: string = 'default') {
-  // หา team_id จาก slug
-  const teamResult = await env.DB.prepare(
-    `SELECT id FROM teams WHERE slug = ? LIMIT 1`
-  )
-    .bind(teamSlug)
-    .first();
+export async function getAllTenants(env: Env, teamSlug?: string) {
+  let teamId: string | null = null;
 
-  if (!teamResult) {
-    return []; // ถ้าไม่เจอ team ให้คืน array ว่าง
+  // ถ้าระบุ teamSlug ให้หา team_id
+  if (teamSlug && teamSlug !== 'default') {
+    const teamResult = await env.DB.prepare(
+      `SELECT id FROM teams WHERE slug = ? LIMIT 1`
+    )
+      .bind(teamSlug)
+      .first();
+
+    if (teamResult) {
+      teamId = teamResult.id as string;
+    }
   }
 
-  const teamId = teamResult.id;
+  // Query tenants โดยกรองจาก team_id ถ้ามี หรือดึงทุก tenant ถ้าไม่ระบุ
+  const query = teamId
+    ? `SELECT 
+        t.id, t.team_id, t.name, t.admin_api_url,
+        t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
+        t.admin_username, t.admin_password,
+        COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
+        COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
+      FROM tenants t
+      LEFT JOIN line_oas lo ON lo.tenant_id = t.id
+      LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
+      WHERE t.team_id = ?
+      GROUP BY t.id
+      ORDER BY t.created_at DESC`
+    : `SELECT 
+        t.id, t.team_id, t.name, t.admin_api_url,
+        t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
+        t.admin_username, t.admin_password,
+        COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
+        COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
+      FROM tenants t
+      LEFT JOIN line_oas lo ON lo.tenant_id = t.id
+      LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
+      GROUP BY t.id
+      ORDER BY t.created_at DESC`;
 
-  const results = await env.DB.prepare(
-    `SELECT 
-      t.id, t.team_id, t.name, t.admin_api_url,
-      t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
-      t.admin_username, t.admin_password,
-      COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
-      COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
-    FROM tenants t
-    LEFT JOIN line_oas lo ON lo.tenant_id = t.id
-    LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
-    WHERE t.team_id = ?
-    GROUP BY t.id
-    ORDER BY t.created_at DESC`
-  )
-    .bind(teamId)
-    .all();
+  const stmt = teamId
+    ? env.DB.prepare(query).bind(teamId)
+    : env.DB.prepare(query);
+
+  const results = await stmt.all();
 
   const tenants = [];
 
@@ -271,7 +288,10 @@ export async function connectAdmin(
       return { success: false, error: 'Failed to login to admin backend' };
     }
 
-    const loginData = await loginResponse.json();
+    const loginData = (await loginResponse.json()) as {
+      token?: string;
+      access_token?: string;
+    };
     const sessionToken = loginData.token || loginData.access_token;
 
     if (!sessionToken) {
@@ -292,7 +312,10 @@ export async function connectAdmin(
       return { success: false, error: 'Failed to fetch bank accounts' };
     }
 
-    const accountsData = await accountsResponse.json();
+    const accountsData = (await accountsResponse.json()) as {
+      data?: any[];
+      accounts?: any[];
+    };
     const accounts = accountsData.data || accountsData.accounts || [];
 
     // 3. บันทึก session ลง D1

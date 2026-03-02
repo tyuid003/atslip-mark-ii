@@ -10,7 +10,21 @@ interface Env {
 export const AutoDepositAPI = {
   async handleToggleAutoDeposit(env: Env, request: Request, tenantId: string): Promise<Response> {
     try {
-      const body = await request.json() as { enabled: boolean };
+      const body = await request.json() as { enabled?: boolean };
+      if (typeof body.enabled !== 'boolean') {
+        return errorResponse('enabled must be a boolean', 400);
+      }
+
+      const existingTenant = await env.DB.prepare(
+        'SELECT id FROM tenants WHERE id = ? LIMIT 1'
+      )
+        .bind(tenantId)
+        .first();
+
+      if (!existingTenant) {
+        return errorResponse('Tenant not found', 404);
+      }
+
       const enabled = body.enabled ? 1 : 0;
       const now = Math.floor(Date.now() / 1000);
 
@@ -36,7 +50,7 @@ export const AutoDepositAPI = {
         success: true,
         data: {
           tenant_id: tenantId,
-          auto_deposit_enabled: tenant?.auto_deposit_enabled === 1,
+          auto_deposit_enabled: Number(tenant?.auto_deposit_enabled || 0) === 1,
         },
       });
     } catch (error: any) {

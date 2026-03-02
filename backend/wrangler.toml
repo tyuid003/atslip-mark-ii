@@ -13,6 +13,21 @@ database_id = "5638e087-63c2-4fb6-95ad-66c864fdfa95"
 binding = "BANK_KV"
 id = "4bdbda645df643df91bd042bd176b24d"
 
+# Durable Objects for Real-Time Notifications
+[[durable_objects.bindings]]
+name = "PENDING_NOTIFICATIONS"
+class_name = "PendingNotificationsDO"
+
+# Migration for Durable Objects (required for first deployment)
+[[migrations]]
+tag = "v1"
+new_classes = ["PendingNotificationsDO"]
+
+[env.production]
+routes = [
+  { pattern = "*.atslip.app/api/*", zone_name = "atslip.app" }
+]
+
 # Scheduled Jobs (Cron)
 [triggers]
 crons = ["*/30 * * * *"]  # ทุก 30 นาที

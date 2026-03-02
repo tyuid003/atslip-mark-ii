@@ -8,21 +8,113 @@ export const BankAccountsAPI = {
   /**
    * POST /api/tenants/:id/bank-accounts/sync
    * Sync bank accounts จาก KV ไปยัง D1 (สร้าง metadata records)
+   * + เรียก /api/accounting/banks/list เพื่อ cache master bank list
    */
   async handleSyncBankAccounts(env: Env, tenantId: string): Promise<Response> {
     try {
       // ดึงข้อมูล tenant
       const tenant = await env.DB.prepare(
-        'SELECT id, team_id FROM tenants WHERE id = ?'
+        'SELECT id, team_id, admin_api_url FROM tenants WHERE id = ?'
       )
         .bind(tenantId)
-        .first();
+        .first<any>();
 
       if (!tenant) {
         return errorResponse('Tenant not found', 404);
       }
 
       const teamId = tenant.team_id as string;
+
+      // ✅ เรียก /api/accounting/bankaccounts/list เพื่อดึง Account List พร้อม Account IDs
+      let bankAccountsList: Array<{ 
+        id: number;           // ← Account ID (ใช้สำหรับ toAccountId!)
+        accountNumber: string; 
+        bankId: number; 
+        bankCode?: string 
+      }> = [];
+      
+      try {
+        const accountsResponse = await fetch(`${tenant.admin_api_url}/api/accounting/bankaccounts/list`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (accountsResponse.ok) {
+          const accountsData = await accountsResponse.json() as { list?: typeof bankAccountsList };
+          bankAccountsList = accountsData.list || [];
+
+          console.log('[BankAccountsAPI] 💳 Bank Accounts fetched:', bankAccountsList.length, 'accounts');
+          console.log('[BankAccountsAPI] 📝 Sample account:', bankAccountsList[0] ? {
+            id: bankAccountsList[0].id,
+            accountNumber: bankAccountsList[0].accountNumber,
+            bankId: bankAccountsList[0].bankId,
+          } : 'none');
+
+          // เก็บ account list ใน KV พร้อม Account IDs สำหรับ lookup
+          const accountListKey = `tenant:${tenantId}:bank-accounts-list`;
+          await env.BANK_KV.put(
+            accountListKey,
+            JSON.stringify({
+              accounts: bankAccountsList,
+              cached_at: Math.floor(Date.now() / 1000),
+            }),
+            { expirationTtl: 86400 } // 24 hours
+          );
+
+          console.log('[BankAccountsAPI] ✅ Bank accounts list cached in KV');
+        } else {
+          const errorText = await accountsResponse.text();
+          console.log('[BankAccountsAPI] ⚠️ Failed to fetch bank accounts:', accountsResponse.status, errorText);
+        }
+      } catch (accountError: any) {
+        console.log('[BankAccountsAPI] ⚠️ Network error fetching bank accounts:', accountError.message);
+        // Continue even if account list fetch fails
+      }
+
+      // ✅ เรียก /api/accounting/banks/list เพื่อ cache master list
+      let masterBanks: Array<{ id: number; code: string; name: string }> = [];
+      const bankIdToCode: { [key: number]: string } = {};
+      
+      try {
+        const banksResponse = await fetch(`${tenant.admin_api_url}/api/accounting/banks/list`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (banksResponse.ok) {
+          const banksData = await banksResponse.json() as { list?: Array<{ id: number; code: string; name: string }> };
+          masterBanks = banksData.list || [];
+
+          // สร้าง mapping: bankId → code
+          masterBanks.forEach(bank => {
+            bankIdToCode[bank.id] = bank.code;
+          });
+
+          console.log('[BankAccountsAPI] 🏦 Master banks fetched:', masterBanks.length, 'banks');
+          console.log('[BankAccountsAPI] 📝 Bank ID to Code mapping:', bankIdToCode);
+
+          // เก็บ master list ใน KV
+          const masterBankKey = `tenant:${tenantId}:master-banks`;
+          await env.BANK_KV.put(
+            masterBankKey,
+            JSON.stringify({
+              banks: masterBanks,
+              cached_at: Math.floor(Date.now() / 1000),
+            }),
+            { expirationTtl: 86400 } // 24 hours
+          );
+        } else {
+          const errorText = await banksResponse.text();
+          console.log('[BankAccountsAPI] ⚠️ Failed to fetch master banks:', banksResponse.status, errorText);
+        }
+      } catch (bankError: any) {
+        console.log('[BankAccountsAPI] ⚠️ Network error fetching master banks:', bankError.message);
+        // Continue even if master list fetch fails
+      }
 
       // ดึงบัญชีจาก KV
       const bankKey = `tenant:${tenantId}:banks`;
@@ -39,14 +131,26 @@ export const BankAccountsAPI = {
       let syncedCount = 0;
       let skippedCount = 0;
 
+      console.log('[BankAccountsAPI] 📥 Starting sync for', accounts.length, 'account(s)');
+
       // Loop แต่ละบัญชีและ insert/update ใน D1
       for (const account of accounts) {
+        // ✅ CRITICAL: account.id จาก /api/accounting/bankaccounts/list คือ Account ID (ต้องเก็บไว้!)
         const accountId = account.id || account.accountId || `acc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         const accountNumber = account.accountNumber || account.account_number || '';
         const accountName = account.accountName || account.account_name || '';
         const bankId = account.bankId || account.bank_id || '';
+        
+        // ดึง bankShort จากปัจจุบัน (ถ้าไม่มี try map จาก bankId)
+        let bankShort = account.bankShort || account.bank_short || '';
+        if (!bankShort && bankId && bankIdToCode[bankId]) {
+          bankShort = bankIdToCode[bankId];
+          console.log(`[BankAccountsAPI] 🔍 Mapped bankId ${bankId} → code ${bankShort}`);
+        }
+
         const bankName = account.bankName || account.bank_name || '';
-        const bankShort = account.bankShort || account.bank_short || '';
+
+        console.log(`[BankAccountsAPI] 📋 Processing account: ${accountNumber} | bank_short=${bankShort}`);
 
         // ตรวจสอบว่ามีอยู่แล้วหรือไม่
         const existing = await env.DB.prepare(
@@ -57,14 +161,15 @@ export const BankAccountsAPI = {
 
         if (existing) {
           // Update
-          await env.DB.prepare(
+          const result = await env.DB.prepare(
             `UPDATE tenant_bank_accounts 
-             SET account_number = ?, account_name_th = ?, bank_id = ?, bank_name = ?, bank_short = ?, updated_at = ?
+             SET account_number = ?, account_name_th = ?, bank_id = ?, bank_name = ?, bank_short = ?, status = 'active', updated_at = ?
              WHERE tenant_id = ? AND account_id = ?`
           )
             .bind(accountNumber, accountName, bankId, bankName, bankShort, now, tenantId, accountId)
             .run();
 
+          console.log(`[BankAccountsAPI] ✏️ Updated account: ${accountId}`);
           skippedCount++;
         } else {
           // Insert
@@ -81,6 +186,7 @@ export const BankAccountsAPI = {
               teamId,
               tenantId,
               accountId,
+                // ✅ Store Account ID (not account number!)
               accountNumber,
               accountName,
               '', // account_name_en (empty จนกว่า user จะแก้ไข)
@@ -93,9 +199,12 @@ export const BankAccountsAPI = {
             )
             .run();
 
+          console.log(`[BankAccountsAPI] ✅ Inserted account: ${accountId} with bank_short=${bankShort}`);
           syncedCount++;
         }
       }
+
+      console.log(`[BankAccountsAPI] ✅ Sync complete: ${syncedCount} inserted, ${skippedCount} updated`);
 
       return successResponse(
         {

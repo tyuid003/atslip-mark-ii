@@ -11,13 +11,24 @@ import { ScanAPI } from './api/scan';
 import { BankAccountsAPI } from './api/bank-accounts';
 import { handleUserSearch } from './api/user-search';
 import { handleMatchPendingTransaction } from './api/match-pending';
+import {
+  handleCreditPendingTransaction,
+  handleWithdrawPendingCredit,
+} from './api/pending-credit';
+import { PendingNotificationsDO } from './durable-objects/pending-notifications';
+import { RealtimeAPI } from './api/realtime';
+import {
+  handleGetLineMessageSettings,
+  handleUpdateLineMessageSettings,
+} from './api/line-message-settings';
+import { handleLineWebhook } from './api/line-webhook';
 
 // ============================================================
 // MAIN ROUTER
 // ============================================================
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const pathname = url.pathname;
     const method = request.method;
@@ -219,6 +230,28 @@ export default {
       return await LineOAsAPI.handleDeleteLineOA(env, lineOAId);
     }
 
+    // GET /api/line-oas/:id/reply-settings - ดูค่า settings ตอบกลับ LINE
+    const getLineReplySettingsMatch = pathname.match(/^\/api\/line-oas\/([^\/]+)\/reply-settings$/);
+    if (method === 'GET' && getLineReplySettingsMatch) {
+      const lineOAId = decodeURIComponent(getLineReplySettingsMatch[1]);
+      return await handleGetLineMessageSettings(env, lineOAId);
+    }
+
+    // PUT /api/line-oas/:id/reply-settings - แก้ไขค่า settings ตอบกลับ LINE
+    const updateLineReplySettingsMatch = pathname.match(/^\/api\/line-oas\/([^\/]+)\/reply-settings$/);
+    if (method === 'PUT' && updateLineReplySettingsMatch) {
+      const lineOAId = decodeURIComponent(updateLineReplySettingsMatch[1]);
+      return await handleUpdateLineMessageSettings(request, env, lineOAId);
+    }
+
+    // POST /webhook/:tenantId/:lineOAId - รับ LINE OA webhook
+    const lineWebhookMatch = pathname.match(/^\/webhook\/([^\/]+)\/([^\/]+)$/);
+    if (method === 'POST' && lineWebhookMatch) {
+      const tenantId = decodeURIComponent(lineWebhookMatch[1]);
+      const lineOAId = decodeURIComponent(lineWebhookMatch[2]);
+      return await handleLineWebhook(request, env, ctx, tenantId, lineOAId);
+    }
+
     // ============================================================
     // USER SEARCH ROUTES
     // ============================================================
@@ -245,10 +278,24 @@ export default {
     }
 
     // PATCH /api/pending-transactions/:id/match - จับคู่รายการแบบ manual
-    const matchPendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)\/match$/);
+    const matchPendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)\/match\/?$/);
     if (method === 'PATCH' && matchPendingMatch) {
       const transactionId = decodeURIComponent(matchPendingMatch[1]);
       return await handleMatchPendingTransaction(env, transactionId, request);
+    }
+
+    // POST /api/pending-transactions/:id/credit - เติมเครดิตแบบ manual
+    const creditPendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)\/credit\/?$/);
+    if (method === 'POST' && creditPendingMatch) {
+      const transactionId = decodeURIComponent(creditPendingMatch[1]);
+      return await handleCreditPendingTransaction(env, transactionId, request);
+    }
+
+    // POST /api/pending-transactions/:id/withdraw - ดึงเครดิตกลับ
+    const withdrawPendingMatch = pathname.match(/^\/api\/pending-transactions\/([^\/]+)\/withdraw\/?$/);
+    if (method === 'POST' && withdrawPendingMatch) {
+      const transactionId = decodeURIComponent(withdrawPendingMatch[1]);
+      return await handleWithdrawPendingCredit(env, transactionId, request);
     }
 
     // ============================================================
@@ -258,6 +305,20 @@ export default {
     // POST /api/scan/upload - อัพโหลดและสแกนสลิป
     if (method === 'POST' && pathname === '/api/scan/upload') {
       return await ScanAPI.handleUploadSlip(request, env);
+    }
+
+    // ============================================================
+    // REALTIME ROUTES
+    // ============================================================
+
+    // GET /api/realtime/ws - WebSocket upgrade endpoint
+    if (pathname === '/api/realtime/ws') {
+      return await RealtimeAPI.handleWebSocketUpgrade(request, env);
+    }
+
+    // GET /api/realtime/health - Health check endpoint
+    if (method === 'GET' && pathname === '/api/realtime/health') {
+      return await RealtimeAPI.handleHealthCheck(request, env);
     }
 
     // ============================================================
@@ -281,3 +342,9 @@ export default {
     );
   },
 };
+
+// ============================================================
+// DURABLE OBJECTS EXPORTS
+// ============================================================
+export { PendingNotificationsDO };
+

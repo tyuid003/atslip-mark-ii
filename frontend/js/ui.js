@@ -43,8 +43,17 @@ const UI = {
     document.getElementById('loadingState').style.display = 'none';
   },
 
-  showEmptyState() {
-    document.getElementById('emptyState').style.display = 'block';
+  showEmptyState(title = null, message = null) {
+    const emptyState = document.getElementById('emptyState');
+    if (title) {
+      const titleEl = emptyState.querySelector('h3');
+      if (titleEl) titleEl.textContent = title;
+    }
+    if (message) {
+      const messageEl = emptyState.querySelector('p');
+      if (messageEl) messageEl.textContent = message;
+    }
+    emptyState.style.display = 'block';
     document.getElementById('tenantGrid').style.display = 'none';
   },
 
@@ -217,10 +226,17 @@ const UI = {
         const statusConfig = {
           pending: { color: 'yellow', label: 'รอจับคู่' },
           matched: { color: 'blue', label: 'จับคู่แล้ว' },
-          completed: { color: 'green', label: 'เติมแล้ว' },
+          credited: { color: 'green', label: 'เติมแล้ว' },
           duplicate: { color: 'red', label: 'ยอดซ้ำ' },
         };
         const status = statusConfig[item.status] || statusConfig.pending;
+        const canWithdraw = item.status === 'credited';
+        const canCredit = !!item.matched_user_id && item.status !== 'credited' && item.status !== 'duplicate';
+        const creditActionHtml = canWithdraw
+          ? `<button class="pending-credit-btn pending-credit-btn-withdraw" onclick="withdrawPendingCredit('${item.id}')" title="ดึงเครดิตกลับ">ดึงเครดิตกลับ</button>`
+          : (canCredit
+              ? `<button class="pending-credit-btn" onclick="creditPendingItem('${item.id}')" title="เติมเครดิต">เติมเครดิต</button>`
+              : '');
 
         return `
           <div class="pending-item" data-item-id="${item.id}" data-tenant-id="${item.tenant_id}">
@@ -246,7 +262,10 @@ const UI = {
                   <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
                 </div>
               </div>
-              <span class="amount">${amount} บาท</span>
+              <div class="pending-amount-actions">
+                ${creditActionHtml}
+                <span class="amount">${amount} บาท</span>
+              </div>
             </div>
           </div>
         `;

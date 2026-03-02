@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ATslip Mark-II - จัดการระบบเติมเครดิตอัตโนมัติ</title>
-  <link rel="icon" type="image/png" href="assets/images/logo.webp">
+  <link rel="icon" type="image/gif" href="assets/images/logo.webp">
   <!-- Preload Kanit Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/global.css">
   <link rel="stylesheet" href="css/components/tenant-card.css">
   <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/reply-message.css">
   
   <!-- Lucide Icons (Open Source) -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -30,6 +31,9 @@
         <span id="teamBadge" class="team-badge" style="display: none;"></span>
       </div>
       <div class="header-actions">
+        <button id="goReplyPageBtn" class="page-nav-btn" onclick="goToReplyMessagePage()" title="ตั้งค่าข้อความตอบกลับ LINE OA">
+          ตั้งค่าการตอบกลับ
+        </button>
         <button class="notification-btn" onclick="toggleNotificationDropdown()" aria-label="การแจ้งเตือน">
           <i data-lucide="bell"></i>
           <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
@@ -51,6 +55,7 @@
        MAIN CONTENT
        ============================================================ -->
   <div class="container">
+    <div id="dashboardPage">
     <div class="tenant-header">
       <div class="tenant-title-wrap">
 <!--        <h2>รายชื่อเว็บ</h2> -->
@@ -66,14 +71,10 @@
     <!-- Empty State -->
     <div id="emptyState" class="empty-state" style="display: none;">
       <div class="empty-state-icon">
-        <i data-lucide="building-2" size="32"></i>
+        <i data-lucide="alert-circle" size="32"></i>
       </div>
-      <h3>ยังไม่มีเว็บในระบบ</h3>
-      <p>เริ่มต้นโดยการเพิ่มเว็บแรกของคุณเพื่อเริ่มใช้งานระบบเติมเครดิตอัตโนมัติ</p>
-      <button class="btn btn-primary" onclick="openCreateTenantModal()">
-        <i data-lucide="plus"></i>
-        เพิ่มเว็บใหม่
-      </button>
+      <h3>ไม่มีสิทธิ์เข้าถึง</h3>
+      <p>คุณไม่มีสิทธิ์ในการเข้าถึงทีมนี้ โปรดติดต่อผู้ดูแลระบบ</p>
     </div>
 
     <!-- Tenant Slider -->
@@ -130,13 +131,13 @@
               <div id="filterDropdown" class="filter-dropdown" style="display: none;">
                 <div class="filter-dropdown-group">
                   <label class="filter-dropdown-label">เลือกเว็บ</label>
-                  <select id="filterTenantDropdown" class="form-input" style="width: 100%; max-width: 200px;" onchange="applyPendingFilter()">
+                  <select id="filterTenantDropdown" class="form-input" style="width: 100%; max-width: 200px;" onclick="event.stopPropagation()" onchange="applyPendingFilter()">
                     <option value="">-- ทั้งหมด --</option>
                   </select>
                 </div>
                 <div class="filter-dropdown-group">
                   <label class="filter-dropdown-label">สถานะ</label>
-                  <select id="filterStatusDropdown" class="form-input" style="width: 100%; max-width: 200px;" onchange="applyPendingFilter()">
+                  <select id="filterStatusDropdown" class="form-input" style="width: 100%; max-width: 200px;" onclick="event.stopPropagation()" onchange="applyPendingFilter()">
                     <option value="">-- ทั้งหมด --</option>
                     <option value="pending">รอจับคู่</option>
                     <option value="matched">จับคู่แล้ว</option>
@@ -153,6 +154,126 @@
           <div id="pendingList" class="pending-list"></div>
         </div>
       </section>
+    </div>
+    </div>
+
+    <div id="replyMessagePage" class="reply-page">
+      <div class="reply-header">
+        <h2>ตั้งค่าการตอบกลับ LINE OA</h2>
+        <button class="btn btn-secondary" onclick="goToDashboardPage()">
+          <i data-lucide="arrow-left"></i>
+          กลับหน้าสแกน
+        </button>
+      </div>
+      <div id="replyTenantGrid" class="reply-grid"></div>
+    </div>
+  </div>
+
+  <div id="replySettingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 980px;">
+      <div class="modal-header">
+        <h3 class="modal-title">ตั้งค่า Reply/Flex Message - <span id="replySettingsLineOAName"></span></h3>
+        <button class="modal-close" onclick="closeReplySettingsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="reply-toggle-row">
+          <span>ข้อความตอบกลับเมื่อลูกค้าส่งสลิป</span>
+          <label class="toggle-switch toggle-switch-compact">
+            <input type="checkbox" id="enableProcessingReply">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="form-group mt-2">
+          <label class="form-label">ข้อความที่ต้องการตอบกลับ</label>
+          <textarea id="processingReplyText" class="form-input" rows="2"></textarea>
+        </div>
+
+        <div class="reply-toggle-row mt-2">
+          <span>ตอบกลับเมื่อเติมเครดิตสำเร็จ</span>
+          <label class="toggle-switch toggle-switch-compact">
+            <input type="checkbox" id="enableSuccessFlex">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="reply-toggle-row mt-2">
+          <span>ตอบกลับเมื่อพบรายการซ้ำ</span>
+          <label class="toggle-switch toggle-switch-compact">
+            <input type="checkbox" id="enableDuplicateFlex">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="reply-toggle-row mt-2">
+          <span>ตอบกลับเมื่อไม่สำเร็จ</span>
+          <label class="toggle-switch toggle-switch-compact">
+            <input type="checkbox" id="enableFailedReply">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="form-group mt-2">
+          <label class="form-label">ข้อความเมื่อไม่สำเร็จ</label>
+          <textarea id="failedReplyText" class="form-input" rows="2"></textarea>
+        </div>
+
+        <div class="reply-setting-grid mt-3">
+          <div class="form-group">
+            <label class="form-label">ลิ้งก์ภาพโลโก้</label>
+            <input id="logoImageUrl" class="form-input" type="url">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ลิ้งก์เข้าเล่น</label>
+            <input id="playUrl" class="form-input" type="url">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความหัวข้อ</label>
+            <input id="headerTitleText" class="form-input" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความสถานะสำเร็จ</label>
+            <input id="successStatusText" class="form-input" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความสถานะรายการซ้ำ</label>
+            <input id="duplicateStatusText" class="form-input" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความสถานะไม่สำเร็จ</label>
+            <input id="failedStatusText" class="form-input" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความส่วนท้าย</label>
+            <input id="footerText" class="form-input" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ข้อความบนปุ่ม</label>
+            <input id="buttonText" class="form-input" type="text">
+          </div>
+
+          <div class="reply-setting-full"><strong>สี Flex Message</strong></div>
+
+          <div class="reply-color-row"><label>สีส่วนหัว</label><div style="display:flex;gap:8px;"><input id="headerBackgroundColor" type="color"><input id="headerBackgroundColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีพื้นหลัง</label><div style="display:flex;gap:8px;"><input id="bodyBackgroundColor" type="color"><input id="bodyBackgroundColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีส่วนท้าย</label><div style="display:flex;gap:8px;"><input id="footerBackgroundColor" type="color"><input id="footerBackgroundColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีข้อความหัวข้อ</label><div style="display:flex;gap:8px;"><input id="headerTitleColor" type="color"><input id="headerTitleColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีข้อความสำเร็จ</label><div style="display:flex;gap:8px;"><input id="statusSuccessColor" type="color"><input id="statusSuccessColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีข้อความไม่สำเร็จ</label><div style="display:flex;gap:8px;"><input id="statusFailedColor" type="color"><input id="statusFailedColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีป้ายกำกับ</label><div style="display:flex;gap:8px;"><input id="labelsColor" type="color"><input id="labelsColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีค่าข้อมูล</label><div style="display:flex;gap:8px;"><input id="valuesColor" type="color"><input id="valuesColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีข้อความรอง</label><div style="display:flex;gap:8px;"><input id="secondaryTextColor" type="color"><input id="secondaryTextColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีเส้นคั่น</label><div style="display:flex;gap:8px;"><input id="separatorColor" type="color"><input id="separatorColorText" class="form-input" type="text"></div></div>
+          <div class="reply-color-row"><label>สีปุ่ม</label><div style="display:flex;gap:8px;"><input id="buttonColor" type="color"><input id="buttonColorText" class="form-input" type="text"></div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeReplySettingsModal()">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveReplySettings()">
+          <i data-lucide="save"></i>
+          บันทึกการตั้งค่า
+        </button>
+      </div>
     </div>
   </div>
 
@@ -245,7 +366,7 @@
        LINE OA MODAL
        ============================================================ -->
   <div id="lineOAModal" class="modal-overlay" style="display: none;">
-    <div class="modal">
+    <div class="modal lineoa-modal">
       <div class="modal-header">
         <h3 class="modal-title">จัดการ LINE OA</h3>
         <button class="modal-close" onclick="closeLineOAModal()">
@@ -278,12 +399,12 @@
                 <input type="password" id="lineOAAccessToken" required placeholder="••••••••••••••••" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.875rem;">
               </div>
               <div style="display: flex; gap: var(--space-sm); justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary" onclick="cancelAddLineOA()">
+                <button type="button" class="btn btn-secondary lineoa-btn-compact" onclick="cancelAddLineOA()">
                   ยกเลิก
                 </button>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary lineoa-btn-compact" id="submitLineOAFormBtn">
                   <i data-lucide="check" size="16"></i>
-                  เพิ่ม LINE OA
+                  <span id="submitLineOAFormBtnText">เพิ่ม LINE OA</span>
                 </button>
               </div>
             </div>
@@ -292,7 +413,7 @@
 
         <!-- Toggle Add Form Button -->
         <div style="margin-bottom: var(--space-lg);">
-          <button id="showAddFormBtn" class="btn btn-primary" onclick="showAddLineOAForm()">
+          <button id="showAddFormBtn" class="btn btn-primary lineoa-btn-compact" onclick="showAddLineOAForm()">
             <i data-lucide="plus"></i>
             เพิ่ม LINE OA
           </button>
@@ -302,7 +423,7 @@
         <div id="lineOAList"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeLineOAModal()">
+        <button class="btn btn-secondary lineoa-btn-compact" onclick="closeLineOAModal()">
           ปิด
         </button>
       </div>
@@ -416,7 +537,9 @@
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/reply-message.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/realtime.js?v=1.1"></script>
   
   <script>
     // Initialize Lucide icons
