@@ -229,19 +229,39 @@
           </div>
           <div class="form-group">
             <label class="form-label">ข้อความหัวข้อ</label>
-            <input id="headerTitleText" class="form-input" type="text">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="headerTitleText" class="form-input" type="text" style="flex:1;">
+              <button class="btn btn-secondary btn-sm" onclick="previewFlexStatus('header')" title="ดูตัวอย่างข้อความหัวข้อ" style="padding:6px 10px;">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">ข้อความสถานะสำเร็จ</label>
-            <input id="successStatusText" class="form-input" type="text">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="successStatusText" class="form-input" type="text" style="flex:1;">
+              <button class="btn btn-secondary btn-sm" onclick="previewFlexStatus('success')" title="ดูตัวอย่างสถานะสำเร็จ" style="padding:6px 10px;">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">ข้อความสถานะรายการซ้ำ</label>
-            <input id="duplicateStatusText" class="form-input" type="text">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="duplicateStatusText" class="form-input" type="text" style="flex:1;">
+              <button class="btn btn-secondary btn-sm" onclick="previewFlexStatus('duplicate')" title="ดูตัวอย่างสถานะรายการซ้ำ" style="padding:6px 10px;">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">ข้อความสถานะไม่สำเร็จ</label>
-            <input id="failedStatusText" class="form-input" type="text">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="failedStatusText" class="form-input" type="text" style="flex:1;">
+              <button class="btn btn-secondary btn-sm" onclick="previewFlexStatus('failed')" title="ดูตัวอย่างสถานะไม่สำเร็จ" style="padding:6px 10px;">
+                <i data-lucide="eye" style="width:16px;height:16px;"></i>
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">ข้อความส่วนท้าย</label>
@@ -252,7 +272,13 @@
             <input id="buttonText" class="form-input" type="text">
           </div>
 
-          <div class="reply-setting-full"><strong>สี Flex Message</strong></div>
+          <div class="reply-setting-full" style="display:flex;justify-content:space-between;align-items:center;">
+            <strong>สี Flex Message</strong>
+            <button class="btn btn-secondary btn-sm" onclick="openFlexPreview()" title="ดูตัวอย่าง Flex Message">
+              <i data-lucide="eye"></i>
+              ดูตัวอย่าง
+            </button>
+          </div>
 
           <div class="reply-color-row"><label>สีส่วนหัว</label><div style="display:flex;gap:8px;"><input id="headerBackgroundColor" type="color"><input id="headerBackgroundColorText" class="form-input" type="text"></div></div>
           <div class="reply-color-row"><label>สีพื้นหลัง</label><div style="display:flex;gap:8px;"><input id="bodyBackgroundColor" type="color"><input id="bodyBackgroundColorText" class="form-input" type="text"></div></div>
@@ -535,11 +561,11 @@
 
   <!-- Scripts -->
   <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
+  <script src="js/api.js?v=1.2"></script>
+  <script src="js/ui.js?v=1.1"></script>
   <script src="js/reply-message.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/realtime.js?v=1.1"></script>
+  <script src="js/app.js?v=1.2"></script>
+  <script src="js/realtime.js?v=1.4"></script>
   
   <script>
     // Initialize Lucide icons

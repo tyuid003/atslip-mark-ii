@@ -127,6 +127,17 @@ class RealtimeClient {
    */
   handleMessage(message) {
     console.log('[Realtime] handleMessage called with:', message);
+
+    if (!this.isMessageForCurrentTeam(message?.data)) {
+      console.log('[Realtime] ⏭️ Ignored message from other team:', {
+        currentTeamSlug: window.currentTeamSlug,
+        currentTeamId: window.currentTeamId,
+        messageTeamSlug: message?.data?.team_slug,
+        messageTeamId: message?.data?.team_id,
+      });
+      return;
+    }
+
     if (message.type === 'new_pending') {
       console.log('[Realtime] Detected new_pending message, calling onNewPending');
       // New pending transaction received
@@ -135,9 +146,36 @@ class RealtimeClient {
       console.log('[Realtime] Detected transaction_updated message, calling onTransactionUpdated');
       // Transaction status changed (credit applied, etc)
       this.onTransactionUpdated(message.data);
+    } else if (message.type === 'tenant_connection_updated') {
+      console.log('[Realtime] Detected tenant_connection_updated message, calling onTenantConnectionUpdated');
+      // Tenant admin connection status changed
+      this.onTenantConnectionUpdated(message.data);
     } else {
       console.log('[Realtime] Unknown message type:', message.type);
     }
+  }
+
+  /**
+   * Check if incoming realtime payload belongs to current team
+   * @param {object} data
+   * @returns {boolean}
+   */
+  isMessageForCurrentTeam(data) {
+    if (!data) return false;
+
+    const currentTeamSlug = window.currentTeamSlug || (typeof window.getTeamFromURL === 'function' ? window.getTeamFromURL() : null);
+    const currentTeamId = window.currentTeamId || null;
+
+    if (data.team_id && currentTeamId) {
+      return String(data.team_id) === String(currentTeamId);
+    }
+
+    if (data.team_slug && currentTeamSlug) {
+      return String(data.team_slug) === String(currentTeamSlug);
+    }
+
+    // Strict isolation: if payload has no team info, ignore it
+    return false;
   }
 
   /**
@@ -218,7 +256,61 @@ class RealtimeClient {
         this.playNotificationSound();
       } else {
         console.log('[Realtime] ⚠️ Transaction not found in list:', data.id);
+
+        // Fallback: force refresh to sync latest status from backend
+        if (typeof refreshPendingTransactions === 'function') {
+          console.log('[Realtime] 🔄 Triggering fallback refresh for missing transaction:', data.id);
+          refreshPendingTransactions();
+        }
       }
+    }
+  }
+
+  /**
+   * Called when tenant admin connection status changes
+   * @param {object} data
+   */
+  onTenantConnectionUpdated(data) {
+    console.log('[Realtime] Tenant connection updated:', data);
+
+    if (!data || !data.tenant_id) {
+      return;
+    }
+
+    if (typeof currentTenants === 'undefined' || !Array.isArray(currentTenants)) {
+      return;
+    }
+
+    const tenantIndex = currentTenants.findIndex((tenant) => tenant.id === data.tenant_id);
+    if (tenantIndex === -1) {
+      return;
+    }
+
+    currentTenants[tenantIndex] = {
+      ...currentTenants[tenantIndex],
+      admin_connected: !!data.admin_connected,
+      bank_account_count: Number.isFinite(data.bank_account_count)
+        ? data.bank_account_count
+        : currentTenants[tenantIndex].bank_account_count,
+      updated_at: data.updated_at || currentTenants[tenantIndex].updated_at,
+    };
+
+    // Keep cache in sync so later page actions don't revert the status.
+    try {
+      sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
+      sessionStorage.setItem('tenants_cache_time', Date.now().toString());
+    } catch (error) {
+      console.warn('[Realtime] Failed to update tenants cache:', error);
+    }
+
+    if (typeof UI !== 'undefined' && typeof UI.renderTenants === 'function' && document.getElementById('tenantGrid')) {
+      UI.renderTenants(currentTenants);
+    }
+
+    if (typeof showToast === 'function') {
+      const tenantName = data.tenant_name || currentTenants[tenantIndex].name || 'Tenant';
+      const statusText = data.admin_connected ? 'เชื่อมต่อแล้ว' : 'ยกเลิกการเชื่อมต่อแล้ว';
+      showToast(`🔌 ${tenantName}: ${statusText}`, data.admin_connected ? 'success' : 'warning');
     }
   }
 
