@@ -32,5 +32,10 @@ routes = [
 [triggers]
 crons = ["*/30 * * * *"]  # ทุก 30 นาที
 
+# Observability - Enable logs
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 # Environment Variables (set via Cloudflare dashboard or wrangler secret)
 # EASYSLIP_API_KEY = "your-easyslip-key"

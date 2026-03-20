@@ -3,10 +3,69 @@
 // POST /api/tenants/:id/login
 
 import { jsonResponse, errorResponse } from '../utils/helpers';
+import type { Env } from '../types';
 
-interface Env {
-  DB: D1Database;
-  BANK_KV: KVNamespace;
+async function getTenantRealtimeInfo(env: Env, tenantId: string): Promise<{
+  team_id: string | null;
+  team_slug: string | null;
+  tenant_name: string | null;
+  bank_account_count: number;
+}> {
+  const tenant = await env.DB.prepare(
+    `SELECT t.team_id, tm.slug AS team_slug, t.name AS tenant_name
+     FROM tenants t
+     LEFT JOIN teams tm ON tm.id = t.team_id
+     WHERE t.id = ?
+     LIMIT 1`
+  )
+    .bind(tenantId)
+    .first<{ team_id: string; team_slug: string; tenant_name: string }>();
+
+  const bankKey = `tenant:${tenantId}:banks`;
+  const bankData = await env.BANK_KV.get(bankKey);
+  const bank_account_count = bankData ? (JSON.parse(bankData).accounts || []).length : 0;
+
+  return {
+    team_id: tenant?.team_id || null,
+    team_slug: tenant?.team_slug || null,
+    tenant_name: tenant?.tenant_name || null,
+    bank_account_count,
+  };
+}
+
+async function broadcastTenantConnectionUpdated(
+  env: Env,
+  tenantId: string,
+  adminConnected: boolean
+): Promise<void> {
+  try {
+    const info = await getTenantRealtimeInfo(env, tenantId);
+    const now = Math.floor(Date.now() / 1000);
+
+    const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
+    const doStub = env.PENDING_NOTIFICATIONS.get(doId);
+
+    const payload = {
+      type: 'tenant_connection_updated',
+      data: {
+        tenant_id: tenantId,
+        tenant_name: info.tenant_name,
+        team_id: info.team_id,
+        team_slug: info.team_slug,
+        admin_connected: adminConnected,
+        bank_account_count: info.bank_account_count,
+        updated_at: now,
+      },
+    };
+
+    await doStub.fetch('https://internal/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error('[AdminLoginAPI] Failed to broadcast tenant connection update:', error);
+  }
 }
 
 export const AdminLoginAPI = {
@@ -184,6 +243,8 @@ export const AdminLoginAPI = {
         );
       }
 
+      await broadcastTenantConnectionUpdated(env, tenantId, connected);
+
       return jsonResponse({
         success: true,
         data: {
@@ -248,6 +309,8 @@ export const AdminLoginAPI = {
         const bankKey = `tenant:${tenantId}:banks`;
         await env.BANK_KV.delete(bankKey);
 
+        await broadcastTenantConnectionUpdated(env, tenantId, false);
+
         return errorResponse('Failed to refresh bank accounts. Session expired.', 401);
       }
 
@@ -268,6 +331,8 @@ export const AdminLoginAPI = {
           expirationTtl: cacheTtl,
         }
       );
+
+      await broadcastTenantConnectionUpdated(env, tenantId, true);
 
       return jsonResponse({
         success: true,

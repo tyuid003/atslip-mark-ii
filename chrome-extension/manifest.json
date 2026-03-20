@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "ATslip Mark-II",
+  "version": "2.0.0",
+  "description": "ระบบจัดการสแกนสลิปและเติมเครดิตอัตโนมัติสำหรับธุรกิจออนไลน์",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://atslip-backend.tyuid003.workers.dev/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "ATslip Mark-II",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

@@ -168,6 +168,7 @@ async function openReplySettingsModal(tenantId, lineOAId) {
 
     document.getElementById('replySettingsModal').style.display = 'flex';
     setupReplySettingsColorBindings();
+    setupRealtimePreviewListeners(); // Setup realtime preview after modal opens
   } catch (error) {
     if (typeof addNotification === 'function') {
       addNotification('❌ ไม่สามารถโหลดค่า reply message: ' + error.message);
@@ -255,3 +256,116 @@ window.initReplyMessagePage = initReplyMessagePage;
 window.openReplySettingsModal = openReplySettingsModal;
 window.closeReplySettingsModal = closeReplySettingsModal;
 window.saveReplySettings = saveReplySettings;
+
+// Store popup window reference for realtime updates
+let flexPreviewWindow = null;
+
+function getCurrentFlexSettings(previewType = 'all') {
+  return {
+    previewType: previewType,
+    headerBg: document.getElementById('headerBackgroundColorText').value.trim() || '#000000',
+    footerBg: document.getElementById('footerBackgroundColorText').value.trim() || '#000000',
+    bodyBg: document.getElementById('bodyBackgroundColorText').value.trim() || '#1A1A1A',
+    statusTextColor: document.getElementById('headerTitleColorText').value.trim() || '#D4AF37',
+    titleColor: document.getElementById('statusSuccessColorText').value.trim() || '#33FF33',
+    failColor: document.getElementById('statusFailedColorText').value.trim() || '#FF4D4D',
+    labelColor: document.getElementById('labelsColorText').value.trim() || '#D4AF37',
+    valueColor: document.getElementById('valuesColorText').value.trim() || '#FFFFFF',
+    subTextColor: document.getElementById('secondaryTextColorText').value.trim() || '#888888',
+    sepColor: document.getElementById('separatorColorText').value.trim() || '#333333',
+    btnColor: document.getElementById('buttonColorText').value.trim() || '#D4AF37',
+    logoUrl: document.getElementById('logoImageUrl').value.trim() || 'https://lh3.googleusercontent.com/pw/AP1GczNX0bkhtsKfNWK2SS9C68wqtI-zOH6pgtz6FNBlPR8XKQDUmNm93D6HsKb1UuEFafEhHtv4cdNy58IaVEXL9oZlqnXQ_lK4E60ye8Mo4tW2tgfh29tXGmXwZlN_DZZfq-IDkVzf7QalpJvaELnKOZTK',
+    btnUrl: document.getElementById('playUrl').value.trim() || 'https://example.com/login',
+    headerTitle: document.getElementById('headerTitleText').value.trim() || 'AUTO DEPOSIT SUCCESS',
+    successStatus: document.getElementById('successStatusText').value.trim() || 'ฝากเงินสำเร็จ',
+    duplicateStatus: document.getElementById('duplicateStatusText').value.trim() || 'พบรายการซ้ำ',
+    failedStatus: document.getElementById('failedStatusText').value.trim() || 'ไม่สามารถทำรายการได้',
+    footerText: document.getElementById('footerText').value.trim() || 'ขอบคุณที่ใช้บริการค่ะ',
+    buttonText: document.getElementById('buttonText').value.trim() || 'เข้าเล่นเกม',
+  };
+}
+
+function sendFlexPreviewUpdate(previewType) {
+  if (flexPreviewWindow && !flexPreviewWindow.closed) {
+    const settings = getCurrentFlexSettings(previewType);
+    console.log('[Realtime Preview] Sending update:', settings);
+    flexPreviewWindow.postMessage({ type: 'updatePreview', settings }, '*');
+  }
+}
+
+function openFlexPreview(previewType = 'all') {
+  // Collect current color values from the form
+  const settings = getCurrentFlexSettings(previewType);
+  const params = new URLSearchParams({ popup: 'true', ...settings });
+
+  // Open popup window with flexmessage-preview.html
+  const width = 400;
+  const height = 700;
+  const left = (screen.width - width) / 2;
+  const top = (screen.height - height) / 2;
+  flexPreviewWindow = window.open(
+    `flexmessage-preview.html?${params.toString()}`, 
+    'flexPreview', 
+    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+  );
+  
+  // Store the preview type for updates
+  if (flexPreviewWindow) {
+    flexPreviewWindow.currentPreviewType = previewType;
+  }
+}
+
+function previewFlexStatus(type) {
+  openFlexPreview(type);
+}
+
+// Setup realtime preview listeners
+function setupRealtimePreviewListeners() {
+  // Both color pickers and text inputs
+  const colorPickerIds = [
+    'headerBackgroundColor', 'footerBackgroundColor', 'bodyBackgroundColor',
+    'headerTitleColor', 'statusSuccessColor', 'statusFailedColor',
+    'labelsColor', 'valuesColor', 'secondaryTextColor', 'separatorColor',
+    'buttonColor'
+  ];
+  
+  const textInputIds = [
+    'headerBackgroundColorText', 'footerBackgroundColorText', 'bodyBackgroundColorText',
+    'headerTitleColorText', 'statusSuccessColorText', 'statusFailedColorText',
+    'labelsColorText', 'valuesColorText', 'secondaryTextColorText', 'separatorColorText',
+    'buttonColorText', 'logoImageUrl', 'playUrl',
+    'headerTitleText', 'successStatusText', 'duplicateStatusText', 'failedStatusText',
+    'footerText', 'buttonText'
+  ];
+  
+  // Listen to color pickers with 'change' and 'input' events
+  colorPickerIds.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      ['change', 'input'].forEach(eventType => {
+        element.addEventListener(eventType, () => {
+          if (flexPreviewWindow && !flexPreviewWindow.closed) {
+            const previewType = flexPreviewWindow.currentPreviewType || 'all';
+            sendFlexPreviewUpdate(previewType);
+          }
+        });
+      });
+    }
+  });
+  
+  // Listen to text inputs with 'input' event
+  textInputIds.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.addEventListener('input', () => {
+        if (flexPreviewWindow && !flexPreviewWindow.closed) {
+          const previewType = flexPreviewWindow.currentPreviewType || 'all';
+          sendFlexPreviewUpdate(previewType);
+        }
+      });
+    }
+  });
+}
+
+window.openFlexPreview = openFlexPreview;
+window.previewFlexStatus = previewFlexStatus;

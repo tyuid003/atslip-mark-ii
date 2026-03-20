@@ -72,9 +72,46 @@ interface EasySlipResponse {
 interface MatchedTenant {
   id: string;
   team_id: string;
+  team_slug?: string;
   name: string;
   admin_api_url: string;
   accountId?: string; // ID ของบัญชีธนาคารที่ match (สำหรับใช้ใน credit submission)
+}
+
+interface ReceiverCandidate {
+  tenantId: string;
+  teamId: string;
+  teamSlug?: string;
+  tenantName: string;
+  adminApiUrl: string;
+  accountId: string;
+  accountNumber: string;
+  accountNameTh: string;
+  accountNameEn: string;
+  bankName: string;
+  bankMatched: boolean;
+  accountMatched: boolean;
+  accountExact: boolean;
+  nameScore: number;
+  nameMatchType: 'thai' | 'english-mapping' | 'none';
+  longestCommonChars: number;
+  totalScore: number;
+}
+
+interface EnglishNameMapping {
+  tenantId: string;
+  accountId: string;
+  accountNumber: string;
+  accountNameTh: string;
+  accountNameEn: string;
+  bankName: string;
+}
+
+interface NameMatchScore {
+  score: number;
+  longestCommonChars: number;
+  exact: boolean;
+  contains: boolean;
 }
 
 export class ScanService {
@@ -215,28 +252,213 @@ export class ScanService {
   }
 
   /**
-   * ตรวจสอบว่าชื่อตรงกันหรือไม่ (ขั้นต่ำ 4 ตัวอักษร)
+   * จัดรูปแบบชื่อเพื่อใช้ในการ match
    */
-  static matchName(name1: string, name2: string, minChars: number = 4): boolean {
-    const cleaned1 = this.removeTitlePrefix(name1).toLowerCase().replace(/\s+/g, '');
-    const cleaned2 = this.removeTitlePrefix(name2).toLowerCase().replace(/\s+/g, '');
+  static normalizePersonName(name: string): string {
+    return this.removeTitlePrefix(name)
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[^\p{L}\p{N}]/gu, '');
+  }
 
-    // ตรวจสอบว่ามีส่วนที่ตรงกัน >= minChars
-    for (let i = 0; i <= cleaned1.length - minChars; i++) {
-      const substring = cleaned1.substring(i, i + minChars);
-      if (cleaned2.includes(substring)) {
-        return true;
+  static getLongestCommonSubstringLength(left: string, right: string): number {
+    if (!left || !right) {
+      return 0;
+    }
+
+    const previous = new Array(right.length + 1).fill(0);
+    const current = new Array(right.length + 1).fill(0);
+    let maxLength = 0;
+
+    for (let i = 1; i <= left.length; i++) {
+      for (let j = 1; j <= right.length; j++) {
+        if (left[i - 1] === right[j - 1]) {
+          current[j] = previous[j - 1] + 1;
+          if (current[j] > maxLength) {
+            maxLength = current[j];
+          }
+        } else {
+          current[j] = 0;
+        }
+      }
+
+      for (let j = 0; j <= right.length; j++) {
+        previous[j] = current[j];
+        current[j] = 0;
       }
     }
 
-    return false;
+    return maxLength;
+  }
+
+  /**
+   * ให้คะแนนการ match ของชื่อ โดยยังคงยอมรับ substring >= 4 ตัวอักษรเป็น candidate
+   * แต่ไม่ให้ substring สั้น ๆ ชนะด้วยตัวเองง่ายเกินไป
+   */
+  static scoreNameMatch(name1: string, name2: string, minChars: number = 4): NameMatchScore {
+    const cleaned1 = this.normalizePersonName(name1);
+    const cleaned2 = this.normalizePersonName(name2);
+
+    if (!cleaned1 || !cleaned2 || cleaned1.length < minChars || cleaned2.length < minChars) {
+      return {
+        score: 0,
+        longestCommonChars: 0,
+        exact: false,
+        contains: false,
+      };
+    }
+
+    if (cleaned1 === cleaned2) {
+      return {
+        score: 120,
+        longestCommonChars: cleaned1.length,
+        exact: true,
+        contains: true,
+      };
+    }
+
+    const contains = cleaned1.includes(cleaned2) || cleaned2.includes(cleaned1);
+    if (contains) {
+      return {
+        score: 95,
+        longestCommonChars: Math.min(cleaned1.length, cleaned2.length),
+        exact: false,
+        contains: true,
+      };
+    }
+
+    const longestCommonChars = this.getLongestCommonSubstringLength(cleaned1, cleaned2);
+    if (longestCommonChars < minChars) {
+      return {
+        score: 0,
+        longestCommonChars,
+        exact: false,
+        contains: false,
+      };
+    }
+
+    if (longestCommonChars >= 8) {
+      return {
+        score: 80,
+        longestCommonChars,
+        exact: false,
+        contains: false,
+      };
+    }
+
+    if (longestCommonChars >= 6) {
+      return {
+        score: 60,
+        longestCommonChars,
+        exact: false,
+        contains: false,
+      };
+    }
+
+    if (longestCommonChars >= 5) {
+      return {
+        score: 40,
+        longestCommonChars,
+        exact: false,
+        contains: false,
+      };
+    }
+
+    return {
+      score: 20,
+      longestCommonChars,
+      exact: false,
+      contains: false,
+    };
+  }
+
+  static getAccountMatchDetails(receiverAccount: string, accountNumber: string, minDigits: number): {
+    matched: boolean;
+    exact: boolean;
+  } {
+    const receiverAccountClean = receiverAccount.replace(/[^0-9]/g, '');
+    const tenantAccountNumber = accountNumber.replace(/[^0-9]/g, '');
+
+    if (!receiverAccountClean || !tenantAccountNumber) {
+      return {
+        matched: false,
+        exact: false,
+      };
+    }
+
+    if (receiverAccountClean === tenantAccountNumber) {
+      return {
+        matched: true,
+        exact: true,
+      };
+    }
+
+    if (tenantAccountNumber.length < minDigits || receiverAccountClean.length < minDigits) {
+      return {
+        matched: false,
+        exact: false,
+      };
+    }
+
+    for (let i = 0; i <= receiverAccountClean.length - minDigits; i++) {
+      const substring = receiverAccountClean.substring(i, i + minDigits);
+      if (tenantAccountNumber.includes(substring)) {
+        return {
+          matched: true,
+          exact: false,
+        };
+      }
+    }
+
+    return {
+      matched: false,
+      exact: false,
+    };
+  }
+
+  static async loadEnglishNameMappings(
+    env: Env,
+    tenantIds: string[]
+  ): Promise<Map<string, EnglishNameMapping[]>> {
+    const mappingByTenant = new Map<string, EnglishNameMapping[]>();
+
+    if (tenantIds.length === 0) {
+      return mappingByTenant;
+    }
+
+    const placeholders = tenantIds.map(() => '?').join(', ');
+    const result = await env.DB.prepare(
+      `SELECT tenant_id, account_id, account_number, account_name_th, account_name_en, bank_name
+       FROM tenant_bank_accounts
+       WHERE tenant_id IN (${placeholders})
+         AND account_name_en IS NOT NULL
+         AND TRIM(account_name_en) != ''`
+    )
+      .bind(...tenantIds)
+      .all();
+
+    for (const row of result.results || []) {
+      const tenantId = row.tenant_id as string;
+      const mappings = mappingByTenant.get(tenantId) || [];
+      mappings.push({
+        tenantId,
+        accountId: String(row.account_id || ''),
+        accountNumber: String(row.account_number || '').replace(/[^0-9]/g, ''),
+        accountNameTh: String(row.account_name_th || ''),
+        accountNameEn: String(row.account_name_en || ''),
+        bankName: String(row.bank_name || ''),
+      });
+      mappingByTenant.set(tenantId, mappings);
+    }
+
+    return mappingByTenant;
   }
 
   /**
    * Match receiver (บัญชีรับ) กับ tenant
    * ลำดับการ match:
    * 1. ชื่อธนาคาร
-   * 2. เลขบัญชี (ขั้นต่ำ 3 ตัว)
+  * 2. เลขบัญชี (ขั้นต่ำ 4 ตัว)
    * 3. ชื่อผู้รับ (ทั้งภาษาไทยและอังกฤษ)
    */
   static async matchReceiver(
@@ -258,17 +480,22 @@ export class ScanService {
 
     // Hard-coded matching settings
     const minNameChars = 4;
-    const minAccountDigits = 3;
+    const minAccountDigits = 4;
+    const minimumStandaloneNameScore = 40;
+    const minimumWinningMargin = 15;
 
     console.log('[ScanService] ⚙️ Matching Settings:', {
       minNameChars,
       minAccountDigits,
+      minimumStandaloneNameScore,
+      minimumWinningMargin,
     });
 
     // ดึงรายการ tenant ที่ active และมี session
     const tenants = await env.DB.prepare(
-      `SELECT DISTINCT t.id, t.team_id, t.name, t.admin_api_url, s.session_token
+      `SELECT DISTINCT t.id, t.team_id, tm.slug as team_slug, t.name, t.admin_api_url, s.session_token
        FROM tenants t
+       INNER JOIN teams tm ON tm.id = t.team_id
        INNER JOIN admin_sessions s ON s.tenant_id = t.id
        WHERE s.expires_at > ? AND t.status = 'active'`
     )
@@ -283,10 +510,25 @@ export class ScanService {
 
     console.log(`[ScanService] 🔍 Checking ${tenants.results.length} tenant(s)...`);
 
+    const activeTenants = tenants.results.map((tenant) => ({
+      id: tenant.id as string,
+      teamId: tenant.team_id as string,
+      teamSlug: tenant.team_slug as string,
+      name: tenant.name as string,
+      adminApiUrl: tenant.admin_api_url as string,
+    }));
+    const receiverAccountClean = receiverAccount.replace(/[^0-9]/g, '');
+    const hasReceiverThaiName = Boolean(receiverNameTh?.trim());
+    const hasReceiverEnglishName = Boolean(receiverNameEn?.trim());
+    const englishMappingsByTenant = hasReceiverEnglishName
+      ? await this.loadEnglishNameMappings(env, activeTenants.map((tenant) => tenant.id))
+      : new Map<string, EnglishNameMapping[]>();
+    const candidates: ReceiverCandidate[] = [];
+
     // Loop แต่ละ tenant และเช็ค bank accounts
-    for (const tenant of tenants.results) {
-      const tenantId = tenant.id as string;
-      const tenantName = tenant.name as string;
+    for (const tenant of activeTenants) {
+      const tenantId = tenant.id;
+      const tenantName = tenant.name;
       const bankKey = `tenant:${tenantId}:banks`;
 
       console.log(`[ScanService] 🔎 Checking tenant: "${tenantName}" (${tenantId})`);
@@ -311,6 +553,9 @@ export class ScanService {
         let bankMatched = false;
         let accountMatched = false;
         let nameMatched = false;
+        let nameScore = 0;
+        let longestCommonChars = 0;
+        let nameMatchType: ReceiverCandidate['nameMatchType'] = 'none';
 
         // 1. Match ชื่อธนาคาร (จำเป็น)
         if (receiverBank.name || receiverBank.short || receiverBank.id) {
@@ -339,19 +584,10 @@ export class ScanService {
           continue;
         }
 
-        // 2. Match เลขบัญชี (ขั้นต่ำ 3 ตัว)
+        // 2. Match เลขบัญชี (ขั้นต่ำ 4 หลัก) - ใช้เป็นข้อมูลประกอบ
         const accountNumber = (account.accountNumber || account.account_number || '').replace(/[^0-9]/g, '');
-        const receiverAccountClean = receiverAccount.replace(/[^0-9]/g, '');
-
-        if (accountNumber.length >= minAccountDigits && receiverAccountClean.length >= minAccountDigits) {
-          for (let i = 0; i <= receiverAccountClean.length - minAccountDigits; i++) {
-            const substring = receiverAccountClean.substring(i, i + minAccountDigits);
-            if (accountNumber.includes(substring)) {
-              accountMatched = true;
-              break;
-            }
-          }
-        }
+        const accountMatch = this.getAccountMatchDetails(receiverAccount, accountNumber, minAccountDigits);
+        accountMatched = accountMatch.matched;
 
         console.log('[ScanService] 🔍 Account Match:', {
           receiverAccountInput: receiverAccount,
@@ -359,73 +595,187 @@ export class ScanService {
           tenantAccountNumber: accountNumber,
           minAccountDigits,
           accountMatched,
+          accountExact: accountMatch.exact,
         });
 
-        // 3. Match ชื่อผู้รับ (ถ้าเลขบัญชีไม่ตรง)
-        if (!accountMatched && (receiverNameTh || receiverNameEn)) {
-          // ดึง metadata จาก D1 (ถ้ามี)
-          const metadata = await env.DB.prepare(
-            `SELECT account_name_th, account_name_en FROM tenant_bank_accounts 
-             WHERE tenant_id = ? AND account_id = ?`
-          )
-            .bind(tenantId, account.accountNumber || account.account_number || account.id || account.accountId)
-            .first();
+        const accountId = String(
+          account.id || account.accountId || account.accountNumber || account.account_number || ''
+        );
+        const accountNameTh = String(account.accountName || account.name || account.account_name || '');
+        let accountNameEn = '';
 
-          const accountNameTh = metadata?.account_name_th as string || account.accountName || account.name || account.account_name || '';
-          const accountNameEn = metadata?.account_name_en as string || '';
-
-          // Match ภาษาไทย
-          if (receiverNameTh && accountNameTh) {
-            if (this.matchName(receiverNameTh, accountNameTh, minNameChars)) {
-              nameMatched = true;
-            }
+        if (hasReceiverThaiName && accountNameTh) {
+          const thaiNameMatch = this.scoreNameMatch(receiverNameTh || '', accountNameTh, minNameChars);
+          nameScore = thaiNameMatch.score;
+          longestCommonChars = thaiNameMatch.longestCommonChars;
+          if (thaiNameMatch.score > 0) {
+            nameMatched = true;
+            nameMatchType = 'thai';
           }
-
-          // Match ภาษาอังกฤษ
-          if (!nameMatched && receiverNameEn && accountNameEn) {
-            if (this.matchName(receiverNameEn, accountNameEn, minNameChars)) {
-              nameMatched = true;
-            }
-          }
-
-          console.log('[ScanService] 🔍 Name Match:', {
-            receiverNameTh,
-            receiverNameEn,
-            accountNameTh,
-            accountNameEn,
-            minNameChars,
-            nameMatched,
-          });
         }
 
-        // ถ้า match ธนาคาร AND (เลขบัญชี OR ชื่อ) ให้ return tenant นี้
-        if (bankMatched && (accountMatched || nameMatched)) {
-          const matchedAccountId = account.id || account.accountId || account.accountNumber || account.account_number || '';
-          console.log(`[ScanService]     ✅ MATCH! Bank: ✓ | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
-          console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
-          console.log('[ScanService] ✅ Matched Tenant:', {
-            id: tenantId,
-            team_id: tenant.team_id as string,
-            name: tenantName,
-            admin_api_url: tenant.admin_api_url as string,
-            accountId: matchedAccountId,
+        if (!nameMatched && hasReceiverEnglishName) {
+          const englishMappings = englishMappingsByTenant.get(tenantId) || [];
+          const mapping = englishMappings.find((item) => {
+            const mappingBankVariants = this.normalizeBankName(item.bankName || account.bankName || account.bank_name || '');
+            const bankCompatible = receiverBank.name || receiverBank.short || receiverBank.id
+              ? this.normalizeBankName(receiverBank.name || receiverBank.short || receiverBank.id || '').some(rv =>
+                  mappingBankVariants.some(av => av.includes(rv) || rv.includes(av))
+                )
+              : true;
+
+            if (!bankCompatible) {
+              return false;
+            }
+
+            if (item.accountId && accountId && item.accountId === accountId) {
+              return true;
+            }
+
+            return Boolean(item.accountNumber && accountNumber && item.accountNumber === accountNumber);
           });
-          return {
-            id: tenantId,
-            team_id: tenant.team_id as string,
-            name: tenant.name as string,
-            admin_api_url: tenant.admin_api_url as string,
-            accountId: matchedAccountId,
-          };
+
+          if (mapping?.accountNameEn) {
+            const englishNameMatch = this.scoreNameMatch(receiverNameEn || '', mapping.accountNameEn, minNameChars);
+            if (englishNameMatch.score > 0) {
+              nameMatched = true;
+              nameScore = englishNameMatch.score;
+              longestCommonChars = englishNameMatch.longestCommonChars;
+              nameMatchType = 'english-mapping';
+              accountNameEn = mapping.accountNameEn;
+            }
+          }
+        }
+
+        console.log('[ScanService] 🔍 Name Match:', {
+          receiverNameTh,
+          receiverNameEn,
+          accountNameTh,
+          accountNameEn,
+          minNameChars,
+          nameMatched,
+          nameScore,
+          longestCommonChars,
+          nameMatchType,
+        });
+
+        const hasReceiverName = hasReceiverThaiName || hasReceiverEnglishName;
+        const hasStrongNameMatch = nameScore >= minimumStandaloneNameScore;
+
+        const isCandidateMatched = hasReceiverName
+          ? (bankMatched && (hasStrongNameMatch || (nameMatched && accountMatched)))
+          : (bankMatched && accountMatched);
+        const totalScore = nameScore
+          + (accountMatch.exact ? 35 : accountMatched ? 15 : 0)
+          + (bankMatched ? 5 : 0);
+
+        if (isCandidateMatched) {
+          candidates.push({
+            tenantId,
+            teamId: tenant.teamId,
+            teamSlug: tenant.teamSlug,
+            tenantName,
+            adminApiUrl: tenant.adminApiUrl,
+            accountId,
+            accountNumber,
+            accountNameTh,
+            accountNameEn,
+            bankName: String(account.bankName || account.bank_name || ''),
+            bankMatched,
+            accountMatched,
+            accountExact: accountMatch.exact,
+            nameScore,
+            nameMatchType,
+            longestCommonChars,
+            totalScore,
+          });
+          console.log(`[ScanService]     ✅ CANDIDATE! Bank: ✓ | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'} | Score: ${totalScore}`);
         } else {
           console.log(`[ScanService]     ❌ No match - Bank: ${bankMatched ? '✓' : '✗'} | Account: ${accountMatched ? '✓' : '✗'} | Name: ${nameMatched ? '✓' : '✗'}`);
         }
       }
     }
 
-    console.log('[ScanService] ❌ No tenant matched');
-    console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
-    return null;
+    if (candidates.length === 0) {
+      console.log('[ScanService] ❌ No tenant matched');
+      console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
+      return null;
+    }
+
+    const sortedCandidates = [...candidates].sort((left, right) => {
+      if (right.totalScore !== left.totalScore) {
+        return right.totalScore - left.totalScore;
+      }
+      if (right.nameScore !== left.nameScore) {
+        return right.nameScore - left.nameScore;
+      }
+      if (right.longestCommonChars !== left.longestCommonChars) {
+        return right.longestCommonChars - left.longestCommonChars;
+      }
+      if (right.accountExact !== left.accountExact) {
+        return Number(right.accountExact) - Number(left.accountExact);
+      }
+      if (right.accountMatched !== left.accountMatched) {
+        return Number(right.accountMatched) - Number(left.accountMatched);
+      }
+      return left.tenantName.localeCompare(right.tenantName);
+    });
+
+    console.log('[ScanService] 📊 Candidate Summary:', sortedCandidates.slice(0, 5).map((candidate) => ({
+      tenant: candidate.tenantName,
+      accountId: candidate.accountId,
+      accountNumber: candidate.accountNumber,
+      accountNameTh: candidate.accountNameTh,
+      accountNameEn: candidate.accountNameEn,
+      bankName: candidate.bankName,
+      nameMatchType: candidate.nameMatchType,
+      nameScore: candidate.nameScore,
+      longestCommonChars: candidate.longestCommonChars,
+      accountMatched: candidate.accountMatched,
+      accountExact: candidate.accountExact,
+      totalScore: candidate.totalScore,
+    })));
+
+    const bestCandidate = sortedCandidates[0];
+    const secondCandidate = sortedCandidates[1];
+    const isAmbiguous = Boolean(
+      secondCandidate &&
+      bestCandidate.totalScore - secondCandidate.totalScore < minimumWinningMargin
+    );
+
+    if (isAmbiguous) {
+      console.log('[ScanService] ⚠️ Ambiguous receiver match - refusing auto match:', {
+        bestCandidate,
+        secondCandidate,
+        minimumWinningMargin,
+      });
+      console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (AMBIGUOUS) =====');
+      return null;
+    }
+
+    console.log(`[ScanService]     ✅ MATCH! Bank: ✓ | Account: ${bestCandidate.accountMatched ? '✓' : '✗'} | Name: ${bestCandidate.nameScore > 0 ? '✓' : '✗'} | Score: ${bestCandidate.totalScore}`);
+    console.log('[ScanService] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
+    console.log('[ScanService] ✅ Matched Tenant:', {
+      id: bestCandidate.tenantId,
+      team_id: bestCandidate.teamId,
+      team_slug: bestCandidate.teamSlug,
+      name: bestCandidate.tenantName,
+      admin_api_url: bestCandidate.adminApiUrl,
+      accountId: bestCandidate.accountId,
+      accountNumber: bestCandidate.accountNumber,
+      accountNameTh: bestCandidate.accountNameTh,
+      accountNameEn: bestCandidate.accountNameEn,
+      nameMatchType: bestCandidate.nameMatchType,
+      totalScore: bestCandidate.totalScore,
+    });
+    return {
+      id: bestCandidate.tenantId,
+      team_id: bestCandidate.teamId,
+      team_slug: bestCandidate.teamSlug,
+      name: bestCandidate.tenantName,
+      admin_api_url: bestCandidate.adminApiUrl,
+      accountId: bestCandidate.accountId,
+    };
   }
 
   /**
@@ -598,21 +948,28 @@ export class ScanService {
     // เพราะอาจทำให้พลาด user ที่ถูกต้อง
     log('[ScanService] 🔎 STEP 3: Bank filtering skipped (users may have multiple banks)');
 
-    // Return คนแรกที่ match ดีที่สุด
-    log('[ScanService] ⚠️ RESULT: Multiple candidates remain, selecting first one:', {
-      totalCandidates: allCandidates.length,
-      selected: {
-        fullname: allCandidates[0].fullname,
-        memberCode: allCandidates[0].memberCode,
-        category: allCandidates[0].category,
-        account: allCandidates[0].bankAccount || allCandidates[0].bank_account || 'N/A',
-      },
-      otherCandidates: allCandidates.slice(1).map(u => ({
-        fullname: u.fullname,
-        memberCode: u.memberCode,
-      })),
+    // ⚠️ ถ้ายังเหลือหลายคน ไม่ควร auto-match เพราะอาจผิดคน → ให้บันทึกเป็น "รอจับคู่" แทน
+    if (allCandidates.length > 1) {
+      log('[ScanService] ⚠️ RESULT: Multiple candidates remain - SKIP AUTO-MATCH (ambiguous):', {
+        totalCandidates: allCandidates.length,
+        candidates: allCandidates.map(u => ({
+          fullname: u.fullname,
+          memberCode: u.memberCode,
+          category: u.category,
+          account: u.bankAccount || u.bank_account || 'N/A',
+        })),
+      });
+      log('[ScanService] 🔍 ===== SENDER MATCHING END (NO AUTO-MATCH - AMBIGUOUS) =====');
+      return null; // ไม่ match อัตโนมัติ ให้บันทึกเป็นรอจับคู่
+    }
+
+    // ถ้าเหลือคนเดียว return เลย
+    log('[ScanService] ✅ RESULT: Final match after filtering:', {
+      fullname: allCandidates[0].fullname,
+      memberCode: allCandidates[0].memberCode,
+      category: allCandidates[0].category,
     });
-    log('[ScanService] 🔍 ===== SENDER MATCHING END (BEST MATCH) =====');
+    log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
     return allCandidates[0];
   }
 }

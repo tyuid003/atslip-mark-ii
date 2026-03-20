@@ -31,47 +31,136 @@ async function verifyLineSignature(rawBody: string, channelSecret: string, signa
 }
 
 async function callLineReplyAPI(channelAccessToken: string, replyToken: string, messages: any[]): Promise<void> {
-  await fetch('https://api.line.me/v2/bot/message/reply', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${channelAccessToken}`,
-    },
-    body: JSON.stringify({
-      replyToken,
-      messages,
-    }),
+  const messageType = messages[0]?.type || 'unknown';
+  const isFlexMessage = messageType === 'flex';
+  
+  console.log('[LINE Reply API] Sending reply:', {
+    messageType,
+    isFlexMessage,
+    messageCount: messages.length,
+    replyTokenPrefix: replyToken.substring(0, 10) + '...',
   });
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        replyToken,
+        messages,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[LINE Reply API] Failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody,
+        messageType,
+      });
+      throw new Error(`LINE Reply API failed: ${response.status} ${errorBody}`);
+    }
+
+    console.log('[LINE Reply API] Success:', {
+      status: response.status,
+      messageType,
+      isFlexMessage,
+    });
+  } catch (error) {
+    console.error('[LINE Reply API] Exception:', {
+      error: error instanceof Error ? error.message : String(error),
+      messageType,
+    });
+    throw error;
+  }
 }
 
 async function callLinePushAPI(channelAccessToken: string, to: string, messages: any[]): Promise<void> {
-  await fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${channelAccessToken}`,
-    },
-    body: JSON.stringify({
-      to,
-      messages,
-    }),
+  const messageType = messages[0]?.type || 'unknown';
+  const isFlexMessage = messageType === 'flex';
+  const flexAltText = isFlexMessage ? messages[0]?.altText : undefined;
+  
+  console.log('[LINE Push API] Sending push message:', {
+    messageType,
+    isFlexMessage,
+    flexAltText,
+    messageCount: messages.length,
+    toUserPrefix: to.substring(0, 8) + '...',
   });
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        messages,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[LINE Push API] Failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody,
+        messageType,
+        flexAltText,
+      });
+      throw new Error(`LINE Push API failed: ${response.status} ${errorBody}`);
+    }
+
+    console.log('[LINE Push API] Success:', {
+      status: response.status,
+      messageType,
+      isFlexMessage,
+      flexAltText,
+    });
+  } catch (error) {
+    console.error('[LINE Push API] Exception:', {
+      error: error instanceof Error ? error.message : String(error),
+      messageType,
+      flexAltText,
+    });
+    throw error;
+  }
 }
 
 function formatDisplayDate(rawDate: string | undefined): string {
   if (!rawDate) return '-';
-  const parsed = new Date(rawDate);
-  if (Number.isNaN(parsed.getTime())) {
-    return rawDate;
+  
+  try {
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) {
+      // ถ้า parse ไม่ได้ ลองแยกแล้วสร้าง Date ใหม่
+      const dateStr = rawDate.substring(0, 19); // "2026-03-02T12:10:00"
+      return dateStr.replace('T', ' '); // "2026-03-02 12:10:00"
+    }
+    
+    // ปรับเวลา UTC เป็น Thai timezone (UTC+7)
+    // getTime() ได้มิลลิวินาทีตั้งแต่ epoch
+    const utcTime = parsed.getTime();
+    const thaiTime = new Date(utcTime + 7 * 60 * 60 * 1000); // เพิ่ม 7 ชั่วโมง
+    
+    return thaiTime.toLocaleString('th-TH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  } catch (error) {
+    console.log('[formatDisplayDate] Error:', error, 'rawDate:', rawDate);
+    return rawDate || '-';
   }
-  return parsed.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
 }
 
 function formatAmountBaht(amount: number): string {
@@ -124,6 +213,14 @@ function buildFlexMessage(settings: any, status: 'credited' | 'duplicate' | 'fai
 
   const resolvedMemberCode = scanData?.credit?.resolved_memberCode || scanData?.matched_user_id || scanData?.sender?.id || '-';
   const amount = Number(scanData?.slip?.amount || 0);
+
+  console.log('[buildFlexMessage] Building Flex message:', {
+    status,
+    amount,
+    resolvedMemberCode,
+    hasSlipData: !!scanData?.slip,
+    hasCreditData: !!scanData?.credit,
+  });
 
   return {
     type: 'flex',
@@ -309,12 +406,21 @@ async function processImageEvent(
   const messageId = event?.message?.id;
   const userId = event?.source?.userId;
 
+  console.log('[processImageEvent] Starting:', {
+    tenantId: lineOA.tenant_id,
+    lineOAId: lineOA.id,
+    messageId,
+    userIdPrefix: userId?.substring(0, 8) + '...',
+  });
+
   if (!messageId || !userId) {
+    console.log('[processImageEvent] Missing messageId or userId');
     return;
   }
 
   const imageFile = await fetchLineImage(lineOA.channel_access_token, messageId);
   if (!imageFile) {
+    console.log('[processImageEvent] Failed to fetch image from LINE');
     if (settings.enable_failed_reply === 1) {
       await callLinePushAPI(lineOA.channel_access_token, userId, [
         {
@@ -325,6 +431,8 @@ async function processImageEvent(
     }
     return;
   }
+
+  console.log('[processImageEvent] Image fetched, starting scan');
 
   const formData = new FormData();
   formData.append('file', imageFile);
@@ -340,14 +448,22 @@ async function processImageEvent(
   const scanResponse = await ScanAPI.handleUploadSlip(internalRequest, env);
   const scanPayload = (await scanResponse.json()) as any;
 
+  console.log('[processImageEvent] Scan completed:', {
+    success: scanPayload?.success,
+    status: scanPayload?.data?.status,
+    scanResponseOk: scanResponse.ok,
+  });
+
   if (!scanResponse.ok || !scanPayload?.success) {
     if (isDuplicateScanResult(scanResponse, scanPayload) && settings.enable_duplicate_flex === 1) {
+      console.log('[processImageEvent] Duplicate scan detected, sending duplicate flex');
       await callLinePushAPI(lineOA.channel_access_token, userId, [
         buildFlexMessage(settings, 'duplicate', scanPayload?.data || {}),
       ]);
       return;
     }
 
+    console.log('[processImageEvent] Scan failed, sending failed reply');
     if (settings.enable_failed_reply === 1) {
       await callLinePushAPI(lineOA.channel_access_token, userId, [
         {
@@ -363,6 +479,7 @@ async function processImageEvent(
   const status = data.status;
 
   if (status === 'credited' && settings.enable_success_flex === 1) {
+    console.log('[processImageEvent] Status is credited, sending success flex');
     await callLinePushAPI(lineOA.channel_access_token, userId, [
       buildFlexMessage(settings, 'credited', data),
     ]);
@@ -370,12 +487,14 @@ async function processImageEvent(
   }
 
   if (status === 'duplicate' && settings.enable_duplicate_flex === 1) {
+    console.log('[processImageEvent] Status is duplicate, sending duplicate flex');
     await callLinePushAPI(lineOA.channel_access_token, userId, [
       buildFlexMessage(settings, 'duplicate', data),
     ]);
     return;
   }
 
+  console.log('[processImageEvent] No matching status for flex, sending failed reply if enabled');
   if (settings.enable_failed_reply === 1) {
     await callLinePushAPI(lineOA.channel_access_token, userId, [
       {
@@ -393,6 +512,11 @@ export async function handleLineWebhook(
   tenantId: string,
   lineOAId: string
 ): Promise<Response> {
+  console.log('[LINE Webhook] Received webhook:', {
+    tenantId,
+    lineOAId,
+  });
+
   const lineOA = await env.DB.prepare(
     `SELECT id, tenant_id, channel_secret, channel_access_token, webhook_enabled, status
      FROM line_oas
@@ -402,6 +526,7 @@ export async function handleLineWebhook(
     .first<any>();
 
   if (!lineOA) {
+    console.log('[LINE Webhook] LINE OA not found:', { tenantId, lineOAId });
     return jsonResponse({ success: true, ignored: true, reason: 'LINE OA not found' });
   }
 
@@ -420,12 +545,27 @@ export async function handleLineWebhook(
   const payload = JSON.parse(rawBody || '{}') as any;
   const events = Array.isArray(payload.events) ? payload.events : [];
 
+  console.log('[LINE Webhook] Parsed events:', {
+    eventCount: events.length,
+    eventTypes: events.map((e: any) => e?.type).join(', '),
+  });
+
   const settings = await getOrCreateLineMessageSettings(env, lineOA.id, lineOA.tenant_id);
+
+  console.log('[LINE Webhook] Message settings loaded:', {
+    enable_processing_reply: settings.enable_processing_reply,
+    enable_success_flex: settings.enable_success_flex,
+    enable_duplicate_flex: settings.enable_duplicate_flex,
+    enable_failed_reply: settings.enable_failed_reply,
+  });
 
   for (const event of events) {
     if (event?.type !== 'message' || event?.message?.type !== 'image') {
+      console.log('[LINE Webhook] Skipping non-image event:', { eventType: event?.type, messageType: event?.message?.type });
       continue;
     }
+
+    console.log('[LINE Webhook] Processing image event');
 
     if (settings.enable_processing_reply === 1 && event.replyToken) {
       await callLineReplyAPI(lineOA.channel_access_token, event.replyToken, [

@@ -9,21 +9,52 @@ export async function handleGetPendingTransactions(
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get('limit') || '50');
     const limit = Math.min(Math.max(limitParam, 1), 50);
+    const teamSlug = request.headers.get('X-Team-Slug') || url.searchParams.get('team') || 'default';
 
-    const results = await env.DB.prepare(
-      `SELECT 
-        pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, 
-        pt.receiver_name, pt.receiver_account,
-        pt.status, pt.slip_data, pt.matched_user_id, pt.matched_username, 
-        pt.created_at,
-        t.name as tenant_name
-       FROM pending_transactions pt
-       LEFT JOIN tenants t ON t.id = pt.tenant_id
-       ORDER BY pt.created_at DESC
-       LIMIT ?`
-    )
-      .bind(limit)
-      .all();
+    let results;
+
+    if (teamSlug && teamSlug !== 'default') {
+      const team = await env.DB.prepare(
+        `SELECT id FROM teams WHERE slug = ? LIMIT 1`
+      )
+        .bind(teamSlug)
+        .first();
+
+      if (!team) {
+        return successResponse([]);
+      }
+
+      results = await env.DB.prepare(
+        `SELECT 
+          pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, 
+          pt.receiver_name, pt.receiver_account,
+          pt.status, pt.slip_data, pt.matched_user_id, pt.matched_username, 
+          pt.created_at,
+          t.name as tenant_name
+         FROM pending_transactions pt
+         LEFT JOIN tenants t ON t.id = pt.tenant_id
+         WHERE pt.team_id = ?
+         ORDER BY pt.created_at DESC
+         LIMIT ?`
+      )
+        .bind(team.id, limit)
+        .all();
+    } else {
+      results = await env.DB.prepare(
+        `SELECT 
+          pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, 
+          pt.receiver_name, pt.receiver_account,
+          pt.status, pt.slip_data, pt.matched_user_id, pt.matched_username, 
+          pt.created_at,
+          t.name as tenant_name
+         FROM pending_transactions pt
+         LEFT JOIN tenants t ON t.id = pt.tenant_id
+         ORDER BY pt.created_at DESC
+         LIMIT ?`
+      )
+        .bind(limit)
+        .all();
+    }
 
     return successResponse(results.results || []);
   } catch (error: any) {

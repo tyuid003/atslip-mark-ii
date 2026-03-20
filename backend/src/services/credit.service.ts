@@ -457,10 +457,10 @@ export class CreditService {
         return { success: false, message: 'Session not active. Please login first.' };
       }
 
-      const endpoint = `${tenant.admin_api_url}/api/banking/transactions/withdraw-credit-back`;
+      const endpoint = `${tenant.admin_api_url}/api/banking/transactions/user-credit-cancel`;
       const payload = {
-        amount: params.amount,
         memberCode: params.memberCode,
+        amount: params.amount,
         remark: params.remark,
       };
 

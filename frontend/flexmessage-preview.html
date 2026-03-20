@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flex Message Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Kanit', sans-serif; 
+            background-color: #f0f0f0; 
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .flex-container { 
+            width: 300px; 
+            border-radius: 18px; 
+            overflow: hidden; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3); 
+            background: white;
+        }
+        .image-aspect-square {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #p-logo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div id="flex-preview" class="flex-container">
+        <div id="p-header" class="flex flex-col items-center" style="display:flex;flex-direction:column;align-items:center;">
+            <div class="image-aspect-square">
+                <img id="p-logo" src="" alt="Logo">
+            </div>
+            <span id="p-status" style="font-size:12px;font-weight:bold;margin-bottom:16px;"></span>
+        </div>
+        
+        <div id="p-body" style="padding:20px;">
+            <div id="p-title" style="text-align:center;font-size:20px;font-weight:bold;margin-bottom:16px;"></div>
+            
+            <div style="font-size:14px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span class="p-label">ยูสเซอร์:</span>
+                    <span class="p-value" style="font-weight:bold;">zta70fb1000737</span>
+                </div>
+                <div id="p-sep" style="height:1px;margin:8px 0;"></div>
+                
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span class="p-label">จำนวนเงิน</span>
+                    <span class="p-value" style="font-size:18px;font-weight:bold;">50.00 THB</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span class="p-subtext">วันที่/เวลา</span>
+                    <span class="p-subtext">02/03/2569 13:20</span>
+                </div>
+            </div>
+
+            <a id="p-button-link" href="" target="_blank" style="display:block;text-decoration:none;">
+                <button id="p-button" style="width:100%;margin-top:24px;padding:8px;border:none;border-radius:4px;color:white;font-weight:bold;cursor:pointer;font-family:'Kanit',sans-serif;font-size:14px;"></button>
+            </a>
+        </div>
+
+        <div id="p-footer" style="padding:8px;text-align:center;">
+            <span id="p-footer-text" style="font-size:10px;"></span>
+        </div>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        function getParam(key, defaultValue = '') {
+            return urlParams.get(key) || defaultValue;
+        }
+
+        // Get preview type to determine which status to show
+        const previewType = getParam('previewType', 'all');
+        
+        // Determine which status message to display
+        let statusText = '';
+        let titleColor = '';
+        
+        if (previewType === 'header' || previewType === 'all') {
+            statusText = getParam('headerTitle', 'AUTO DEPOSIT SUCCESS');
+            titleColor = getParam('titleColor', '#33FF33');
+            document.getElementById('p-title').innerText = getParam('successStatus', 'ฝากเงินสำเร็จ');
+        } else if (previewType === 'success') {
+            statusText = getParam('headerTitle', 'AUTO DEPOSIT SUCCESS');
+            titleColor = getParam('titleColor', '#33FF33');
+            document.getElementById('p-title').innerText = getParam('successStatus', 'ฝากเงินสำเร็จ');
+        } else if (previewType === 'duplicate') {
+            statusText = getParam('headerTitle', 'AUTO DEPOSIT SUCCESS');
+            titleColor = getParam('failColor', '#FF4D4D');
+            document.getElementById('p-title').innerText = getParam('duplicateStatus', 'พบรายการซ้ำ');
+        } else if (previewType === 'failed') {
+            statusText = getParam('headerTitle', 'AUTO DEPOSIT SUCCESS');
+            titleColor = getParam('failColor', '#FF4D4D');
+            document.getElementById('p-title').innerText = getParam('failedStatus', 'ไม่สามารถทำรายการได้');
+        }
+        
+        // Apply all colors and settings from URL parameters
+        const headerBg = getParam('headerBg', '#000000');
+        const footerBg = getParam('footerBg', '#000000');
+        const bodyBg = getParam('bodyBg', '#1A1A1A');
+        const statusTextColor = getParam('statusTextColor', '#D4AF37');
+        const labelColor = getParam('labelColor', '#D4AF37');
+        const valueColor = getParam('valueColor', '#FFFFFF');
+        const subTextColor = getParam('subTextColor', '#888888');
+        const sepColor = getParam('sepColor', '#333333');
+        const btnColor = getParam('btnColor', '#D4AF37');
+        const logoUrl = getParam('logoUrl', 'https://mockimage.tw/photo/500x205/9e9e9e01/000000/LOGO');
+        const btnUrl = getParam('btnUrl', 'https://example.com/login');
+        const buttonText = getParam('buttonText', 'เข้าเล่นเกม');
+        const footerText = getParam('footerText', 'ขอบคุณที่ใช้บริการค่ะ');
+        
+        // Apply backgrounds
+        document.getElementById('p-header').style.backgroundColor = headerBg;
+        document.getElementById('p-footer').style.backgroundColor = footerBg;
+        document.getElementById('p-body').style.backgroundColor = bodyBg;
+        
+        // Apply header text
+        document.getElementById('p-status').innerText = statusText;
+        document.getElementById('p-status').style.color = statusTextColor;
+        
+        // Apply title color
+        document.getElementById('p-title').style.color = titleColor;
+        
+        // Apply label colors
+        document.querySelectorAll('.p-label').forEach(el => el.style.color = labelColor);
+        
+        // Apply value colors
+        document.querySelectorAll('.p-value').forEach(el => el.style.color = valueColor);
+        
+        // Apply subtext colors
+        document.querySelectorAll('.p-subtext').forEach(el => el.style.color = subTextColor);
+        document.getElementById('p-footer-text').style.color = subTextColor;
+        
+        // Apply separator color
+        document.getElementById('p-sep').style.backgroundColor = sepColor;
+        
+        // Apply button
+        document.getElementById('p-button').style.backgroundColor = btnColor;
+        document.getElementById('p-button').innerText = buttonText;
+        
+        // Apply logo
+        document.getElementById('p-logo').src = logoUrl;
+        
+        // Apply button link
+        const finalUrl = btnUrl.startsWith('http') ? btnUrl : 'https://' + btnUrl;
+        document.getElementById('p-button-link').href = finalUrl;
+        
+        // Apply footer text
+        document.getElementById('p-footer-text').innerText = footerText;
+        
+        // Listen for realtime updates from parent window
+        window.addEventListener('message', (event) => {
+          console.log('[Flex Preview] Received message:', event.data);
+          if (event.data && event.data.type === 'updatePreview' && event.data.settings) {
+            const s = event.data.settings;
+            
+            // Update backgrounds
+            document.getElementById('p-header').style.backgroundColor = s.headerBg || '#000000';
+            document.getElementById('p-footer').style.backgroundColor = s.footerBg || '#000000';
+            document.getElementById('p-body').style.backgroundColor = s.bodyBg || '#1A1A1A';
+            
+            // Update header text and color
+            document.getElementById('p-status').innerText = s.headerTitle || 'AUTO DEPOSIT SUCCESS';
+            document.getElementById('p-status').style.color = s.statusTextColor || '#D4AF37';
+            
+            // Update title based on preview type
+            const titleEl = document.getElementById('p-title');
+            if (s.previewType === 'success' || s.previewType === 'header' || s.previewType === 'all') {
+              titleEl.innerText = s.successStatus || 'ฝากเงินสำเร็จ';
+              titleEl.style.color = s.titleColor || '#33FF33';
+            } else if (s.previewType === 'duplicate') {
+              titleEl.innerText = s.duplicateStatus || 'พบรายการซ้ำ';
+              titleEl.style.color = s.failColor || '#FF4D4D';
+            } else if (s.previewType === 'failed') {
+              titleEl.innerText = s.failedStatus || 'ไม่สามารถทำรายการได้';
+              titleEl.style.color = s.failColor || '#FF4D4D';
+            }
+            
+            // Update labels
+            document.querySelectorAll('.p-label').forEach(el => {
+              el.style.color = s.labelColor || '#D4AF37';
+            });
+            
+            // Update values
+            document.querySelectorAll('.p-value').forEach(el => {
+              el.style.color = s.valueColor || '#FFFFFF';
+            });
+            
+            // Update subtexts
+            document.querySelectorAll('.p-subtext').forEach(el => {
+              el.style.color = s.subTextColor || '#888888';
+            });
+            document.getElementById('p-footer-text').style.color = s.subTextColor || '#888888';
+            
+            // Update separator
+            document.getElementById('p-sep').style.backgroundColor = s.sepColor || '#333333';
+            
+            // Update button
+            document.getElementById('p-button').style.backgroundColor = s.btnColor || '#D4AF37';
+            document.getElementById('p-button').innerText = s.buttonText || 'เข้าเล่นเกม';
+            
+            // Update logo
+            if (s.logoUrl) {
+              document.getElementById('p-logo').src = s.logoUrl;
+            }
+            
+            // Update button link
+            if (s.btnUrl) {
+              const url = s.btnUrl.startsWith('http') ? s.btnUrl : 'https://' + s.btnUrl;
+              document.getElementById('p-button-link').href = url;
+            }
+            
+            // Update footer text
+            document.getElementById('p-footer-text').innerText = s.footerText || 'ขอบคุณที่ใช้บริการค่ะ';
+          }
+        });
+    </script>
+</body>
+</html>

@@ -15,6 +15,133 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body.popup-alert-open {
+  overflow: hidden;
+}
+
+body.popup-alert-open > *:not(.popup-alert-overlay) {
+  filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.popup-alert-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(135, 135, 135, 0.18);
+}
+
+.popup-alert-dialog {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #f7f4ff 0%, #ffffff 26%);
+  border: 1px solid rgba(118, 75, 162, 0.22);
+  box-shadow: 0 24px 80px rgba(90, 64, 143, 0.22);
+  padding: 28px 28px 22px;
+}
+
+.popup-alert-close {
+  position: sticky;
+  top: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(118, 75, 162, 0.28);
+}
+
+.popup-alert-close:hover {
+  background: linear-gradient(135deg, #5b6ee0 0%, #6a4297 100%);
+}
+
+.popup-alert-body {
+  margin-top: 8px;
+}
+
+.popup-alert-title {
+  margin: 0 0 16px;
+  color: #5b3d91;
+  font-size: clamp(1.3rem, 2.6vw, 2rem);
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.popup-alert-heading {
+  margin: 20px 0 10px;
+  color: #433168;
+  font-weight: 700;
+}
+
+.popup-alert-heading-2 {
+  font-size: 1.15rem;
+}
+
+.popup-alert-heading-4 {
+  font-size: 1rem;
+}
+
+.popup-alert-paragraph {
+  margin: 0 0 10px;
+  color: #4b5563;
+}
+
+.popup-alert-list {
+  margin: 0 0 14px 20px;
+  color: #4b5563;
+}
+
+.popup-alert-list li {
+  margin-bottom: 8px;
+}
+
+.popup-alert-quote {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-left: 4px solid #764ba2;
+  border-radius: 12px;
+  background: #f6f0ff;
+  color: #5b3d91;
+}
+
+.popup-alert-footer {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(118, 75, 162, 0.16);
+}
+
+.popup-alert-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #433168;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.popup-alert-checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: #764ba2;
+}
+
 .container {
   max-width: 1400px;
   margin: 0 auto;

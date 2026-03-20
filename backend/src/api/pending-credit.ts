@@ -147,7 +147,7 @@ export async function handleCreditPendingTransaction(
     await request.text().catch(() => '');
 
     const transaction = await env.DB.prepare(
-      `SELECT id, tenant_id, slip_ref, amount, sender_account, receiver_account, slip_data,
+      `SELECT id, team_id, tenant_id, slip_ref, amount, sender_account, receiver_account, slip_data,
               matched_user_id, matched_username, status
        FROM pending_transactions
        WHERE id = ?
@@ -236,6 +236,7 @@ export async function handleCreditPendingTransaction(
       .run();
 
     // 🔔 Broadcast realtime notification for credit completion
+    console.log('[PendingCredit] 🔔 Starting broadcast for transaction:', transactionId);
     try {
       const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
       const doStub = env.PENDING_NOTIFICATIONS.get(doId);
@@ -244,6 +245,8 @@ export async function handleCreditPendingTransaction(
         type: 'transaction_updated',
         data: {
           id: transactionId,
+          team_id: transaction.team_id,
+          tenant_id: transaction.tenant_id,
           status: newStatus,
           matched_user_id: creditResult.resolvedMemberCode || null,
           matched_username: creditResult.resolvedUsername || null,
@@ -252,7 +255,7 @@ export async function handleCreditPendingTransaction(
         },
       };
 
-      console.log('[PendingCredit] 📡 Broadcasting credit update:', JSON.stringify(broadcastPayload).substring(0, 200));
+      console.log('[PendingCredit] 📡 Broadcasting payload:', JSON.stringify(broadcastPayload).substring(0, 200));
 
       const broadcastResponse = await doStub.fetch('https://internal/broadcast', {
         method: 'POST',
@@ -260,10 +263,21 @@ export async function handleCreditPendingTransaction(
         body: JSON.stringify(broadcastPayload),
       });
 
-      const broadcastResult = await broadcastResponse.json();
-      console.log('[PendingCredit] ✅ Credit update broadcasted:', broadcastResult);
+      console.log('[PendingCredit] 📡 Broadcast response status:', broadcastResponse.status);
+
+      if (!broadcastResponse.ok) {
+        console.error('[PendingCredit] ❌ Broadcast response not OK:', broadcastResponse.status, broadcastResponse.statusText);
+        const responseText = await broadcastResponse.text();
+        console.error('[PendingCredit] ❌ Response body:', responseText);
+      } else {
+        const broadcastResult = await broadcastResponse.json();
+        console.log('[PendingCredit] ✅ Credit update broadcasted:', broadcastResult);
+      }
     } catch (broadcastError) {
-      console.log('[PendingCredit] ⚠️ Failed to broadcast credit update:', broadcastError instanceof Error ? broadcastError.message : String(broadcastError));
+      console.error('[PendingCredit] ❌ Failed to broadcast credit update:', {
+        error: broadcastError instanceof Error ? broadcastError.message : String(broadcastError),
+        stack: broadcastError instanceof Error ? broadcastError.stack : undefined,
+      });
     }
 
     return successResponse({

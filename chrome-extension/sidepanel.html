@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATslip Mark-II</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="sp-header">
+    <div class="sp-header-title">
+      <h1>ATslip Mark-II</h1>
+      <span class="sp-version">v2.0</span>
+    </div>
+    <div class="sp-header-actions">
+      <button class="sp-icon-btn" id="notificationBtn" title="การแจ้งเตือน">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span class="sp-badge" id="notificationBadge" style="display: none;">0</span>
+      </button>
+      <button class="sp-icon-btn" id="refreshBtn" title="รีเฟรช">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Team Selector -->
+  <div class="sp-team-selector">
+    <label for="teamSelect">ทีม:</label>
+    <select id="teamSelect" class="sp-select">
+      <option value="default">-- เลือกทีม --</option>
+    </select>
+  </div>
+
+  <!-- Main Content -->
+  <div class="sp-content">
+    <!-- Tenant Cards -->
+    <section class="sp-section">
+      <div class="sp-section-header">
+        <h3>รายชื่อเว็บ</h3>
+        <span class="sp-count" id="tenantCount">0</span>
+      </div>
+      <div class="sp-tenant-slider-shell">
+        <button class="sp-slider-arrow" id="tenantPrevBtn" aria-label="เลื่อนไปซ้าย">&#8249;</button>
+        <div id="tenantList" class="sp-tenant-list">
+          <div class="sp-loading">กำลังโหลด...</div>
+        </div>
+        <button class="sp-slider-arrow" id="tenantNextBtn" aria-label="เลื่อนไปขวา">&#8250;</button>
+      </div>
+    </section>
+
+    <!-- Upload Section -->
+    <section class="sp-section">
+      <div class="sp-section-header">
+        <h3>อัพโหลดสลิป</h3>
+      </div>
+      <div class="sp-upload-zone" id="uploadZone">
+        <div class="sp-upload-empty" id="uploadEmptyState">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+            <path d="M12 12v9"></path>
+            <path d="m16 16-4-4-4 4"></path>
+          </svg>
+          <p>คลิกหรือลากไฟล์มาวาง</p>
+          <small>รองรับ JPG, PNG และวางภาพจากคลิปบอร์ด</small>
+        </div>
+        <img id="uploadPreview" class="sp-upload-preview" alt="" hidden>
+        <div id="uploadProcessing" class="sp-upload-processing" hidden>
+          <div class="sp-spinner"></div>
+          <span>กำลังประมวลผลสลิป</span>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </div>
+    </section>
+
+    <!-- Pending Transactions -->
+    <section class="sp-section">
+      <div class="sp-section-header">
+        <h3>รายการสแกน</h3>
+        <span class="sp-count" id="pendingCount">0</span>
+      </div>
+
+      <div class="sp-search-wrap">
+        <input 
+          type="text"
+          id="searchInput"
+          class="sp-input"
+          placeholder="ค้นหาชื่อผู้โอน, ผู้ใช้, เว็บ, เลขอ้างอิง, จำนวนเงิน"
+        >
+      </div>
+
+      <!-- Pending List -->
+      <div id="pendingList" class="sp-pending-list">
+        <div class="sp-loading">กำลังโหลด...</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toastContainer" class="sp-toast-container"></div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

@@ -276,7 +276,7 @@ export const ScanAPI = {
       if (!matchedTenant) {
         log('[ScanAPI] ❌ RESULT: No matching tenant found');
         log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (NO MATCH) =====');
-        return errorResponse('No matching tenant found for this slip', 404);
+        return errorResponse('No matching tenant found for this slip - account not registered', 404);
       }
 
       log('[ScanAPI] ✅ MATCHED TENANT:', {
@@ -418,9 +418,13 @@ export const ScanAPI = {
             data: {
               id: transactionId,
               tenant_id: matchedTenant.id,
+              tenant_name: matchedTenant.name,
               team_id: matchedTenant.team_id,
+              team_slug: matchedTenant.team_slug || null,
               amount: slip.amount.amount,
               sender_name: senderNameTh || senderNameEn || 'Unknown',
+              receiver_name: receiverNameTh || receiverNameEn || '',
+              slip_date: slip.date || null,
               status: matchedUser ? 'matched' : 'pending',
               created_at: now,
             },
@@ -584,6 +588,52 @@ export const ScanAPI = {
           } else {
             log('[ScanAPI] ❌ Credit submission FAILED:', creditResult.message);
             // สถานะยังคงเป็น matched (ไม่เปลี่ยน)
+          }
+
+          // 🔔 Broadcast realtime notification for transaction update (credit status)
+          try {
+            log('[ScanAPI] 🔔 Starting transaction_updated broadcast...');
+            const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
+            const doStub = env.PENDING_NOTIFICATIONS.get(doId);
+
+            const creditBroadcastPayload = {
+              type: 'transaction_updated',
+              data: {
+                id: transactionId,
+                tenant_id: matchedTenant.id,
+                tenant_name: matchedTenant.name,
+                team_id: matchedTenant.team_id,
+                team_slug: matchedTenant.team_slug || null,
+                amount: slip.amount.amount,
+                sender_name: senderNameTh || senderNameEn || 'Unknown',
+                receiver_name: receiverNameTh || receiverNameEn || '',
+                slip_date: slip.date || null,
+                status: creditResult.success 
+                  ? (creditResult.isDuplicate ? 'duplicate' : 'credited')
+                  : 'matched',
+                matched_user_id: creditResult.resolvedMemberCode || matchedUser?.memberCode || matchedUser?.id || null,
+                matched_username: creditResult.resolvedUsername || null,
+                message: creditResult.message || null,
+                isDuplicate: creditResult.isDuplicate || false,
+                updated_at: Math.floor(Date.now() / 1000),
+              },
+            };
+
+            log('[ScanAPI] 📡 Broadcasting transaction_updated payload:', JSON.stringify(creditBroadcastPayload));
+
+            const creditBroadcastResponse = await doStub.fetch('https://internal/broadcast', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(creditBroadcastPayload),
+            });
+
+            const creditBroadcastResult = await creditBroadcastResponse.json();
+            log('[ScanAPI] ✅ transaction_updated broadcasted:', creditBroadcastResult);
+          } catch (creditBroadcastError) {
+            log('[ScanAPI] ⚠️ Failed to broadcast transaction_updated:', {
+              error: creditBroadcastError instanceof Error ? creditBroadcastError.message : String(creditBroadcastError),
+              stack: creditBroadcastError instanceof Error ? creditBroadcastError.stack : undefined,
+            });
           }
         } else {
           log('[ScanAPI] ⏭️ Auto-deposit is DISABLED - skipping credit submission');
