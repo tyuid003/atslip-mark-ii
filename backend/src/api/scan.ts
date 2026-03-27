@@ -12,6 +12,8 @@ interface BankAccountListItem {
   account_number?: string;
 }
 
+const ACCOUNT_RESOLVE_TIMEOUT_MS = 1500;
+
 function pickAccountIdFromCandidates(
   receiverAccount: string,
   candidates: Array<{ id: number; accountNumber: string }>
@@ -78,10 +80,19 @@ async function resolveToAccountId(
       headers.Authorization = `Bearer ${sessionToken}`;
     }
 
-    const response = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
-      method: 'GET',
-      headers,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ACCOUNT_RESOLVE_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (response.ok) {
       const data = await response.json() as { list?: BankAccountListItem[] };
@@ -95,10 +106,15 @@ async function resolveToAccountId(
 
       const resolvedFromApi = pickAccountIdFromCandidates(receiverAccount, candidates);
       if (resolvedFromApi) {
+        console.log('[ScanAPI] resolveToAccountId source=api timeoutMs=', ACCOUNT_RESOLVE_TIMEOUT_MS);
         return resolvedFromApi;
       }
     }
-  } catch {
+  } catch (error: any) {
+    console.log('[ScanAPI] resolveToAccountId api fetch failed, fallback to KV:', {
+      timeoutMs: ACCOUNT_RESOLVE_TIMEOUT_MS,
+      message: error?.message || String(error),
+    });
     // fallback to KV below
   }
 
@@ -122,8 +138,11 @@ async function resolveToAccountId(
     accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
     }))
     .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
-
-  return pickAccountIdFromCandidates(receiverAccount, candidates);
+  const resolvedFromKv = pickAccountIdFromCandidates(receiverAccount, candidates);
+  if (resolvedFromKv) {
+    console.log('[ScanAPI] resolveToAccountId source=kv');
+  }
+  return resolvedFromKv;
 }
 
 export const ScanAPI = {
@@ -469,15 +488,23 @@ export const ScanAPI = {
         if (autoDepositEnabled) {
           log('[ScanAPI] 🎯 Auto-deposit is ENABLED - triggering credit submission...');
 
-          const toAccountId = receiverAccount
-            ? await resolveToAccountId(
-                matchedTenant.id,
-                matchedTenant.admin_api_url,
-                session ? String((session as any).session_token || '') : null,
-                receiverAccount,
-                env
-              )
-            : null;
+          const matchedTenantAccountId = Number((matchedTenant as any).accountId || 0);
+          const toAccountId = Number.isFinite(matchedTenantAccountId) && matchedTenantAccountId > 0
+            ? matchedTenantAccountId
+            : receiverAccount
+              ? await resolveToAccountId(
+                  matchedTenant.id,
+                  matchedTenant.admin_api_url,
+                  session ? String((session as any).session_token || '') : null,
+                  receiverAccount,
+                  env
+                )
+              : null;
+
+          log('[ScanAPI] toAccountId resolved:', {
+            source: Number.isFinite(matchedTenantAccountId) && matchedTenantAccountId > 0 ? 'matched-tenant' : 'resolver',
+            toAccountId,
+          });
 
           if (!toAccountId) {
             log('[ScanAPI] ⚠️ toAccountId could not be resolved - skipping auto credit');

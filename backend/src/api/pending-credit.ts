@@ -12,6 +12,8 @@ interface BankAccountListItem {
   account_number?: string;
 }
 
+const ACCOUNT_RESOLVE_TIMEOUT_MS = 1500;
+
 function pickAccountIdFromCandidates(
   receiverAccount: string,
   candidates: Array<{ id: number; accountNumber: string }>
@@ -90,10 +92,19 @@ async function resolveToAccountId(
         headers.Authorization = `Bearer ${session.session_token}`;
       }
 
-      const response = await fetch(`${tenant.admin_api_url}/api/accounting/bankaccounts/list?limit=100`, {
-        method: 'GET',
-        headers,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ACCOUNT_RESOLVE_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(`${tenant.admin_api_url}/api/accounting/bankaccounts/list?limit=100`, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (response.ok) {
         const data = await response.json() as { list?: BankAccountListItem[] };
@@ -107,11 +118,16 @@ async function resolveToAccountId(
 
         const resolvedFromApi = pickAccountIdFromCandidates(receiver, candidates);
         if (resolvedFromApi) {
+          console.log('[PendingCredit] resolveToAccountId source=api timeoutMs=', ACCOUNT_RESOLVE_TIMEOUT_MS);
           return resolvedFromApi;
         }
       }
     }
-  } catch {
+  } catch (error: any) {
+    console.log('[PendingCredit] resolveToAccountId api fetch failed, fallback to KV:', {
+      timeoutMs: ACCOUNT_RESOLVE_TIMEOUT_MS,
+      message: error?.message || String(error),
+    });
     // fallback KV below
   }
 
@@ -134,8 +150,11 @@ async function resolveToAccountId(
       accountNumber: normalizeAccount(acc.accountNumber || acc.account_number || ''),
     }))
     .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
-
-  return pickAccountIdFromCandidates(receiver, candidates);
+  const resolvedFromKv = pickAccountIdFromCandidates(receiver, candidates);
+  if (resolvedFromKv) {
+    console.log('[PendingCredit] resolveToAccountId source=kv');
+  }
+  return resolvedFromKv;
 }
 
 export async function handleCreditPendingTransaction(
