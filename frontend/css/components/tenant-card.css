@@ -531,6 +531,17 @@
   background: #3aff5b;
 }
 
+.pending-credit-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.pending-credit-spinner {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+}
+
 .pending-credit-btn-withdraw {
   border-color: var(--color-warning);
   color: #ffffff;

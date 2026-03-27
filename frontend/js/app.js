@@ -15,6 +15,7 @@ let toastEnabled = true; // สถานะการแสดง toast notificat
 let toastQueue = []; // คิวสำหรับ toast notifications
 let isShowingToast = false; // สถานะการแสดง toast
 let isUploading = false; // ป้องกันการอัพโหลดซ้อน
+const creditInFlight = new Set(); // ป้องกันการกดเติมเครดิตซ้ำ
 
 // Filter & Sort state
 let pendingFilterTenant = null; // Filter by tenant ID
@@ -1071,6 +1072,21 @@ async function deletePendingItem(transactionId) {
 }
 
 async function creditPendingItem(transactionId) {
+  if (creditInFlight.has(transactionId)) {
+    return;
+  }
+
+  const creditButton = document.querySelector(`.pending-credit-btn[data-transaction-id="${transactionId}"]`);
+  const defaultLabel = creditButton?.dataset.defaultLabel || 'เติมเครดิต';
+
+  if (creditButton) {
+    creditButton.disabled = true;
+    creditButton.innerHTML = '<i data-lucide="loader" class="spin-icon pending-credit-spinner"></i>';
+    lucide.createIcons();
+  }
+
+  creditInFlight.add(transactionId);
+
   try {
     const response = await api.creditPendingTransaction(transactionId);
 
@@ -1084,6 +1100,12 @@ async function creditPendingItem(transactionId) {
     await loadPendingTransactions();
   } catch (error) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
+    if (creditButton) {
+      creditButton.disabled = false;
+      creditButton.innerHTML = defaultLabel;
+    }
+  } finally {
+    creditInFlight.delete(transactionId);
   }
 }
 
