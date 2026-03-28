@@ -45,8 +45,8 @@ export async function handleGetDuplicateCheckAccounts(
     const groups: AccountGroup[] = [];
 
     for (const tenant of tenants.results || []) {
-      // Get bank accounts from KV cache
-      const kvKey = `tenant:${tenant.id}:bank-accounts-list`;
+      // Get bank accounts from KV cache (same key as bank-refresh.service.ts)
+      const kvKey = `tenant:${tenant.id}:banks`;
       const raw = await env.BANK_KV.get(kvKey);
       if (!raw) continue;
 
