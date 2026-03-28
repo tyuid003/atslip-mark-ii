@@ -7,7 +7,8 @@ const DUPCHECK_TIMEOUT_MS = 3000;
 
 interface TransactionItem {
   id: number;
-  amount: number;
+  creditAmount: number;
+  bonusAmount: number;
   transferAt: string;
   directionId: number; // 1 = DEPOSIT
   directionName: string;
@@ -168,16 +169,17 @@ export class DuplicateCheckService {
         // Only check deposits
         if (tx.directionId !== 1 && tx.directionName !== 'DEPOSIT') continue;
 
-        const txAmount = Number(tx.amount);
+        const txAmount = Number(tx.creditAmount || 0) + Number(tx.bonusAmount || 0);
         if (txAmount !== slipAmount) continue;
 
         const txTime = new Date(tx.transferAt).getTime();
         const timeDiff = Math.abs(txTime - slipTime);
 
         if (timeDiff <= TWO_MINUTES_MS) {
-          log('[DupCheck] ⚠️ MATCH FOUND:', {
+          log('[DupCheck] ⚠️ DUPLICATE MATCH FOUND:', {
             txId: tx.id,
-            txAmount,
+            txCreditAmount: tx.creditAmount,
+            txTotalAmount: txAmount,
             txTime: tx.transferAt,
             slipAmount,
             slipTime: opts.slipDate,
