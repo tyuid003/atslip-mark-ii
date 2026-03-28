@@ -39,18 +39,54 @@ export class DuplicateCheckService {
     },
     log: (...args: any[]) => void = console.log
   ): Promise<DupCheckResult> {
-    const accNum = String(opts.receiverAccountNumber || '').replace(/[^0-9]/g, '');
+    const slipAccNum = String(opts.receiverAccountNumber || '').replace(/[^0-9]/g, '');
 
-    // 1. Check if dupcheck is enabled for this account
-    const dupcheckKey = `dupcheck:${opts.tenantId}:${accNum}`;
+    // 1. Resolve full account number from KV banks (slip may have masked/partial number)
+    let fullAccNum = slipAccNum;
+    try {
+      const banksRaw = await env.BANK_KV.get(`tenant:${opts.tenantId}:banks`);
+      if (banksRaw) {
+        const banksData = JSON.parse(banksRaw);
+        const accounts = (banksData.accounts || []) as Array<{ accountNumber?: string; account_number?: string }>;
+        for (const acc of accounts) {
+          const kvAccNum = String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, '');
+          if (!kvAccNum) continue;
+          // Exact match
+          if (kvAccNum === slipAccNum) { fullAccNum = kvAccNum; break; }
+          // Full contains partial (suffix match) - slip often shows last N digits
+          if (kvAccNum.endsWith(slipAccNum) && slipAccNum.length >= 4) { fullAccNum = kvAccNum; break; }
+          // Chunk match: visible digit groups from masked number must appear in order
+          const rawAcc = String(opts.receiverAccountNumber || '');
+          const chunks = rawAcc.split(/[^0-9]+/).filter(c => c.length >= 2);
+          if (chunks.length > 0) {
+            let startAt = 0;
+            let allMatch = true;
+            for (const chunk of chunks) {
+              const idx = kvAccNum.indexOf(chunk, startAt);
+              if (idx < 0) { allMatch = false; break; }
+              startAt = idx + chunk.length;
+            }
+            if (allMatch) { fullAccNum = kvAccNum; break; }
+          }
+        }
+      }
+    } catch (err: any) {
+      log('[DupCheck] Failed to resolve full account number from KV:', err?.message || String(err));
+    }
+
+    log('[DupCheck] Account resolution:', { slipAccNum, fullAccNum });
+
+    // 2. Check if dupcheck is enabled for this account
+    const dupcheckKey = `dupcheck:${opts.tenantId}:${fullAccNum}`;
     const flag = await env.BANK_KV.get(dupcheckKey);
     if (flag !== '1') {
+      log('[DupCheck] Dupcheck NOT enabled for key:', dupcheckKey);
       return { isDuplicate: false, skipped: true, reason: 'dupcheck_disabled' };
     }
 
-    log('[DupCheck] Enabled for account:', accNum, '- checking transactions...');
+    log('[DupCheck] Enabled for account:', fullAccNum, '- checking transactions...');
 
-    // 2. Resolve the admin backend numeric userId
+    // 3. Resolve the admin backend numeric userId
     let userId: number | null = null;
     try {
       const controller = new AbortController();
@@ -93,7 +129,7 @@ export class DuplicateCheckService {
 
     log('[DupCheck] Resolved userId:', userId);
 
-    // 3. Get transaction list for the slip date
+    // 4. Get transaction list for the slip date
     const slipDateObj = new Date(opts.slipDate);
     const dateStr = opts.slipDate.split('T')[0]; // YYYY-MM-DD
 
@@ -123,7 +159,7 @@ export class DuplicateCheckService {
 
       log('[DupCheck] Found', transactions.length, 'transactions for date', dateStr);
 
-      // 4. Filter deposits and check for matching amount + time ±2 minutes
+      // 5. Filter deposits and check for matching amount + time ±2 minutes
       const TWO_MINUTES_MS = 2 * 60 * 1000;
       const slipTime = slipDateObj.getTime();
       const slipAmount = Number(opts.amount);
