@@ -1746,17 +1746,23 @@ function addNotification(title) {
 
 function updateNotificationBadge() {
   const badge = document.getElementById('notificationBadge');
-  if (!badge) {
-    return;
+  if (badge) {
+    if (unreadCount <= 0) {
+      badge.style.display = 'none';
+    } else {
+      badge.textContent = String(unreadCount);
+      badge.style.display = 'flex';
+    }
   }
 
-  if (unreadCount <= 0) {
-    badge.style.display = 'none';
-    return;
+  // Update kebab menu red dot + badge
+  const dot = document.getElementById('kebabNotifDot');
+  const menuBadge = document.getElementById('kebabNotifBadge');
+  if (dot) dot.style.display = unreadCount > 0 ? 'block' : 'none';
+  if (menuBadge) {
+    menuBadge.textContent = String(unreadCount);
+    menuBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
   }
-
-  badge.textContent = String(unreadCount);
-  badge.style.display = 'flex';
 }
 
 function toggleNotificationDropdown() {

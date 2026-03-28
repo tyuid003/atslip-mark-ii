@@ -305,6 +305,7 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
    ============================================================ */
 
 .kebab-menu-btn {
+  position: relative;
   width: 34px;
   height: 34px;
   border: none;
@@ -321,6 +322,33 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
 .kebab-menu-btn:hover {
   background: var(--color-gray-100);
   color: var(--color-primary);
+}
+
+.kebab-notif-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  border: 1.5px solid var(--color-white);
+  pointer-events: none;
+}
+
+.kebab-notif-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  color: var(--color-white);
+  font-size: 0.66rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
 }
 
 .kebab-menu-dropdown {

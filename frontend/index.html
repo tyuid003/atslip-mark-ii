@@ -37,6 +37,7 @@
         <!-- 3-dot kebab menu -->
         <button class="kebab-menu-btn" onclick="toggleKebabMenu()" aria-label="เมนู">
           <i data-lucide="more-vertical"></i>
+          <span id="kebabNotifDot" class="kebab-notif-dot" style="display: none;"></span>
         </button>
         <div id="kebabMenuDropdown" class="kebab-menu-dropdown" style="display: none;">
           <button class="kebab-menu-item" onclick="goToReplyMessagePage(); closeKebabMenu();">
@@ -46,6 +47,7 @@
           <button class="kebab-menu-item" onclick="toggleNotificationPanel(); closeKebabMenu();">
             <i data-lucide="bell" size="16"></i>
             การแจ้งเตือน
+            <span id="kebabNotifBadge" class="kebab-notif-badge" style="display: none;">0</span>
           </button>
           <button class="kebab-menu-item" onclick="openDuplicateCheckModal(); closeKebabMenu();">
             <i data-lucide="copy-check" size="16"></i>
