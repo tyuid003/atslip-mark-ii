@@ -2013,7 +2013,111 @@ document.addEventListener('click', function(event) {
   if (dropdown && !filterBtn && !dropdownContent && dropdown.style.display === 'block') {
     dropdown.style.display = 'none';
   }
+
+  // Close kebab menu when clicking outside
+  if (!event.target.closest('.kebab-menu-btn') && !event.target.closest('.kebab-menu-dropdown')) {
+    const kebab = document.getElementById('kebabMenuDropdown');
+    if (kebab) kebab.style.display = 'none';
+  }
 });
+
+// ============================================================
+// KEBAB MENU (3-DOT) FUNCTIONS
+// ============================================================
+
+function toggleKebabMenu() {
+  const dropdown = document.getElementById('kebabMenuDropdown');
+  if (!dropdown) return;
+  const isOpen = dropdown.style.display === 'block';
+  dropdown.style.display = isOpen ? 'none' : 'block';
+}
+
+function closeKebabMenu() {
+  const dropdown = document.getElementById('kebabMenuDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+function toggleNotificationPanel() {
+  toggleNotificationDropdown();
+}
+
+window.toggleKebabMenu = toggleKebabMenu;
+window.closeKebabMenu = closeKebabMenu;
+window.toggleNotificationPanel = toggleNotificationPanel;
+
+// ============================================================
+// DUPLICATE CHECK FUNCTIONS
+// ============================================================
+
+async function openDuplicateCheckModal() {
+  document.getElementById('duplicateCheckModal').style.display = 'flex';
+  lucide.createIcons();
+
+  const listEl = document.getElementById('duplicateCheckList');
+  listEl.innerHTML = '<div style="text-align:center;padding:var(--space-lg);"><div class="loading"></div><p class="text-muted mt-3">กำลังโหลดข้อมูลบัญชี...</p></div>';
+
+  try {
+    const response = await api.getDuplicateCheckAccounts();
+    const groups = response.data || [];
+    renderDuplicateCheckList(groups);
+  } catch (error) {
+    listEl.innerHTML = '<p style="text-align:center;color:var(--color-danger);">ไม่สามารถโหลดข้อมูลได้: ' + error.message + '</p>';
+  }
+}
+
+function renderDuplicateCheckList(groups) {
+  const listEl = document.getElementById('duplicateCheckList');
+
+  if (!groups || groups.length === 0) {
+    listEl.innerHTML = '<p style="text-align:center;color:var(--color-gray-500);">ไม่พบบัญชีธนาคาร กรุณาเชื่อมต่อ Admin ก่อน</p>';
+    return;
+  }
+
+  let html = '';
+  groups.forEach(group => {
+    html += `<div class="dupcheck-tenant-group">`;
+    html += `<div class="dupcheck-tenant-label">${group.tenant_name}</div>`;
+    (group.accounts || []).forEach(acc => {
+      const checked = acc.dupcheck_enabled ? 'checked' : '';
+      const accNumSafe = String(acc.account_number || '').replace(/'/g, "\\'");
+      html += `
+        <div class="dupcheck-account-row">
+          <img src="${acc.bank_icon_url || ''}" alt="" class="dupcheck-bank-icon" onerror="this.style.display='none'">
+          <div class="dupcheck-account-info">
+            <div class="dupcheck-account-name">${acc.account_name || 'ไม่ระบุชื่อ'}</div>
+            <div class="dupcheck-account-number">${acc.account_number || '-'}</div>
+          </div>
+          <label class="toggle-switch toggle-switch-compact">
+            <input type="checkbox" ${checked} onchange="toggleDupCheck('${group.tenant_id}', '${accNumSafe}', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>`;
+    });
+    html += '</div>';
+  });
+
+  listEl.innerHTML = html;
+  lucide.createIcons();
+}
+
+async function toggleDupCheck(tenantId, accountNumber, enabled) {
+  try {
+    await api.toggleDuplicateCheck(tenantId, accountNumber, enabled);
+    addNotification(enabled ? '✅ เปิดตรวจสอบรายการซ้ำ' : '🔕 ปิดตรวจสอบรายการซ้ำ');
+  } catch (error) {
+    addNotification('❌ ไม่สามารถเปลี่ยนสถานะได้: ' + error.message);
+    // Re-open modal to refresh state
+    openDuplicateCheckModal();
+  }
+}
+
+function closeDuplicateCheckModal() {
+  document.getElementById('duplicateCheckModal').style.display = 'none';
+}
+
+window.openDuplicateCheckModal = openDuplicateCheckModal;
+window.closeDuplicateCheckModal = closeDuplicateCheckModal;
+window.toggleDupCheck = toggleDupCheck;
 
 // ============================================================
 // START APPLICATION

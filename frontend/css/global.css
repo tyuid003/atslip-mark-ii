@@ -300,6 +300,132 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
   background: var(--color-gray-100);
 }
 
+/* ============================================================
+   KEBAB (3-DOT) MENU
+   ============================================================ */
+
+.kebab-menu-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-white);
+  color: var(--color-gray-600);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.kebab-menu-btn:hover {
+  background: var(--color-gray-100);
+  color: var(--color-primary);
+}
+
+.kebab-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 500;
+  padding: var(--space-xs) 0;
+}
+
+.kebab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: transparent;
+  color: var(--color-gray-700);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+
+.kebab-menu-item:hover {
+  background: var(--color-gray-100);
+  color: var(--color-primary);
+}
+
+/* ============================================================
+   DUPLICATE CHECK MODAL
+   ============================================================ */
+
+.duplicate-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.dupcheck-tenant-group {
+  margin-bottom: var(--space-sm);
+}
+
+.dupcheck-tenant-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-gray-100);
+  margin-bottom: var(--space-xs);
+}
+
+.dupcheck-account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-xs);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+}
+
+.dupcheck-account-row:hover {
+  background: var(--color-gray-50);
+}
+
+.dupcheck-bank-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.dupcheck-account-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dupcheck-account-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dupcheck-account-number {
+  font-size: 0.8rem;
+  color: var(--color-gray-500);
+  font-family: var(--font-mono, monospace);
+}
+
 .filter-btn {
   width: 20px;
   height: 20px;

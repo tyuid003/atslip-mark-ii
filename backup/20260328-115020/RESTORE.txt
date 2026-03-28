@@ -1,0 +1,16 @@
+Backup created: 2026-03-28 11:50:20
+Purpose: Before adding 3-dot menu, duplicate check feature
+
+Files backed up:
+- frontend/index.html
+- frontend/js/app.js
+- frontend/js/api.js
+- frontend/js/ui.js
+- frontend/css/global.css
+- frontend/css/components/tenant-card.css
+- backend/src/index.ts
+- backend/src/api/scan.ts
+- backend/src/api/pending-credit.ts
+
+To restore:
+Copy all files from this backup folder back to the project root, preserving folder structure.

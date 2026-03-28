@@ -281,6 +281,21 @@ class API {
   async genMemberCode(tenantId) {
     return this.request(`/api/admin/gen-membercode/${tenantId}`);
   }
+
+  // ============================================================
+  // DUPLICATE CHECK APIs
+  // ============================================================
+
+  async getDuplicateCheckAccounts() {
+    return this.request('/api/duplicate-check/accounts');
+  }
+
+  async toggleDuplicateCheck(tenantId, accountNumber, enabled) {
+    return this.request('/api/duplicate-check/toggle', {
+      method: 'PATCH',
+      body: JSON.stringify({ tenant_id: tenantId, account_number: accountNumber, enabled }),
+    });
+  }
 }
 
 // Create API instance

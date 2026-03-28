@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { successResponse, errorResponse } from '../utils/helpers';
 import { CreditService } from '../services/credit.service';
+import { DuplicateCheckService } from '../services/duplicate-check.service';
 
 function normalizeAccount(value: string | null | undefined): string {
   return String(value || '').replace(/[^0-9]/g, '');
@@ -204,6 +205,52 @@ export async function handleCreditPendingTransaction(
       transRef: transaction.slip_ref,
       date: new Date().toISOString(),
     };
+
+    // ======== DUPLICATE CHECK BEFORE CREDIT ========
+    const tenantRow = await env.DB.prepare(
+      `SELECT admin_api_url FROM tenants WHERE id = ? AND status = 'active' LIMIT 1`
+    )
+      .bind(transaction.tenant_id)
+      .first<{ admin_api_url: string }>();
+
+    const sessionRow = await env.DB.prepare(
+      `SELECT session_token FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
+    )
+      .bind(transaction.tenant_id, Math.floor(Date.now() / 1000))
+      .first<{ session_token: string }>();
+
+    if (tenantRow?.admin_api_url && sessionRow?.session_token) {
+      const dupResult = await DuplicateCheckService.checkBeforeCredit(
+        env,
+        {
+          tenantId: transaction.tenant_id,
+          adminApiUrl: tenantRow.admin_api_url,
+          sessionToken: sessionRow.session_token,
+          receiverAccountNumber: transaction.receiver_account || '',
+          amount: Number(transaction.amount || 0),
+          slipDate: slipData.date || new Date().toISOString(),
+          matchedUserId: transaction.matched_user_id || '',
+        },
+        console.log
+      );
+
+      if (dupResult.isDuplicate) {
+        const now = Math.floor(Date.now() / 1000);
+        await env.DB.prepare(
+          `UPDATE pending_transactions SET status = 'duplicate', error_message = ?, updated_at = ? WHERE id = ?`
+        )
+          .bind('Duplicate detected by pre-credit check', now, transactionId)
+          .run();
+
+        return successResponse({
+          id: transactionId,
+          status: 'duplicate',
+          duplicate: true,
+          message: 'Duplicate transaction detected by pre-credit check',
+        });
+      }
+    }
+    // ======== END DUPLICATE CHECK ========
 
     const creditResult = await CreditService.submitCredit(
       env,

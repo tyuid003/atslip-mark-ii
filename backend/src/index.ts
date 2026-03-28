@@ -22,6 +22,10 @@ import {
   handleUpdateLineMessageSettings,
 } from './api/line-message-settings';
 import { handleLineWebhook } from './api/line-webhook';
+import {
+  handleGetDuplicateCheckAccounts,
+  handleToggleDuplicateCheck,
+} from './api/duplicate-check';
 
 // ============================================================
 // MAIN ROUTER
@@ -296,6 +300,20 @@ export default {
     if (method === 'POST' && withdrawPendingMatch) {
       const transactionId = decodeURIComponent(withdrawPendingMatch[1]);
       return await handleWithdrawPendingCredit(env, transactionId, request);
+    }
+
+    // ============================================================
+    // DUPLICATE CHECK ROUTES
+    // ============================================================
+
+    // GET /api/duplicate-check/accounts - ดูรายการบัญชีทั้งหมดพร้อมสถานะ dupcheck
+    if (method === 'GET' && pathname === '/api/duplicate-check/accounts') {
+      return await handleGetDuplicateCheckAccounts(env, request);
+    }
+
+    // PATCH /api/duplicate-check/toggle - เปิด/ปิด dupcheck ของบัญชี
+    if (method === 'PATCH' && pathname === '/api/duplicate-check/toggle') {
+      return await handleToggleDuplicateCheck(env, request);
     }
 
     // ============================================================

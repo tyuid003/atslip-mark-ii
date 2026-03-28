@@ -427,6 +427,10 @@ document.addEventListener('click', (e) => {
     if (dropdown) {
       dropdown.style.display = 'none';
     }
+    const kebab = document.getElementById('kebabMenuDropdown');
+    if (kebab) {
+      kebab.style.display = 'none';
+    }
   }
 });
 

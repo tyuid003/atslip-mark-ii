@@ -4,6 +4,7 @@
 import { jsonResponse, errorResponse, successResponse } from '../utils/helpers';
 import { ScanService } from '../services/scan.service';
 import { CreditService } from '../services/credit.service';
+import { DuplicateCheckService } from '../services/duplicate-check.service';
 import type { Env } from '../types';
 
 interface BankAccountListItem {
@@ -539,6 +540,45 @@ export const ScanAPI = {
               },
             }, 'Slip scanned and saved successfully');
           }
+
+          // ======== DUPLICATE CHECK BEFORE CREDIT ========
+          const sessionToken = session ? String((session as any).session_token || '') : '';
+          if (sessionToken) {
+            const dupResult = await DuplicateCheckService.checkBeforeCredit(
+              env,
+              {
+                tenantId: matchedTenant.id,
+                adminApiUrl: matchedTenant.admin_api_url,
+                sessionToken,
+                receiverAccountNumber: receiverAccount,
+                amount: slip.amount.amount,
+                slipDate: slip.date,
+                matchedUserId: matchedUser.memberCode || matchedUser.id || '',
+              },
+              log
+            );
+
+            if (dupResult.isDuplicate) {
+              log('[ScanAPI] ⚠️ Duplicate check BLOCKED credit - matching transaction found');
+              const updateTs = Math.floor(Date.now() / 1000);
+              await env.DB.prepare(
+                `UPDATE pending_transactions SET status = 'duplicate', error_message = ?, updated_at = ? WHERE id = ?`
+              )
+                .bind('Duplicate detected by pre-credit check', updateTs, transactionId)
+                .run();
+
+              return successResponse({
+                debug: debugLogs,
+                transaction_id: transactionId,
+                tenant: { id: matchedTenant.id, name: matchedTenant.name },
+                slip: { ref: slip.transRef, amount: slip.amount.amount, date: slip.date },
+                sender: { id: matchedUser.id, name: matchedUser.fullname, matched: true },
+                status: 'duplicate',
+                credit: { attempted: false, success: false, duplicate: true, message: 'Duplicate transaction detected by pre-credit check' },
+              }, 'Duplicate transaction detected');
+            }
+          }
+          // ======== END DUPLICATE CHECK ========
           
           creditResult = await CreditService.submitCredit(
             env,
