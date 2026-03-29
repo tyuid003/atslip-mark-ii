@@ -325,6 +325,7 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
 }
 
 .kebab-notif-dot {
+  display: none !important;
   position: absolute;
   top: 4px;
   right: 4px;
@@ -488,6 +489,7 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
   align-items: center;
   justify-content: center;
   padding: 0 4px;
+  z-index: 1;
 }
 
 .notification-dropdown {
@@ -540,7 +542,7 @@ body.popup-alert-open > *:not(.popup-alert-overlay) {
 .toast-toggle-btn.disabled:hover {
   background: none;
   color: var(--color-gray-600);
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 .notification-list {

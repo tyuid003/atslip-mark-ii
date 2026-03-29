@@ -585,13 +585,7 @@
   color: #991b1b;
 }
 
-/* Pending Item Kebab Menu */
-.pending-item-menu-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.pending-kebab-btn {
+.pending-delete-btn {
   background: none;
   border: none;
   color: var(--color-gray-400);
@@ -602,59 +596,46 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
-.pending-kebab-btn:hover {
-  background: var(--color-gray-100);
-  color: var(--color-gray-700);
+.pending-delete-btn:hover {
+  background: var(--color-red-50);
+  color: var(--color-red-600);
 }
 
-.pending-kebab-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.pending-item-dropdown {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  min-width: 170px;
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 100;
-  overflow: hidden;
-}
-
-.pending-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  font-size: 0.8rem;
-  color: var(--color-gray-700);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s ease;
-}
-
-.pending-menu-item:hover {
-  background: var(--color-gray-50);
-}
-
-.pending-menu-item-danger {
+.pending-delete-btn svg {
+  width: 14px;
+  height: 14px;
   color: #ef4444;
 }
 
-.pending-menu-item-danger:hover {
-  background: #fef2f2;
+.pending-search-btn {
+  background: none;
+  border: none;
+  color: var(--color-gray-400);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.pending-search-btn:hover {
+  background: var(--color-blue-50);
+  color: var(--color-blue-600);
+}
+
+.pending-search-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .pending-empty {
@@ -1267,226 +1248,4 @@
   justify-content: center;
   padding-left: 8px;
   padding-right: 8px;
-}
-
-/* ============================================================
-   TRANSACTION HISTORY MODAL
-   ============================================================ */
-
-.tx-history-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  animation: fadeIn 0.2s ease;
-}
-
-.tx-history-content {
-  background: var(--color-white);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  max-width: 600px;
-  width: 95%;
-  box-shadow: var(--shadow-xl);
-  animation: slideUp 0.2s ease;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.tx-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-md);
-}
-
-.tx-history-header h3 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--color-gray-900);
-}
-
-.tx-history-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-gray-500);
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-}
-
-.tx-history-close:hover {
-  background: var(--color-gray-100);
-  color: var(--color-gray-900);
-}
-
-.tx-history-filters {
-  display: flex;
-  gap: 8px;
-  margin-bottom: var(--space-md);
-  flex-wrap: wrap;
-}
-
-.tx-history-filters input[type="date"] {
-  padding: 6px 10px;
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  color: var(--color-gray-700);
-  flex: 1;
-  min-width: 130px;
-}
-
-.tx-history-filters button {
-  padding: 6px 14px;
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tx-history-filters button:hover {
-  opacity: 0.9;
-}
-
-.tx-history-list {
-  overflow-y: auto;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tx-history-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--color-gray-100);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  gap: 8px;
-}
-
-.tx-history-item:hover {
-  background: var(--color-gray-50);
-}
-
-.tx-history-item-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.tx-history-type {
-  font-weight: 600;
-  font-size: 0.78rem;
-}
-
-.tx-history-type.deposit {
-  color: #059669;
-}
-
-.tx-history-type.withdraw {
-  color: #dc2626;
-}
-
-.tx-history-detail {
-  font-size: 0.72rem;
-  color: var(--color-gray-500);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tx-history-time {
-  font-size: 0.7rem;
-  color: var(--color-gray-400);
-}
-
-.tx-history-item-right {
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.tx-history-amount {
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.tx-history-amount.deposit {
-  color: #059669;
-}
-
-.tx-history-amount.withdraw {
-  color: #dc2626;
-}
-
-.tx-history-balance {
-  font-size: 0.7rem;
-  color: var(--color-gray-500);
-}
-
-.tx-history-empty {
-  text-align: center;
-  padding: var(--space-lg);
-  color: var(--color-gray-500);
-  font-size: 0.85rem;
-}
-
-.tx-history-loading {
-  text-align: center;
-  padding: var(--space-lg);
-  color: var(--color-gray-500);
-  font-size: 0.85rem;
-}
-
-.tx-history-pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-gray-100);
-}
-
-.tx-history-pagination button {
-  padding: 4px 12px;
-  border: 1px solid var(--color-gray-200);
-  background: white;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  cursor: pointer;
-  color: var(--color-gray-700);
-}
-
-.tx-history-pagination button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tx-history-pagination button:not(:disabled):hover {
-  background: var(--color-gray-50);
-}
-
-.tx-history-page-info {
-  font-size: 0.75rem;
-  color: var(--color-gray-500);
 }

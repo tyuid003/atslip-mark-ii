@@ -345,25 +345,12 @@ const UI = {
               <span class="status-badge status-${status.color}">${status.label}</span>
               <div class="matched-user-info">
                 ${matchedUserText ? `<span class="matched-user-text">${matchedUserText}</span>` : ''}
-                <div class="pending-item-menu-wrapper">
-                  <button class="pending-kebab-btn" onclick="event.stopPropagation(); togglePendingItemMenu('${item.id}')" title="เมนู">
-                    <i data-lucide="more-vertical"></i>
-                  </button>
-                  <div class="pending-item-dropdown" id="pending-menu-${item.id}">
-                    <button class="pending-menu-item" onclick="openUserSearch('${item.id}', '${item.tenant_id}')">
-                      <i data-lucide="search" style="width:14px;height:14px;"></i>
-                      <span>ค้นหาและจับคู่</span>
-                    </button>
-                    ${item.matched_user_id ? `<button class="pending-menu-item" onclick="openTransactionHistory('${item.matched_user_id}', '${item.tenant_id}', '${(matchedUserText || '').replace(/'/g, "\\'")}')">
-                      <i data-lucide="receipt" style="width:14px;height:14px;"></i>
-                      <span>รายการฝาก-ถอน</span>
-                    </button>` : ''}
-                    <button class="pending-menu-item pending-menu-item-danger" onclick="deletePendingItem('${item.id}')">
-                      <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
-                      <span>ลบรายการ</span>
-                    </button>
-                  </div>
-                </div>
+                <button class="pending-search-btn" onclick="openUserSearch('${item.id}', '${item.tenant_id}')" title="ค้นหาและจับคู่ผู้ใช้">
+                  <i data-lucide="search"></i>
+                </button>
+                <button class="pending-delete-btn" onclick="deletePendingItem('${item.id}')" title="ลบรายการ">
+                  <i data-lucide="x"></i>
+                </button>
               </div>
             </div>
             <div class="pending-item-bottom">
@@ -435,13 +422,6 @@ document.addEventListener('click', (e) => {
     });
   }
 
-  // ปิด pending item menu เมื่อคลิกนอก
-  if (!e.target.closest('.pending-item-menu-wrapper')) {
-    document.querySelectorAll('.pending-item-dropdown').forEach((m) => {
-      m.style.display = 'none';
-    });
-  }
-
   if (!e.target.closest('.header-actions')) {
     const dropdown = document.getElementById('notificationDropdown');
     if (dropdown) {
@@ -453,22 +433,5 @@ document.addEventListener('click', (e) => {
     }
   }
 });
-
-// Toggle pending item kebab menu
-function togglePendingItemMenu(itemId) {
-  // ปิดเมนูอื่นทั้งหมดก่อน
-  document.querySelectorAll('.pending-item-dropdown').forEach((m) => {
-    if (m.id !== `pending-menu-${itemId}`) {
-      m.style.display = 'none';
-    }
-  });
-
-  const menu = document.getElementById(`pending-menu-${itemId}`);
-  if (!menu) return;
-  const isVisible = menu.style.display === 'block';
-  menu.style.display = isVisible ? 'none' : 'block';
-}
-
-window.togglePendingItemMenu = togglePendingItemMenu;
 
 window.UI = UI;

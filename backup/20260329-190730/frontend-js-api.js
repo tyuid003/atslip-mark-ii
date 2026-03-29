@@ -278,22 +278,6 @@ class API {
     return this.request(`/api/users/search?${params.toString()}`);
   }
 
-  // ============================================================
-  // USER TRANSACTION HISTORY APIs
-  // ============================================================
-
-  async getUserTransactions(userId, tenantId, opts = {}) {
-    const params = new URLSearchParams({
-      user_id: userId,
-      tenant_id: tenantId,
-      page: String(opts.page || 1),
-      limit: String(opts.limit || 20),
-    });
-    if (opts.fromDate) params.set('from_date', opts.fromDate);
-    if (opts.toDate) params.set('to_date', opts.toDate);
-    return this.request(`/api/user-transactions/list?${params}`);
-  }
-
   async genMemberCode(tenantId) {
     return this.request(`/api/admin/gen-membercode/${tenantId}`);
   }

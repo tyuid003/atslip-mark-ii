@@ -26,7 +26,6 @@ import {
   handleGetDuplicateCheckAccounts,
   handleToggleDuplicateCheck,
 } from './api/duplicate-check';
-import { handleUserTransactionsList } from './api/user-transactions';
 
 // ============================================================
 // MAIN ROUTER
@@ -264,11 +263,6 @@ export default {
     // GET /api/users/search?q=<term>&category=<member|non-member> - ค้นหาผู้ใช้
     if (method === 'GET' && pathname === '/api/users/search') {
       return await handleUserSearch(env, request);
-    }
-
-    // GET /api/user-transactions/list - ดูรายการฝาก-ถอนของผู้ใช้
-    if (method === 'GET' && pathname === '/api/user-transactions/list') {
-      return await handleUserTransactionsList(env, request);
     }
 
     // ============================================================
