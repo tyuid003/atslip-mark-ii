@@ -1,0 +1,15 @@
+Backup created: 2026-03-14 09:54:36
+Workspace root: c:\Users\tyuid\OneDrive\Documents\ATslipMark-II
+
+Backed up files:
+1. backend/src/services/scan.service.ts -> backup/20260314-095436/backend/src/services/scan.service.ts.bak
+
+How to restore:
+1. Open a PowerShell terminal at the workspace root.
+2. Run:
+   Copy-Item "c:\Users\tyuid\OneDrive\Documents\ATslipMark-II\backup\20260314-095436\backend\src\services\scan.service.ts.bak" "c:\Users\tyuid\OneDrive\Documents\ATslipMark-II\backend\src\services\scan.service.ts" -Force
+3. Re-deploy if needed.
+
+Notes:
+- This backup was created immediately before the receiver matching logic update.
+- The backup file is a direct snapshot of the original source file.

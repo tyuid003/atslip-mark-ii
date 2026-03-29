@@ -143,8 +143,7 @@ export async function getOrCreateLineMessageSettings(
   lineOAId: string,
   tenantId: string
 ): Promise<LineMessageSettings> {
-  // ลบ ensureLineMessageSettingsTable ออก - table สร้างแล้วตอน deploy/migration
-  // เดิมรัน CREATE TABLE IF NOT EXISTS ทุกครั้งที่ webhook เข้า → เปลือง rows read
+  await ensureLineMessageSettingsTable(env);
 
   const existing = await env.DB.prepare(
     `SELECT * FROM line_message_settings WHERE line_oa_id = ? AND tenant_id = ? LIMIT 1`

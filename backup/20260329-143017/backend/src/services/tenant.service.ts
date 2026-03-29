@@ -64,9 +64,11 @@ export async function getTenantById(env: Env, id: string): Promise<TenantWithSta
       t.id, t.team_id, t.name, t.admin_api_url,
       t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
       t.admin_username, t.admin_password, t.easyslip_token,
-      COUNT(DISTINCT lo.id) as line_oa_count
+      COUNT(DISTINCT lo.id) as line_oa_count,
+      COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
     FROM tenants t
     LEFT JOIN line_oas lo ON lo.tenant_id = t.id
+    LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
     WHERE t.id = ?
     GROUP BY t.id`
   )
@@ -76,14 +78,6 @@ export async function getTenantById(env: Env, id: string): Promise<TenantWithSta
   if (!result) {
     return null;
   }
-
-  // นับ pending_count แยก (ใช้ index, ไม่ต้อง full join)
-  const pendingRow = await env.DB.prepare(
-    `SELECT COUNT(*) as cnt FROM pending_transactions WHERE tenant_id = ? AND status = 'pending'`
-  )
-    .bind(id)
-    .first<{ cnt: number }>();
-  const pending_count = pendingRow?.cnt || 0;
 
   // เช็คว่ามีบัญชีธนาคารใน KV หรือไม่ (สถานะเชื่อมต่อ)
   const bankKey = `tenant:${id}:banks`;
@@ -123,19 +117,17 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
   }
 
   // Query tenants โดยกรองจาก team_id ถ้ามี หรือดึงทุก tenant ถ้าไม่ระบุ
-  // ลบ LEFT JOIN pending_transactions ออก (ลด rows read) + รวม admin_sessions ใน query เดียว (ลบ loop query)
-  const now = Math.floor(Date.now() / 1000);
   const query = teamId
     ? `SELECT 
         t.id, t.team_id, t.name, t.admin_api_url,
         t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
         t.admin_username, t.admin_password,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
-        MAX(CASE WHEN ads.id IS NOT NULL THEN 1 ELSE 0 END) as has_active_session
+        COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t
       LEFT JOIN line_oas lo ON lo.tenant_id = t.id
-      LEFT JOIN admin_sessions ads ON ads.tenant_id = t.id AND ads.expires_at > ?
-      ${teamId ? 'WHERE t.team_id = ?' : ''}
+      LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
+      WHERE t.team_id = ?
       GROUP BY t.id
       ORDER BY t.created_at DESC`
     : `SELECT 
@@ -143,41 +135,42 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
         t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
         t.admin_username, t.admin_password,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
-        MAX(CASE WHEN ads.id IS NOT NULL THEN 1 ELSE 0 END) as has_active_session
+        COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t
       LEFT JOIN line_oas lo ON lo.tenant_id = t.id
-      LEFT JOIN admin_sessions ads ON ads.tenant_id = t.id AND ads.expires_at > ?
+      LEFT JOIN pending_transactions pt ON pt.tenant_id = t.id
       GROUP BY t.id
       ORDER BY t.created_at DESC`;
 
   const stmt = teamId
-    ? env.DB.prepare(query).bind(now, teamId)
-    : env.DB.prepare(query).bind(now);
+    ? env.DB.prepare(query).bind(teamId)
+    : env.DB.prepare(query);
 
   const results = await stmt.all();
-
-  // นับ pending_count ทุก tenant ใน query เดียว (แทน LEFT JOIN ใน main query)
-  const pendingCounts = await env.DB.prepare(
-    `SELECT tenant_id, COUNT(*) as cnt FROM pending_transactions WHERE status = 'pending' GROUP BY tenant_id`
-  ).all();
-  const pendingMap = new Map<string, number>();
-  for (const row of pendingCounts.results || []) {
-    pendingMap.set(row.tenant_id as string, row.cnt as number);
-  }
 
   const tenants = [];
 
   for (const tenant of results.results || []) {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // เช็คว่ามี session ที่ยังไม่หมดอายุหรือไม่
+    const session = await env.DB.prepare(
+      `SELECT id FROM admin_sessions 
+       WHERE tenant_id = ? AND expires_at > ? 
+       LIMIT 1`
+    )
+      .bind(tenant.id, now)
+      .first();
+    
     const bankKey = `tenant:${tenant.id}:banks`;
     const bankData = await env.BANK_KV.get(bankKey);
     const bank_account_count = bankData ? JSON.parse(bankData).accounts.length : 0;
 
     // สถานะเชื่อมต่อต้องมีทั้ง session ที่ยังไม่หมดอายุ และมีข้อมูลบัญชีธนาคาร
-    const admin_connected = !!(tenant.has_active_session) && bank_account_count > 0;
+    const admin_connected = !!session && bank_account_count > 0;
 
     tenants.push({
       ...tenant,
-      pending_count: pendingMap.get(tenant.id as string) || 0,
       bank_account_count,
       admin_connected,
     });

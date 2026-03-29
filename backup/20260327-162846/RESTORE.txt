@@ -1,0 +1,6 @@
+Backup before resolveToAccountId latency fix
+Created: 
+2026-03-27 16:28:46
+Files:
+- backend/src/api/scan.ts
+- backend/src/api/pending-credit.ts
