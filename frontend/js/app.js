@@ -1210,25 +1210,40 @@ async function loadTxHistory() {
       const isDeposit = tx.directionName === 'DEPOSIT';
       const typeClass = isDeposit ? 'deposit' : 'withdraw';
       const sign = isDeposit ? '+' : '-';
-      const amount = Number(tx.creditAmount || 0).toLocaleString('th-TH');
+      const creditAmt = Number(tx.creditAmount || 0);
       const bonus = Number(tx.bonusAmount || 0);
-      const bonusText = bonus > 0 ? ` (+${bonus.toLocaleString('th-TH')} โบนัส)` : '';
+
+      // ถ้า creditAmount = 0 ไม่แสดง +0 ด้านหน้า
+      let amountText = '';
+      if (creditAmt > 0) {
+        amountText = `${sign}${creditAmt.toLocaleString('th-TH')}`;
+        if (bonus > 0) amountText += ` (+${bonus.toLocaleString('th-TH')} โบนัส)`;
+      } else if (bonus > 0) {
+        amountText = `+${bonus.toLocaleString('th-TH')} โบนัส`;
+      } else {
+        amountText = '0';
+      }
+
       const balanceAfter = Number(tx.creditAfter || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
       const time = tx.transferAt
         ? new Date(tx.transferAt).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit' })
         : '-';
       const detail = tx.detail || tx.typeName || '';
-      const autoTag = tx.isAdjustAuto ? ' (auto)' : '';
+
+      // ผู้ทำรายการ / ผู้ยืนยัน
+      const createdBy = tx.createAdminUsername || 'Auto';
+      const confirmedBy = tx.confirmAdminUsername || 'Auto';
 
       return `
         <div class="tx-history-item">
           <div class="tx-history-item-left">
-            <span class="tx-history-type ${typeClass}">${tx.typeName || tx.directionName}${autoTag}</span>
+            <span class="tx-history-type ${typeClass}">${tx.typeName || tx.directionName}</span>
             <span class="tx-history-detail" title="${detail}">${detail}</span>
             <span class="tx-history-time">${time}</span>
+            <span class="tx-history-admin">ทำรายการ: ${createdBy} / ยืนยัน: ${confirmedBy}</span>
           </div>
           <div class="tx-history-item-right">
-            <div class="tx-history-amount ${typeClass}">${sign}${amount}${bonusText}</div>
+            <div class="tx-history-amount ${typeClass}">${amountText}</div>
             <div class="tx-history-balance">คงเหลือ ${balanceAfter}</div>
           </div>
         </div>

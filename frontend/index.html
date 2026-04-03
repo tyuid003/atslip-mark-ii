@@ -16,8 +16,15 @@
   <link rel="stylesheet" href="css/components/toast.css">
   <link rel="stylesheet" href="css/components/reply-message.css">
   
-  <!-- Lucide Icons (Open Source) -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Lucide Icons (Open Source) - pinned version + fallback CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script>
+    if (typeof lucide === 'undefined') {
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js';
+      document.head.appendChild(s);
+    }
+  </script>
 </head>
 <body>
   <!-- ============================================================

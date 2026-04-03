@@ -385,6 +385,7 @@ export const ScanAPI = {
               name: senderNameTh || senderNameEn || 'Unknown',
               matched: false,
             },
+            matched_user_id: matchedUser?.memberCode || matchedUser?.id || null,
           },
         }, 400);
       }
@@ -531,6 +532,7 @@ export const ScanAPI = {
                     name: senderNameTh || senderNameEn || 'Unknown',
                     matched: false,
                   },
+              matched_user_id: matchedUser?.memberCode || matchedUser?.id || null,
               status: matchedUser ? 'matched' : 'pending',
               credit: {
                 attempted: false,
@@ -573,6 +575,7 @@ export const ScanAPI = {
                 tenant: { id: matchedTenant.id, name: matchedTenant.name },
                 slip: { ref: slip.transRef, amount: slip.amount.amount, date: slip.date },
                 sender: { id: matchedUser.id, name: matchedUser.fullname, matched: true },
+                matched_user_id: matchedUser.memberCode || matchedUser.id || null,
                 status: 'duplicate',
                 credit: { attempted: false, success: false, duplicate: true, message: 'Duplicate transaction detected by pre-credit check' },
               }, 'Duplicate transaction detected');

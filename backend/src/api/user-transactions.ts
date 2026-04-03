@@ -30,12 +30,40 @@ export async function handleUserTransactionsList(
   if (!tenant) return errorResponse('Tenant not found', 404);
   if (!tenant.session_token) return errorResponse('Admin session not found. Please login first.', 401);
 
+  // ถ้า userId ไม่ใช่ตัวเลข (เป็น memberCode เช่น zta70f11014577) ต้อง resolve เป็น numeric ID ก่อน
+  let numericUserId = userId;
+  if (!/^\d+$/.test(userId)) {
+    const searchUrl = `${tenant.admin_api_url}/api/users/list?page=1&limit=1&search=${encodeURIComponent(userId)}`;
+    const searchResp = await fetch(searchUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${tenant.session_token}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!searchResp.ok) {
+      return errorResponse('Failed to resolve user ID', 502);
+    }
+
+    const searchData = (await searchResp.json()) as { list?: any[] };
+    const matchedUser = (searchData.list || []).find(
+      (u: any) => u.memberCode === userId || u.username === userId
+    );
+
+    if (!matchedUser || !matchedUser.id) {
+      return errorResponse('User not found in admin system', 404);
+    }
+
+    numericUserId = String(matchedUser.id);
+  }
+
   const params = new URLSearchParams({
     page,
     limit,
     sortCol: 'transfer_at',
     sortAsc: 'desc',
-    userId,
+    userId: numericUserId,
   });
   if (fromDate) params.set('fromDate', fromDate);
   if (toDate) params.set('toDate', toDate);
@@ -52,7 +80,9 @@ export async function handleUserTransactionsList(
     });
 
     if (!resp.ok) {
-      return errorResponse(`Admin API returned ${resp.status}`, 502);
+      const errorBody = await resp.text().catch(() => 'no body');
+      console.error(`[user-transactions] Admin API ${resp.status}: ${errorBody} | URL: ${adminUrl}`);
+      return errorResponse(`Admin API returned ${resp.status}: ${errorBody}`, 502);
     }
 
     const data = (await resp.json()) as { list?: any[]; total?: number };

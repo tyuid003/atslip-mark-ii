@@ -408,7 +408,6 @@
   padding: var(--space-sm);
   background: var(--color-white);
   transition: all 0.1s ease;
-  cursor: pointer;
   position: relative;
   z-index: 1;
 }
@@ -583,6 +582,33 @@
 .status-red {
   background: #fee2e2;
   color: #991b1b;
+}
+
+/* Pending Item Search Button (shortcut) */
+.pending-search-btn {
+  background: none;
+  border: none;
+  color: var(--color-gray-400);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.pending-search-btn:hover {
+  background: var(--color-blue-50);
+  color: var(--color-blue-600);
+}
+
+.pending-search-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Pending Item Kebab Menu */
@@ -1418,6 +1444,11 @@
 
 .tx-history-time {
   font-size: 0.7rem;
+  color: var(--color-gray-400);
+}
+
+.tx-history-admin {
+  font-size: 0.68rem;
   color: var(--color-gray-400);
 }
 

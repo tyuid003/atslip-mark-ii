@@ -345,6 +345,9 @@ const UI = {
               <span class="status-badge status-${status.color}">${status.label}</span>
               <div class="matched-user-info">
                 ${matchedUserText ? `<span class="matched-user-text">${matchedUserText}</span>` : ''}
+                <button class="pending-search-btn" onclick="event.stopPropagation(); openUserSearch('${item.id}', '${item.tenant_id}')" title="ค้นหาและจับคู่ผู้ใช้">
+                  <i data-lucide="search"></i>
+                </button>
                 <div class="pending-item-menu-wrapper">
                   <button class="pending-kebab-btn" onclick="event.stopPropagation(); togglePendingItemMenu('${item.id}')" title="เมนู">
                     <i data-lucide="more-vertical"></i>
