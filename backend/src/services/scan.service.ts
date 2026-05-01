@@ -124,10 +124,11 @@ export class ScanService {
       throw new Error('EASYSLIP token is empty or invalid. Please configure it in tenant settings.');
     }
 
-    const formData = new FormData();
-    formData.append('file', imageFile);
+    // แปลง image เป็น base64 แล้วส่งเป็น JSON (V2 ต้องการ JSON body)
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-    console.log('[ScanService] Calling EASYSLIP API...', {
+    console.log('[ScanService] Calling EASYSLIP API v2...', {
       tokenLength: easyslipToken.length,
       tokenStart: easyslipToken.substring(0, 8),
       fileSize: imageFile.size,
@@ -138,8 +139,9 @@ export class ScanService {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${easyslipToken}`,
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify({ image: base64 }),
     });
 
     // EASYSLIP v2 คืนค่า { success: true, data: {...} } หรือ { success: false, error: { code, message } }
