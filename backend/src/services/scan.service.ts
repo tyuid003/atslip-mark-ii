@@ -558,9 +558,9 @@ export class ScanService {
         let nameMatchType: ReceiverCandidate['nameMatchType'] = 'none';
 
         // 1. Match ชื่อธนาคาร (จำเป็น)
-        if (receiverBank.name || receiverBank.short || receiverBank.id) {
+        if (receiverBank?.name || receiverBank?.short || receiverBank?.id) {
           const receiverBankVariants = this.normalizeBankName(
-            receiverBank.name || receiverBank.short || receiverBank.id || ''
+            receiverBank?.name || receiverBank?.short || receiverBank?.id || ''
           );
 
           const accountBankName = account.bankName || account.bank_name || '';
@@ -571,7 +571,7 @@ export class ScanService {
           );
 
           console.log('[ScanService] 🔍 Bank Match:', {
-            receiverBankInput: receiverBank.name || receiverBank.short || receiverBank.id,
+            receiverBankInput: receiverBank?.name || receiverBank?.short || receiverBank?.id,
             receiverBankVariants,
             accountBankName,
             accountBankVariants,
@@ -618,8 +618,8 @@ export class ScanService {
           const englishMappings = englishMappingsByTenant.get(tenantId) || [];
           const mapping = englishMappings.find((item) => {
             const mappingBankVariants = this.normalizeBankName(item.bankName || account.bankName || account.bank_name || '');
-            const bankCompatible = receiverBank.name || receiverBank.short || receiverBank.id
-              ? this.normalizeBankName(receiverBank.name || receiverBank.short || receiverBank.id || '').some(rv =>
+            const bankCompatible = receiverBank?.name || receiverBank?.short || receiverBank?.id
+              ? this.normalizeBankName(receiverBank?.name || receiverBank?.short || receiverBank?.id || '').some(rv =>
                   mappingBankVariants.some(av => av.includes(rv) || rv.includes(av))
                 )
               : true;
