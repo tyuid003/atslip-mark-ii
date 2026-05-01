@@ -268,15 +268,21 @@ export const ScanAPI = {
       }
 
       const slip = slipData.data.data;
+
+      if (!slip) {
+        log('[ScanAPI] ❌ No slip data in response');
+        return errorResponse('EASYSLIP returned empty slip data', 400);
+      }
+
       log('[ScanAPI] Slip scanned successfully:', slip.transRef);
 
       // Match receiver (บัญชีรับ)
       log('[ScanAPI] 🏦 ===== RECEIVER MATCHING START =====');
       
-      const receiverBank = slip.receiver.bank;
-      const receiverAccount = slip.receiver.account.bank?.account || slip.receiver.account.proxy?.account || '';
-      const receiverNameTh = slip.receiver.account.name.th;
-      const receiverNameEn = slip.receiver.account.name.en;
+      const receiverBank = slip.receiver?.bank;
+      const receiverAccount = slip.receiver?.account?.bank?.account || slip.receiver?.account?.proxy?.account || '';
+      const receiverNameTh = slip.receiver?.account?.name?.th;
+      const receiverNameEn = slip.receiver?.account?.name?.en;
 
       log('[ScanAPI] 📥 Receiver Info from SLIP:', {
         bank: receiverBank?.name || receiverBank?.short || receiverBank?.id || 'N/A',
@@ -307,10 +313,10 @@ export const ScanAPI = {
       log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
 
       // Match sender (ผู้โอน)
-      const senderNameTh = slip.sender.account.name.th;
-      const senderNameEn = slip.sender.account.name.en;
-      const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
-      const senderBank = slip.sender.bank; // { id, name, short }
+      const senderNameTh = slip.sender?.account?.name?.th;
+      const senderNameEn = slip.sender?.account?.name?.en;
+      const senderAccount = slip.sender?.account?.bank?.account || slip.sender?.account?.proxy?.account || '';
+      const senderBank = slip.sender?.bank; // { id, name, short }
 
       log('[ScanAPI] 🔍 ===== SENDER MATCHING START =====');
       log('[ScanAPI] 📥 Sender Info from SLIP:', {
