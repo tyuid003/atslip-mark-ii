@@ -153,26 +153,10 @@ export class ScanService {
       hasError: !!result.error,
     });
 
-    // Log ข้อมูลสลิปที่ได้รับ (ถ้า success)
+    // Log raw V2 response เพื่อ debug structure
     if (result.success && result.data) {
-      const slip = result.data;
-      console.log('[ScanService] 📋 Slip Data:', {
-        transRef: slip.transRef,
-        amount: slip.amount?.amount,
-        date: slip.date,
-        sender: {
-          bank: slip.sender?.bank?.name || slip.sender?.bank?.short || slip.sender?.bank?.id,
-          account: slip.sender?.account?.bank?.account || slip.sender?.account?.proxy?.account,
-          name: slip.sender?.account?.name?.th || slip.sender?.account?.name?.en,
-        },
-        receiver: {
-          bank: slip.receiver?.bank?.name || slip.receiver?.bank?.short || slip.receiver?.bank?.id,
-          account: slip.receiver?.account?.bank?.account || slip.receiver?.account?.proxy?.account,
-          name: slip.receiver?.account?.name?.th || slip.receiver?.account?.name?.en,
-        },
-      });
+      console.log('[ScanService] 📋 RAW V2 data:', JSON.stringify(result.data));
     }
-
     if (!response.ok) {
       console.error('[ScanService] EASYSLIP API HTTP error:', {
         httpStatus: response.status,
@@ -190,9 +174,11 @@ export class ScanService {
     }
 
     // แปลงเป็นรูปแบบที่เราต้องการ (คง shape เดิมเพื่อ backward compat กับ scan.ts)
+    // V2 wraps slip data inside result.data.rawSlip
+    const slipData = result.data?.rawSlip ?? result.data;
     return {
       success: true,
-      data: { status: 200, data: result.data },
+      data: { status: 200, data: slipData },
     };
   }
 
