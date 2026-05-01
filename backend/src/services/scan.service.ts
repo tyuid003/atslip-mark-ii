@@ -134,7 +134,7 @@ export class ScanService {
       fileType: imageFile.type,
     });
 
-    const response = await fetch('https://developer.easyslip.com/api/v1/verify', {
+    const response = await fetch('https://api.easyslip.com/v2/verify/bank', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${easyslipToken}`,
@@ -142,19 +142,19 @@ export class ScanService {
       body: formData,
     });
 
-    // EASYSLIP คืนค่าโดยตรงเป็น { status: 200, data: {...} } หรือ { status: 400, message: "..." }
+    // EASYSLIP v2 คืนค่า { success: true, data: {...} } หรือ { success: false, error: { code, message } }
     const result = await response.json() as any;
     
     console.log('[ScanService] 📥 EASYSLIP Response:', {
       httpStatus: response.status,
       httpOk: response.ok,
-      resultStatus: result.status,
+      resultSuccess: result.success,
       hasData: !!result.data,
-      hasMessage: !!result.message,
+      hasError: !!result.error,
     });
 
     // Log ข้อมูลสลิปที่ได้รับ (ถ้า success)
-    if (result.status === 200 && result.data) {
+    if (result.success && result.data) {
       const slip = result.data;
       console.log('[ScanService] 📋 Slip Data:', {
         transRef: slip.transRef,
@@ -177,22 +177,22 @@ export class ScanService {
       console.error('[ScanService] EASYSLIP API HTTP error:', {
         httpStatus: response.status,
         statusText: response.statusText,
-        resultStatus: result.status,
-        message: result.message,
+        resultSuccess: result.success,
+        message: result.error?.message || result.message,
       });
-      throw new Error(`EASYSLIP API error (${response.status}): ${result.message || response.statusText}`);
+      throw new Error(`EASYSLIP API error (${response.status}): ${result.error?.message || result.message || response.statusText}`);
     }
 
-    // ตรวจสอบ status ใน response body
-    if (result.status !== 200) {
-      console.error('[ScanService] EASYSLIP returned non-200 status:', result);
-      throw new Error(`EASYSLIP error (${result.status}): ${result.message || 'Scan failed'}`);
+    // ตรวจสอบ success ใน response body
+    if (!result.success) {
+      console.error('[ScanService] EASYSLIP returned unsuccessful response:', result);
+      throw new Error(`EASYSLIP error: ${result.error?.message || result.message || 'Scan failed'}`);
     }
 
-    // แปลงเป็นรูปแบบที่เราต้องการ
+    // แปลงเป็นรูปแบบที่เราต้องการ (คง shape เดิมเพื่อ backward compat กับ scan.ts)
     return {
       success: true,
-      data: result, // { status: 200, data: {...} }
+      data: { status: 200, data: result.data },
     };
   }
 
