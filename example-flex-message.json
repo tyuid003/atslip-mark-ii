@@ -1,0 +1,152 @@
+{
+    "type": "bubble",
+    "size": "mega",
+    "direction": "ltr",
+    "header": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#000000",
+        "contents": [
+            {
+                "type": "image",
+                "url": "https://lh3.googleusercontent.com/pw/AP1GczNX0bkhtsKfNWK2SS9C68wqtI-zOH6pgtz6FNBlPR8XKQDUmNm93D6HsKb1UuEFafEhHtv4cdNy58IaVEXL9oZlqnXQ_lK4E60ye8Mo4tW2tgfh29tXGmXwZlN_DZZfq-IDkVzf7QalpJvaELnKOZTK",
+                "size": "4xl",
+                "aspectMode": "fit",
+                "margin": "none",
+                "align": "center",
+                "gravity": "top"
+            },
+            {
+                "type": "text",
+                "text": "AUTO DEPOSIT SUCCESS",
+                "weight": "bold",
+                "color": "#D4AF37",
+                "size": "sm",
+                "align": "center",
+                "margin": "md"
+            }
+        ]
+    },
+    "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#1A1A1A",
+        "contents": [
+            {
+                "type": "text",
+                "text": "ฝากเงินสำเร็จ",
+                "weight": "bold",
+                "size": "xl",
+                "color": "#33FF33",
+                "align": "center"
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "lg",
+                "spacing": "sm",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "ยูสเซอร์:",
+                                "size": "sm",
+                                "color": "#D4AF37",
+                                "flex": 2
+                            },
+                            {
+                                "type": "text",
+                                "text": "zta70f21009991",
+                                "size": "sm",
+                                "color": "#FFFFFF",
+                                "align": "end",
+                                "flex": 4,
+                                "weight": "bold"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "separator",
+                        "color": "#333333",
+                        "margin": "md"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "margin": "md",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "จำนวนเงิน",
+                                "size": "sm",
+                                "color": "#D4AF37"
+                            },
+                            {
+                                "type": "text",
+                                "text": "1.00 THB",
+                                "size": "lg",
+                                "color": "#FFFFFF",
+                                "align": "end",
+                                "weight": "bold"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "วันที่/เวลา",
+                                "size": "sm",
+                                "color": "#888888"
+                            },
+                            {
+                                "type": "text",
+                                "text": "01/03/2569 18:25",
+                                "size": "sm",
+                                "color": "#888888",
+                                "align": "end"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "xl",
+                "contents": [
+                    {
+                        "type": "button",
+                        "action": {
+                            "type": "uri",
+                            "label": "เข้าเล่นเกม",
+                            "uri": "https://tkwin24.com/login"
+                        },
+                        "style": "primary",
+                        "color": "#D4AF37",
+                        "height": "sm"
+                    }
+                ]
+            }
+        ]
+    },
+    "footer": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#000000",
+        "contents": [
+            {
+                "type": "text",
+                "text": "ขอบคุณที่ใช้บริการค่ะ",
+                "size": "xxs",
+                "color": "#888888",
+                "align": "center"
+            }
+        ]
+    }
+}

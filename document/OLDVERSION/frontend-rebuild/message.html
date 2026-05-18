@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Deposit System - Messages</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components/sidebar.css">
+  <link rel="stylesheet" href="css/components/forms.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/modal.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>Auto Deposit</h1>
+        <p id="tenant-display">BETAX2</p>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="manual-scan.html" class="nav-item">
+          <span class="nav-icon">📄</span>
+          <span class="nav-text">Manual Scan</span>
+        </a>
+        <a href="settings.html" class="nav-item">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
+        </a>
+        <a href="message.html" class="nav-item active">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Messages</span>
+        </a>
+      </nav>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="page-header">
+        <h2 class="page-title">LINE Message Templates</h2>
+        
+        <div class="page-actions">
+          <!-- Tenant Selector -->
+          <select id="message-tenant-select" class="form-select">
+            <option value="BETAX2">BETAX2</option>
+            <option value="WINSURE24">WINSURE24</option>
+            <option value="HENGDRAGON66">HENGDRAGON66</option>
+            <option value="TKWIN24">TKWIN24</option>
+          </select>
+        </div>
+      </header>
+      
+      <!-- Message Templates -->
+      <section class="section">
+        <!-- On Slip Received -->
+        <div class="message-template-section">
+          <h3 class="section-title">เมื่อได้รับสลิป</h3>
+          
+          <div class="form-group">
+            <label class="switch">
+              <input type="checkbox" id="message-on_slip_received-enabled">
+              <span class="switch-slider"></span>
+              <span class="switch-label">เปิดใช้งาน</span>
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Message Template</label>
+            <textarea id="message-on_slip_received-template" class="form-textarea" rows="4" placeholder="ได้รับสลิปเรียบร้อยแล้ว..."></textarea>
+            <small class="form-hint">ตัวแปรที่ใช้ได้: {amount}, {name}, {date}</small>
+          </div>
+          
+          <div class="form-actions">
+            <button type="button" id="preview-on_slip_received-btn" class="btn btn-secondary">Preview</button>
+            <button type="button" id="test-on_slip_received-btn" class="btn btn-secondary">Test Send</button>
+          </div>
+        </div>
+        
+        <hr class="section-divider">
+        
+        <!-- On Credited Success -->
+        <div class="message-template-section">
+          <h3 class="section-title">เมื่อเติมเครดิตสำเร็จ</h3>
+          
+          <div class="form-group">
+            <label class="switch">
+              <input type="checkbox" id="message-on_credited_success-enabled">
+              <span class="switch-slider"></span>
+              <span class="switch-label">เปิดใช้งาน</span>
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Message Template</label>
+            <textarea id="message-on_credited_success-template" class="form-textarea" rows="4" placeholder="เติมเครดิตสำเร็จ..."></textarea>
+            <small class="form-hint">ตัวแปรที่ใช้ได้: {amount}, {balance}, {name}, {date}</small>
+          </div>
+          
+          <div class="form-actions">
+            <button type="button" id="preview-on_credited_success-btn" class="btn btn-secondary">Preview</button>
+            <button type="button" id="test-on_credited_success-btn" class="btn btn-secondary">Test Send</button>
+          </div>
+        </div>
+        
+        <hr class="section-divider">
+        
+        <!-- On Credited Duplicate -->
+        <div class="message-template-section">
+          <h3 class="section-title">เมื่อสลิปซ้ำ</h3>
+          
+          <div class="form-group">
+            <label class="switch">
+              <input type="checkbox" id="message-on_credited_duplicate-enabled">
+              <span class="switch-slider"></span>
+              <span class="switch-label">เปิดใช้งาน</span>
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Message Template</label>
+            <textarea id="message-on_credited_duplicate-template" class="form-textarea" rows="4" placeholder="สลิปนี้ถูกใช้งานแล้ว..."></textarea>
+            <small class="form-hint">ตัวแปรที่ใช้ได้: {name}, {date}</small>
+          </div>
+          
+          <div class="form-actions">
+            <button type="button" id="preview-on_credited_duplicate-btn" class="btn btn-secondary">Preview</button>
+            <button type="button" id="test-on_credited_duplicate-btn" class="btn btn-secondary">Test Send</button>
+          </div>
+        </div>
+        
+        <!-- Save All -->
+        <div class="form-actions" style="margin-top: var(--spacing-6);">
+          <button type="button" id="save-messages-btn" class="btn btn-primary">Save All Messages</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+  
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- JavaScript -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/message.js"></script>
+</body>
+</html>

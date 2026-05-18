@@ -1,0 +1,121 @@
+.reply-page {
+  display: none;
+}
+
+.reply-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+  margin-top: var(--space-md);
+}
+
+.reply-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.reply-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-md);
+}
+
+.reply-tenant-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-md);
+}
+
+.reply-tenant-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.reply-tenant-title h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.reply-lineoa-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.reply-lineoa-item {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.reply-lineoa-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.reply-lineoa-meta {
+  font-size: 0.75rem;
+  color: var(--color-gray-500);
+  font-family: var(--font-mono);
+}
+
+.reply-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.reply-setting-full {
+  grid-column: 1 / -1;
+}
+
+.reply-color-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.reply-color-row input[type='color'] {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+}
+
+.reply-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.page-nav-btn {
+  border: 1px solid var(--color-gray-300);
+  background: var(--color-white);
+  color: var(--color-gray-700);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.page-nav-btn.active {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}

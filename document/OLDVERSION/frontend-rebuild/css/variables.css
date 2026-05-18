@@ -1,0 +1,33 @@
+/* Auto Deposit System - Design Variables */
+:root {
+  /* Colors */
+  --bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface-soft: #f1f4fb;
+  --text: #1f2a44;
+  --muted: #64748b;
+  --border: #dbe3f1;
+  --primary: #2859d6;
+  --primary-soft: #e7efff;
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  
+  /* Typography */
+  --font-xs: 12px;
+  --font-sm: 13px;
+  --font-base: 14px;
+  --font-md: 16px;
+  --font-lg: 18px;
+  --font-xl: 22px;
+}
