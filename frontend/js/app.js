@@ -1071,7 +1071,18 @@ async function deletePendingItem(transactionId) {
   });
 }
 
-async function creditPendingItem(transactionId) {
+async function creditPendingItem(transactionId, event) {
+  const btn = event?.currentTarget;
+  const originalHtml = btn ? btn.innerHTML : '';
+
+  if (btn) {
+    if (btn.dataset.loading === '1') return;
+    btn.dataset.loading = '1';
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="spin-icon"></i> กำลังเติม...';
+    lucide.createIcons();
+  }
+
   try {
     const response = await api.creditPendingTransaction(transactionId);
 
@@ -1085,6 +1096,12 @@ async function creditPendingItem(transactionId) {
     await loadPendingTransactions();
   } catch (error) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.dataset.loading = '0';
+      btn.innerHTML = originalHtml;
+      lucide.createIcons();
+    }
   }
 }
 
@@ -2573,7 +2590,7 @@ function renderScanLogItemHTML(item) {
   const creditActionHtml = canWithdraw
     ? `<button class="pending-credit-btn pending-credit-btn-withdraw" onclick="withdrawPendingCredit('${item.id}')" title="ดึงเครดิตกลับ">ดึงเครดิตกลับ</button>`
     : (canCredit
-        ? `<button class="pending-credit-btn" onclick="creditPendingItem('${item.id}')" title="เติมเครดิต">เติมเครดิต</button>`
+        ? `<button class="pending-credit-btn" onclick="creditPendingItem('${item.id}', event)" title="เติมเครดิต">เติมเครดิต</button>`
         : '');
   return `
     <div class="pending-item" data-item-id="${item.id}" data-tenant-id="${item.tenant_id}">
