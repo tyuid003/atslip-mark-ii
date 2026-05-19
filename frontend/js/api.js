@@ -267,6 +267,12 @@ class API {
     });
   }
 
+  async genMemberCode(tenantId, userId) {
+    return this.request(
+      `/api/users/gen-membercode?tenant_id=${encodeURIComponent(tenantId)}&user_id=${encodeURIComponent(userId)}`
+    );
+  }
+
   async creditPendingTransaction(transactionId, payload = {}) {
     return this.request(`/api/pending-transactions/${transactionId}/credit`, {
       method: 'POST',

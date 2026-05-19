@@ -81,3 +81,91 @@ export async function handleUserSearch(
     return errorResponse(error.message, 500);
   }
 }
+
+/**
+ * GET /api/users/gen-membercode?tenant_id=<id>&user_id=<admin_user_id>
+ * Generate (or fetch existing) memberCode for a non-member user via Admin API.
+ * Returns { memberCode, fullname, username } so the frontend can use it immediately.
+ */
+export async function handleGenMemberCode(
+  env: Env,
+  request: Request
+): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const tenantId = url.searchParams.get('tenant_id');
+    const userId = url.searchParams.get('user_id');
+
+    if (!tenantId) return errorResponse('tenant_id is required', 400);
+    if (!userId) return errorResponse('user_id is required', 400);
+
+    // Get tenant and session
+    const row = await env.DB.prepare(
+      `SELECT t.admin_api_url, s.session_token
+       FROM tenants t
+       LEFT JOIN admin_sessions s ON s.tenant_id = t.id AND s.expires_at > ?
+       WHERE t.id = ? AND t.status = 'active'
+       LIMIT 1`
+    )
+      .bind(Math.floor(Date.now() / 1000), tenantId)
+      .first<{ admin_api_url: string; session_token: string }>();
+
+    if (!row?.admin_api_url) return errorResponse('Tenant not found', 404);
+    if (!row?.session_token) return errorResponse('Admin session expired. Please login again.', 401);
+
+    const genUrl = `${row.admin_api_url}/api/admin/gen-membercode/${encodeURIComponent(userId)}`;
+    console.log('[GenMemberCode] Calling:', genUrl);
+
+    const genResponse = await fetch(genUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${row.session_token}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    const rawText = await genResponse.text();
+    console.log('[GenMemberCode] Raw response status:', genResponse.status, 'body:', rawText);
+
+    if (!genResponse.ok) {
+      return errorResponse(`gen-membercode failed: ${genResponse.status} - ${rawText}`, 502);
+    }
+
+    let raw: any = null;
+    try { raw = JSON.parse(rawText); } catch { raw = rawText; }
+
+    // Extract memberCode from any known response shape
+    const memberCode = extractMemberCode(raw);
+    if (!memberCode) {
+      console.error('[GenMemberCode] Cannot extract memberCode from:', rawText);
+      return errorResponse('gen-membercode returned no memberCode. Raw: ' + rawText, 502);
+    }
+
+    console.log('[GenMemberCode] ✅ memberCode:', memberCode);
+    return successResponse({ memberCode, raw });
+  } catch (error: any) {
+    console.error('[GenMemberCode] Error:', error);
+    return errorResponse(error.message, 500);
+  }
+}
+
+function extractMemberCode(raw: any): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  const candidates = [
+    raw.memberCode,
+    raw.member_code,
+    raw.username,
+    raw.user,
+    raw.data?.memberCode,
+    raw.data?.member_code,
+    raw.data?.username,
+    raw.data?.user,
+    raw.result,
+    raw.value,
+  ];
+  for (const v of candidates) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}

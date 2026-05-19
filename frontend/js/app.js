@@ -1388,7 +1388,7 @@ async function selectUser(indexOrId, fallbackName) {
     return;
   }
 
-  // New flow: indexOrId เป็น index ของ allUsers; fallback ถ้ามี id แบบ legacy
+  // Resolve full user object from cache
   let user = null;
   if (typeof indexOrId === 'number' && Array.isArray(window.__userSearchResults)) {
     user = window.__userSearchResults[indexOrId] || null;
@@ -1396,20 +1396,46 @@ async function selectUser(indexOrId, fallbackName) {
 
   const fullname = (user?.fullname || user?.username || fallbackName || '').toString();
   const username = (user?.username || '').toString();
-  const memberCode = (user?.memberCode || '').toString();
+  let memberCode = (user?.memberCode || '').toString().trim();
   const adminUserId = user?.id ? String(user.id) : '';
   const category = user?.category || 'member';
 
-  // ส่ง matched_user_id เป็น memberCode ถ้ามี; ถ้าไม่มีให้ backend ไป resolve จาก admin id
+  console.log('[Manual Match] User selected:', { adminUserId, memberCode, username, fullname, category });
+
+  // ===== ถ้า non-member และยังไม่มี memberCode: gen-membercode ก่อน =====
+  if ((category === 'non-member' || !memberCode) && adminUserId && currentSearchTenantId) {
+    addNotification('⏳ กำลังสร้างรหัสสมาชิก...');
+    try {
+      const genResult = await api.genMemberCode(currentSearchTenantId, adminUserId);
+      const generatedCode = genResult?.data?.memberCode || '';
+      if (generatedCode) {
+        memberCode = generatedCode;
+        console.log('[Manual Match] ✅ Got memberCode from gen-membercode:', memberCode);
+      } else {
+        console.error('[Manual Match] gen-membercode returned no code. Raw:', genResult);
+        addNotification('❌ ไม่สามารถสร้างรหัสสมาชิกได้: ไม่พบ memberCode ในผลลัพธ์');
+        return;
+      }
+    } catch (genError) {
+      console.error('[Manual Match] gen-membercode error:', genError);
+      addNotification('❌ ไม่สามารถสร้างรหัสสมาชิกได้: ' + (genError.message || genError));
+      return;
+    }
+  }
+
+  // memberCode พร้อมแล้ว (หรือเป็น member ที่มีอยู่แล้ว)
   const matchedUserId = memberCode || adminUserId || username || '';
 
+  if (!matchedUserId) {
+    addNotification('❌ ไม่พบ memberCode หรือ id สำหรับผู้ใช้นี้');
+    return;
+  }
+
   try {
-    console.log('[Manual Match] Attempting to match transaction:', {
+    console.log('[Manual Match] Sending match:', {
       transactionId: currentSearchTransactionId,
       matchedUserId,
       memberCode,
-      adminUserId,
-      username,
       fullname,
       category,
       tenantId: currentSearchTenantId,
@@ -1430,15 +1456,13 @@ async function selectUser(indexOrId, fallbackName) {
 
     console.log('[Manual Match] Success:', result);
     const finalUsername = result?.data?.transaction?.matched_username || fullname;
-    addNotification(`✅ จับคู่กับ ${finalUsername} สำเร็จ`);
+    addNotification(`✅ จับคู่กับ ${finalUsername} (${matchedUserId}) สำเร็จ`);
     closeUserSearch();
     await loadPendingTransactions();
-    
+
   } catch (error) {
     console.error('[Manual Match] Error:', error);
-    
-    const errorMsg = error.message || '';
-    addNotification('❌ ไม่สามารถจับคู่ได้: ' + errorMsg);
+    addNotification('❌ ไม่สามารถจับคู่ได้: ' + (error.message || error));
   }
 }
 

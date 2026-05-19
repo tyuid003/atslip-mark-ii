@@ -9,7 +9,7 @@ import { AdminLoginAPI } from './api/admin-login';
 import { BankRefreshService } from './services/bank-refresh.service';
 import { ScanAPI } from './api/scan';
 import { BankAccountsAPI } from './api/bank-accounts';
-import { handleUserSearch } from './api/user-search';
+import { handleUserSearch, handleGenMemberCode } from './api/user-search';
 import { handleMatchPendingTransaction } from './api/match-pending';
 import {
   handleCreditPendingTransaction,
@@ -261,6 +261,11 @@ export default {
     // GET /api/users/search?q=<term>&category=<member|non-member> - ค้นหาผู้ใช้
     if (method === 'GET' && pathname === '/api/users/search') {
       return await handleUserSearch(env, request);
+    }
+
+    // GET /api/users/gen-membercode?tenant_id=&user_id= - gen/fetch memberCode สำหรับ non-member
+    if (method === 'GET' && pathname === '/api/users/gen-membercode') {
+      return await handleGenMemberCode(env, request);
     }
 
     // ============================================================
