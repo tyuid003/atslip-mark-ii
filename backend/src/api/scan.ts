@@ -444,9 +444,9 @@ export const ScanAPI = {
             receiverNameTh || receiverNameEn || '',
             receiverAccount,
             JSON.stringify(slip),
-            matchedUser?.memberCode || matchedUser?.id || null,
+            matchedUser?.memberCode || matchedUser?.username || null,
             matchedUser?.fullname || null,
-            matchedUser ? 'matched' : 'pending',
+            (matchedUser && (matchedUser?.memberCode || matchedUser?.username)) ? 'matched' : 'pending',
             source,
             now,
             now
@@ -472,7 +472,7 @@ export const ScanAPI = {
               team_id: matchedTenant.team_id,
               amount: slip.amount.amount,
               sender_name: senderNameTh || senderNameEn || 'Unknown',
-              status: matchedUser ? 'matched' : 'pending',
+              status: (matchedUser && (matchedUser?.memberCode || matchedUser?.username)) ? 'matched' : 'pending',
               created_at: now,
             },
           };
@@ -550,7 +550,7 @@ export const ScanAPI = {
                     name: senderNameTh || senderNameEn || 'Unknown',
                     matched: false,
                   },
-              status: matchedUser ? 'matched' : 'pending',
+              status: (matchedUser && (matchedUser?.memberCode || matchedUser?.username)) ? 'matched' : 'pending',
               credit: {
                 attempted: false,
                 success: false,

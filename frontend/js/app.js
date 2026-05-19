@@ -1082,10 +1082,7 @@ async function creditPendingItem(transactionId, btnOrEvent) {
     if (btn.dataset.loading === '1') return;
     btn.dataset.loading = '1';
     btn.disabled = true;
-    btn.innerHTML = '<span class="spin-icon-wrap"><i data-lucide="loader-2"></i></span>';
-    if (window.lucide && typeof lucide.createIcons === 'function') {
-      lucide.createIcons();
-    }
+    btn.innerHTML = '<span style="display:inline-block;width:0.9em;height:0.9em;border:2px solid currentColor;border-radius:50%;border-top-color:transparent;animation:spin-captcha 0.8s linear infinite;vertical-align:middle;box-sizing:border-box"></span>';
   }
 
   try {
@@ -1405,8 +1402,15 @@ async function selectUser(indexOrId, fallbackName) {
 
   console.log('[Manual Match] User selected:', { adminUserId, memberCode, username, fullname, category });
 
-  // ===== ถ้า non-member และยังไม่มี memberCode: gen-membercode ก่อน =====
-  if ((category === 'non-member' || !memberCode) && adminUserId && currentSearchTenantId) {
+  // ===== ถ้า non-member และยังไม่มี memberCode: ลอง username ก่อน แล้วค่อย gen-membercode =====
+  if ((category === 'non-member' || !memberCode) && username) {
+    // username มักเป็น identifier ที่ใช้เป็น memberCode ได้ในหลายระบบ
+    memberCode = username;
+    console.log('[Manual Match] Using username as memberCode fallback:', username);
+  }
+
+  // ถ้ายังไม่มี memberCode → ลอง gen-membercode API
+  if (!memberCode && adminUserId && currentSearchTenantId) {
     addNotification('⏳ กำลังสร้างรหัสสมาชิก...');
     try {
       const genResult = await api.genMemberCode(currentSearchTenantId, adminUserId);
@@ -1415,22 +1419,19 @@ async function selectUser(indexOrId, fallbackName) {
         memberCode = generatedCode;
         console.log('[Manual Match] ✅ Got memberCode from gen-membercode:', memberCode);
       } else {
-        console.error('[Manual Match] gen-membercode returned no code. Raw:', genResult);
-        addNotification('❌ ไม่สามารถสร้างรหัสสมาชิกได้: ไม่พบ memberCode ในผลลัพธ์');
-        return;
+        console.warn('[Manual Match] gen-membercode returned no code. Raw:', genResult);
+        // ไม่ return → ใช้ adminUserId เป็น fallback สุดท้าย
       }
     } catch (genError) {
-      console.error('[Manual Match] gen-membercode error:', genError);
-      addNotification('❌ ไม่สามารถสร้างรหัสสมาชิกได้: ' + (genError.message || genError));
-      return;
+      console.warn('[Manual Match] gen-membercode failed, continuing:', genError.message || genError);
     }
   }
 
-  // memberCode พร้อมแล้ว (หรือเป็น member ที่มีอยู่แล้ว)
-  const matchedUserId = memberCode || adminUserId || username || '';
+  // memberCode พร้อมแล้ว — ห้ามใช้ adminUserId (numeric) เพราะจะเติมเครดิตผิดคน
+  const matchedUserId = memberCode || '';
 
   if (!matchedUserId) {
-    addNotification('❌ ไม่พบ memberCode หรือ id สำหรับผู้ใช้นี้');
+    addNotification('❌ ไม่พบ memberCode หรือ username สำหรับผู้ใช้นี้ กรุณาติดต่อแอดมิน');
     return;
   }
 
