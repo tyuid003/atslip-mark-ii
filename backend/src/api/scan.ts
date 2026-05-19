@@ -348,6 +348,41 @@ export const ScanAPI = {
             category: matchedUser.category,
             bankAccount: matchedUser.bankAccount || matchedUser.bank_account || 'N/A',
           });
+
+          // 🧾 ถ้าเป็น non-member หรือไม่มี memberCode → gen memberCode ทันที
+          // เพื่อให้ matched_user_id ถูกเก็บเป็น memberCode ที่ใช้เติมเครดิตได้จริง
+          const needGen =
+            !String(matchedUser.memberCode || '').trim() ||
+            String(matchedUser.category || '').toLowerCase() === 'non-member';
+
+          if (needGen) {
+            log('[ScanAPI] 🧾 Auto-resolving memberCode for non-member matched user...');
+            try {
+              const resolved = await CreditService.resolveMemberCodeForUser(
+                matchedTenant.admin_api_url,
+                sessionToken,
+                {
+                  id: matchedUser.id,
+                  memberCode: matchedUser.memberCode || '',
+                  fullname: matchedUser.fullname || '',
+                },
+                log
+              );
+
+              if (resolved.success && resolved.memberCode) {
+                matchedUser.memberCode = resolved.memberCode;
+                if (resolved.user) {
+                  matchedUser.fullname = (resolved.user as any).fullname || matchedUser.fullname;
+                  matchedUser.username = (resolved.user as any).username || matchedUser.username;
+                }
+                log('[ScanAPI] ✅ memberCode resolved & attached:', resolved.memberCode);
+              } else {
+                log('[ScanAPI] ⚠️ Cannot auto-resolve memberCode:', resolved.message);
+              }
+            } catch (resolveError: any) {
+              log('[ScanAPI] ⚠️ resolveMemberCodeForUser threw:', resolveError?.message || resolveError);
+            }
+          }
         } else {
           log('[ScanAPI] ❌ No matching user found');
         }
@@ -669,7 +704,7 @@ export const ScanAPI = {
       return successResponse({
         debug: debugLogs,
         transaction_id: transactionId,
-        matched_user_id: matchedUser?.id || null,
+        matched_user_id: matchedUser?.memberCode || matchedUser?.id || null,
         matched_username: matchedUser?.fullname || null,
         tenant: {
           id: matchedTenant.id,
