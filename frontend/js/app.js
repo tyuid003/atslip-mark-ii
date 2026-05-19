@@ -1079,8 +1079,10 @@ async function creditPendingItem(transactionId, event) {
     if (btn.dataset.loading === '1') return;
     btn.dataset.loading = '1';
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="spin-icon"></i>';
-    lucide.createIcons();
+    btn.innerHTML = '<span class="spin-icon-wrap"><i data-lucide="loader-2"></i></span>';
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
   }
 
   try {

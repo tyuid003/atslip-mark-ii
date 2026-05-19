@@ -710,6 +710,20 @@ body {
   animation: spin-captcha 1s linear infinite;
 }
 
+/* Wrapper-based spinner: works even when <i data-lucide=...> is replaced by <svg> */
+.spin-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: spin-captcha 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+.spin-icon-wrap > svg,
+.spin-icon-wrap > i {
+  width: 1em;
+  height: 1em;
+}
+
 /* ============================================================
    BANK ACCOUNTS LIST
    ============================================================ */
