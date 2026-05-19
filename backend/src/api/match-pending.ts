@@ -54,9 +54,20 @@ export async function handleMatchPendingTransaction(
     const incomingMemberCode = String(incomingUser.memberCode || '').trim();
     const tenantIdForResolve = String(body.tenant_id || '').trim();
 
+    // Debug: log full payload received
+    console.log('[Manual Match] 📥 Incoming payload:', JSON.stringify({
+      matched_user_id: body.matched_user_id,
+      matched_username: body.matched_username,
+      tenant_id: body.tenant_id,
+      user: body.user,
+    }));
+    console.log('[Manual Match] Derived: category=', category, 'incomingMemberCode=', incomingMemberCode, 'tenantIdForResolve=', tenantIdForResolve);
+
     const needResolve =
       !!tenantIdForResolve &&
       (category === 'non-member' || !incomingMemberCode);
+
+    console.log('[Manual Match] needResolve=', needResolve);
 
     if (needResolve) {
       const tenant = await env.DB.prepare(
@@ -72,6 +83,8 @@ export async function handleMatchPendingTransaction(
             .bind(tenantIdForResolve, Math.floor(Date.now() / 1000))
             .first<{ session_token: string }>()
         : null;
+
+      console.log('[Manual Match] tenant found=', !!tenant, 'session found=', !!session?.session_token);
 
       if (tenant?.admin_api_url && session?.session_token) {
         const resolveResult = await CreditService.resolveMemberCodeForUser(
@@ -101,7 +114,12 @@ export async function handleMatchPendingTransaction(
           );
         }
       } else {
-        console.warn('[Manual Match] ⚠️ Skip memberCode resolve: missing tenant or session');
+        // ถ้าไม่เจอ tenant หรือ session → block ไม่ให้บันทึก admin id ลง DB
+        console.error('[Manual Match] ❌ Cannot resolve memberCode: tenant or session not found for tenantId=', tenantIdForResolve);
+        return errorResponse(
+          'ไม่พบ session admin หรือข้อมูล tenant กรุณา login ระบบแอดมินใหม่ก่อนจับคู่',
+          401
+        );
       }
     }
 
