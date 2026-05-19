@@ -1324,18 +1324,20 @@ async function performUserSearch(query) {
       return;
     }
     
+    // Cache full user objects so non-member can resolve via backend gen-membercode
+    window.__userSearchResults = allUsers;
+
     // Display results with category headers
     let html = '';
-    
+
     if (memberUsers.length > 0) {
       html += `<div class="user-search-category-header">สมาชิก (${memberUsers.length})</div>`;
-      html += memberUsers.map(user => {
+      html += memberUsers.map((user) => {
+        const idx = allUsers.indexOf(user);
         const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
-        const selectUserId = String(user.memberCode || user.username || user.id || '').replace(/'/g, "\\'");
         const displayUserCode = user.memberCode || user.username || user.id;
-        
         return `
-          <div class="user-result-item" onclick="selectUser('${selectUserId}', '${displayName.replace(/'/g, "\\'")}')">
+          <div class="user-result-item" onclick="selectUser(${idx})">
             <div class="user-result-name">${displayName}</div>
             <div class="user-result-id">รหัส: ${displayUserCode}</div>
             <span class="user-result-category member">สมาชิก</span>
@@ -1343,16 +1345,15 @@ async function performUserSearch(query) {
         `;
       }).join('');
     }
-    
+
     if (nonMemberUsers.length > 0) {
       html += `<div class="user-search-category-header">ไม่ใช่สมาชิก (${nonMemberUsers.length})</div>`;
-      html += nonMemberUsers.map(user => {
+      html += nonMemberUsers.map((user) => {
+        const idx = allUsers.indexOf(user);
         const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
-        const selectUserId = String(user.memberCode || user.username || user.id || '').replace(/'/g, "\\'");
         const displayUserCode = user.memberCode || user.username || user.id;
-        
         return `
-          <div class="user-result-item" onclick="selectUser('${selectUserId}', '${displayName.replace(/'/g, "\\'")}')">
+          <div class="user-result-item" onclick="selectUser(${idx})">
             <div class="user-result-name">${displayName}</div>
             <div class="user-result-id">รหัส: ${displayUserCode}</div>
             <span class="user-result-category non-member">ไม่ใช่สมาชิก</span>
@@ -1373,34 +1374,61 @@ async function performUserSearch(query) {
   }
 }
 
-async function selectUser(userId, userName) {
+async function selectUser(indexOrId, fallbackName) {
   if (!currentSearchTransactionId) {
     addNotification('❌ ไม่พบข้อมูลรายการ');
     closeUserSearch();
     return;
   }
-  
+
   if (!currentSearchTenantId) {
     addNotification('❌ กรุณาเลือกเว็บก่อนจับคู่');
     return;
   }
-  
+
+  // New flow: indexOrId เป็น index ของ allUsers; fallback ถ้ามี id แบบ legacy
+  let user = null;
+  if (typeof indexOrId === 'number' && Array.isArray(window.__userSearchResults)) {
+    user = window.__userSearchResults[indexOrId] || null;
+  }
+
+  const fullname = (user?.fullname || user?.username || fallbackName || '').toString();
+  const username = (user?.username || '').toString();
+  const memberCode = (user?.memberCode || '').toString();
+  const adminUserId = user?.id ? String(user.id) : '';
+  const category = user?.category || 'member';
+
+  // ส่ง matched_user_id เป็น memberCode ถ้ามี; ถ้าไม่มีให้ backend ไป resolve จาก admin id
+  const matchedUserId = memberCode || adminUserId || username || '';
+
   try {
     console.log('[Manual Match] Attempting to match transaction:', {
       transactionId: currentSearchTransactionId,
-      userId: userId,
-      userName: userName,
-      tenantId: currentSearchTenantId
+      matchedUserId,
+      memberCode,
+      adminUserId,
+      username,
+      fullname,
+      category,
+      tenantId: currentSearchTenantId,
     });
-    
+
     const result = await api.matchPendingTransaction(currentSearchTransactionId, {
-      matched_user_id: userId,
-      matched_username: userName,
-      tenant_id: currentSearchTenantId
+      matched_user_id: matchedUserId,
+      matched_username: fullname,
+      tenant_id: currentSearchTenantId,
+      user: {
+        id: adminUserId,
+        memberCode,
+        username,
+        fullname,
+        category,
+      },
     });
-    
+
     console.log('[Manual Match] Success:', result);
-    addNotification(`✅ จับคู่กับ ${userName} สำเร็จ`);
+    const finalUsername = result?.data?.transaction?.matched_username || fullname;
+    addNotification(`✅ จับคู่กับ ${finalUsername} สำเร็จ`);
     closeUserSearch();
     await loadPendingTransactions();
     

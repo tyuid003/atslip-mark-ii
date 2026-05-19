@@ -1,9 +1,15 @@
 import type { Env } from '../types';
 import { successResponse, errorResponse } from '../utils/helpers';
+import { CreditService } from '../services/credit.service';
 
 /**
  * PATCH /api/pending-transactions/:id/match
- * Manually match a pending transaction with a user
+ * Manually match a pending transaction with a user.
+ *
+ * เพิ่มเติม (Non-member flow):
+ * - ถ้า body.user.category === 'non-member' หรือ memberCode ว่าง จะเรียก gen-membercode
+ *   (ผ่าน CreditService.resolveMemberCodeForUser) แล้วเก็บ memberCode ที่ได้ลง matched_user_id
+ *   เพื่อให้ตอนกดเติมเครดิตใช้ memberCode ที่ถูกต้องทันที
  */
 export async function handleMatchPendingTransaction(
   env: Env,
@@ -15,6 +21,13 @@ export async function handleMatchPendingTransaction(
       matched_user_id?: string;
       matched_username?: string;
       tenant_id?: string;
+      user?: {
+        id?: string;
+        memberCode?: string;
+        username?: string;
+        fullname?: string;
+        category?: string;
+      };
     };
 
     if (!body.matched_user_id || !body.matched_username) {
@@ -32,6 +45,66 @@ export async function handleMatchPendingTransaction(
       return errorResponse('Transaction not found', 404);
     }
 
+    // ===== Resolve memberCode (สำหรับ non-member / memberCode ว่าง) =====
+    let finalMatchedUserId = String(body.matched_user_id || '').trim();
+    let finalMatchedUsername = String(body.matched_username || '').trim();
+
+    const incomingUser = body.user || {};
+    const category = String(incomingUser.category || '').toLowerCase();
+    const incomingMemberCode = String(incomingUser.memberCode || '').trim();
+    const tenantIdForResolve = String(body.tenant_id || '').trim();
+
+    const needResolve =
+      !!tenantIdForResolve &&
+      (category === 'non-member' || !incomingMemberCode);
+
+    if (needResolve) {
+      const tenant = await env.DB.prepare(
+        `SELECT admin_api_url FROM tenants WHERE id = ? AND status = 'active' LIMIT 1`
+      )
+        .bind(tenantIdForResolve)
+        .first<{ admin_api_url: string }>();
+
+      const session = tenant
+        ? await env.DB.prepare(
+            `SELECT session_token FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
+          )
+            .bind(tenantIdForResolve, Math.floor(Date.now() / 1000))
+            .first<{ session_token: string }>()
+        : null;
+
+      if (tenant?.admin_api_url && session?.session_token) {
+        const resolveResult = await CreditService.resolveMemberCodeForUser(
+          tenant.admin_api_url,
+          session.session_token,
+          {
+            id: incomingUser.id || finalMatchedUserId,
+            memberCode: incomingMemberCode,
+            fullname: incomingUser.fullname || finalMatchedUsername,
+          },
+          console.log
+        );
+
+        if (resolveResult.success && resolveResult.memberCode) {
+          finalMatchedUserId = resolveResult.memberCode;
+          const resolvedName =
+            (resolveResult.user as any)?.fullname ||
+            (resolveResult.user as any)?.username ||
+            finalMatchedUsername;
+          if (resolvedName) finalMatchedUsername = String(resolvedName);
+          console.log('[Manual Match] ✅ Resolved memberCode for non-member:', finalMatchedUserId);
+        } else {
+          console.warn('[Manual Match] ⚠️ Cannot resolve memberCode:', resolveResult.message);
+          return errorResponse(
+            resolveResult.message || 'ไม่สามารถสร้าง memberCode สำหรับผู้ใช้รายนี้ได้',
+            400
+          );
+        }
+      } else {
+        console.warn('[Manual Match] ⚠️ Skip memberCode resolve: missing tenant or session');
+      }
+    }
+
     // Update matched info (and tenant_id if provided — ใช้เมื่อผู้ใช้เลือก tenant ใหม่ตอนจับคู่ใหม่)
     let result;
     if (body.tenant_id) {
@@ -43,7 +116,7 @@ export async function handleMatchPendingTransaction(
              status = 'matched'
          WHERE id = ?`
       )
-        .bind(body.matched_user_id, body.matched_username, body.tenant_id, transactionId)
+        .bind(finalMatchedUserId, finalMatchedUsername, body.tenant_id, transactionId)
         .run();
     } else {
       result = await env.DB.prepare(
@@ -53,7 +126,7 @@ export async function handleMatchPendingTransaction(
              status = 'matched'
          WHERE id = ?`
       )
-        .bind(body.matched_user_id, body.matched_username, transactionId)
+        .bind(finalMatchedUserId, finalMatchedUsername, transactionId)
         .run();
     }
 
@@ -61,7 +134,7 @@ export async function handleMatchPendingTransaction(
       return errorResponse('Failed to update transaction', 500);
     }
 
-    console.log(`[Manual Match] Transaction ${transactionId} matched to ${body.matched_username} (${body.matched_user_id})` + (body.tenant_id ? ` → tenant ${body.tenant_id}` : ''));
+    console.log(`[Manual Match] Transaction ${transactionId} matched to ${finalMatchedUsername} (${finalMatchedUserId})` + (body.tenant_id ? ` → tenant ${body.tenant_id}` : ''));
 
     // Return updated transaction (includes tenant_name)
     const updated = await env.DB.prepare(
@@ -87,8 +160,8 @@ export async function handleMatchPendingTransaction(
           data: {
             id: transactionId,
             status: 'matched',
-            matched_user_id: body.matched_user_id,
-            matched_username: body.matched_username,
+            matched_user_id: finalMatchedUserId,
+            matched_username: finalMatchedUsername,
             tenant_id: body.tenant_id || (updated as any)?.tenant_id,
             tenant_name: (updated as any)?.tenant_name || null,
             updated_at: Math.floor(Date.now() / 1000),

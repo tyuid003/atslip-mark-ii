@@ -260,7 +260,9 @@ class API {
       method: 'PATCH',
       body: JSON.stringify({
         matched_user_id: userData.matched_user_id,
-        matched_username: userData.matched_username
+        matched_username: userData.matched_username,
+        tenant_id: userData.tenant_id,
+        user: userData.user,
       }),
     });
   }
