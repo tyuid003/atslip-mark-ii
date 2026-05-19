@@ -1079,7 +1079,7 @@ async function creditPendingItem(transactionId, event) {
     if (btn.dataset.loading === '1') return;
     btn.dataset.loading = '1';
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="spin-icon"></i> กำลังเติม...';
+    btn.innerHTML = '<i data-lucide="loader-2" class="spin-icon"></i>';
     lucide.createIcons();
   }
 

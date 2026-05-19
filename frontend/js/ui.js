@@ -321,7 +321,7 @@ const UI = {
         const creditActionHtml = canWithdraw
           ? `<button class="pending-credit-btn pending-credit-btn-withdraw" onclick="withdrawPendingCredit('${item.id}')" title="ดึงเครดิตกลับ">ดึงเครดิตกลับ</button>`
           : (canCredit
-              ? `<button class="pending-credit-btn" onclick="creditPendingItem('${item.id}')" title="เติมเครดิต">เติมเครดิต</button>`
+              ? `<button class="pending-credit-btn" onclick="creditPendingItem('${item.id}', event)" title="เติมเครดิต">เติมเครดิต</button>`
               : '');
 
         return `
