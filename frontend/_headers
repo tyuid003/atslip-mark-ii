@@ -1,14 +1,14 @@
-/*
-  Cache-Control: public, max-age=3600
+/
+  Cache-Control: no-store, no-cache, must-revalidate
 
 /api/*
   Cache-Control: no-store
 
 /js/*.js
-  Cache-Control: public, max-age=300
+  Cache-Control: no-store, no-cache, must-revalidate
 
 /css/*.css
-  Cache-Control: public, max-age=3600
+  Cache-Control: no-store, no-cache, must-revalidate
 
 /*.html
-  Cache-Control: public, max-age=0, must-revalidate
+  Cache-Control: no-store, no-cache, must-revalidate

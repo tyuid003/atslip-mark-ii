@@ -14,7 +14,9 @@
   <link rel="stylesheet" href="css/global.css?v=1.1">
   <link rel="stylesheet" href="css/components/tenant-card.css">
   <link rel="stylesheet" href="css/components/toast.css">
+  <link rel="stylesheet" href="css/components/api-keys.css?v=1">
   <link rel="stylesheet" href="css/components/reply-message.css">
+  <link rel="stylesheet" href="css/telegram.css?v=1.1">
   
   <!-- Lucide Icons (Open Source) -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -31,22 +33,52 @@
         <span id="teamBadge" class="team-badge" style="display: none;"></span>
       </div>
       <div class="header-actions">
-        <button id="goReplyPageBtn" class="page-nav-btn" onclick="goToReplyMessagePage()" title="ตั้งค่าข้อความตอบกลับ LINE OA">
-          ตั้งค่าการตอบกลับ
-        </button>
-        <button class="notification-btn" onclick="toggleNotificationDropdown()" aria-label="การแจ้งเตือน">
-          <i data-lucide="bell"></i>
-          <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
-        </button>
-        <div id="notificationDropdown" class="notification-dropdown" style="display: none;">
-          <div class="notification-dropdown-header">
-            <h4>การแจ้งเตือน</h4>
-            <button class="toast-toggle-btn" onclick="toggleToastNotifications()" aria-label="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ" title="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ">
-              <i id="toastToggleIcon" data-lucide="bell"></i>
+        <!-- 3-dot menu (Telegram version): รวมการตอบกลับ + การแจ้งเตือน + การเชื่อมต่อ -->
+        <div class="kebab-menu-wrap">
+          <button class="kebab-menu-btn" id="kebabMenuBtn" onclick="toggleKebabMenu()" aria-label="เมนู" title="เมนู">
+            <i data-lucide="more-vertical"></i>
+            <span id="kebabNotifBadge" class="notification-badge" style="display: none;">0</span>
+          </button>
+          <div id="kebabMenuDropdown" class="kebab-menu-dropdown" style="display: none;">
+            <button class="kebab-menu-item" onclick="kebabOpenReply()">
+              <i data-lucide="message-square"></i>
+              <span>ตั้งค่าการตอบกลับ</span>
+            </button>
+            <button class="kebab-menu-item" onclick="kebabOpenNotifications()">
+              <i data-lucide="bell"></i>
+              <span>การแจ้งเตือน</span>
+              <span id="kebabNotifInlineBadge" class="notification-badge inline" style="display: none;">0</span>
+            </button>
+            <button class="kebab-menu-item" onclick="kebabOpenTelegram()">
+              <i data-lucide="send"></i>
+              <span>การเชื่อมต่อ Telegram</span>
+            </button>
+            <button class="kebab-menu-item" onclick="kebabOpenAntidup()">
+              <i data-lucide="shield-check"></i>
+              <span>ตรวจสอบรายการซ้ำ</span>
+            </button>
+            <button class="kebab-menu-item" onclick="kebabOpenApiKeys()">
+              <i data-lucide="key-round"></i>
+              <span>ตั้งค่า API Keys</span>
             </button>
           </div>
-          <div id="notificationList" class="notification-list"></div>
         </div>
+
+        <!-- Notification dropdown (เปิดผ่านเมนูสามจุด) — ห่อใน wrapper relative ให้ position ถูกต้อง -->
+        <div class="notification-wrap" style="position: relative;">
+          <div id="notificationDropdown" class="notification-dropdown" style="display: none;">
+            <div class="notification-dropdown-header">
+              <h4>การแจ้งเตือน</h4>
+              <button class="toast-toggle-btn" onclick="toggleToastNotifications()" aria-label="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ" title="เปิด/ปิดการแจ้งเตือนแบบป๊อปอัพ">
+                <i id="toastToggleIcon" data-lucide="bell"></i>
+              </button>
+            </div>
+            <div id="notificationList" class="notification-list"></div>
+          </div>
+        </div>
+
+        <!-- legacy hidden notification button (compat — เก่าใช้ id นี้) -->
+        <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
       </div>
     </div>
   </header>
@@ -96,13 +128,49 @@
           <i data-lucide="loader" id="uploadLoadingIcon" style="display: none; margin-left: auto;"></i>
         </div>
         <div class="card-body">
-          <div class="upload-dropzone" id="slipDropzone">
-            <i data-lucide="upload-cloud"></i>
-            <p>ลากไฟล์สลิปมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
-            <input id="slipUploadInput" type="file" accept="image/*" hidden>
-            <button class="btn btn-secondary" onclick="openSlipPicker()">เลือกไฟล์</button>
+          <!-- Two paste-focus zones, one per provider -->
+          <div class="provider-upload-list" id="providerUploadList">
+            <!-- EasySlip -->
+            <div class="provider-upload-row" data-service="easyslip">
+              <div class="provider-upload-head">
+                <span class="provider-badge provider-badge-easyslip">EasySlip</span>
+                <span class="provider-upload-label">เลือกรูปภาพ</span>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="openProviderPicker('easyslip')">เลือกไฟล์</button>
+                <input type="file" accept="image/*" hidden id="slipUploadInput-easyslip">
+              </div>
+              <div
+                class="provider-paste-zone"
+                id="slipDropzone-easyslip"
+                data-service="easyslip"
+                tabindex="0"
+                role="button"
+                aria-label="คลิกเพื่อโฟกัส แล้ววางรูปสลิปด้วย Ctrl+V (EasySlip)"
+              >
+                <span class="provider-paste-hint">คลิกแล้วกด Ctrl+V เพื่อวางรูปสลิป หรือลากไฟล์มาวาง</span>
+              </div>
+            </div>
+
+            <!-- Slip2Go -->
+            <div class="provider-upload-row" data-service="slip2go">
+              <div class="provider-upload-head">
+                <span class="provider-badge provider-badge-slip2go">Slip2Go</span>
+                <span class="provider-upload-label">เลือกรูปภาพ</span>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="openProviderPicker('slip2go')">เลือกไฟล์</button>
+                <input type="file" accept="image/*" hidden id="slipUploadInput-slip2go">
+              </div>
+              <div
+                class="provider-paste-zone"
+                id="slipDropzone-slip2go"
+                data-service="slip2go"
+                tabindex="0"
+                role="button"
+                aria-label="คลิกเพื่อโฟกัส แล้ววางรูปสลิปด้วย Ctrl+V (Slip2Go)"
+              >
+                <span class="provider-paste-hint">คลิกแล้วกด Ctrl+V เพื่อวางรูปสลิป หรือลากไฟล์มาวาง</span>
+              </div>
+            </div>
           </div>
-          <p id="slipUploadHint" class="form-help mt-2">รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG)</p>
+          <p id="slipUploadHint" class="form-help mt-2">รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG) — เลือกบริการที่ต้องการแล้ววางรูปสลิปลงในช่องของบริการนั้น</p>
         </div>
       </section>
 
@@ -659,13 +727,143 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
+  <!-- ============================================================
+       TELEGRAM CONNECTION MODAL
+       ============================================================ -->
+  <div id="telegramConnModal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i data-lucide="send"></i> การเชื่อมต่อ Telegram</h3>
+        <button class="modal-close" onclick="closeTelegramConnModal()" aria-label="ปิด">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="tgConnStatus" class="tg-status tg-status-loading">กำลังโหลด...</div>
+
+        <div class="form-group">
+          <label for="tgGroupId">Group ID
+            <span class="hint">(เช่น <code>-1001234567890</code>)</span>
+          </label>
+          <input type="text" id="tgGroupId" class="form-control" placeholder="-100xxxxxxxxxx" autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label for="tgBotToken">Bot Token
+            <span class="hint">(จาก @BotFather — รูปแบบ <code>12345:ABCDEF...</code>)</span>
+          </label>
+          <input type="password" id="tgBotToken" class="form-control" placeholder="8287141565:AAFs45c..." autocomplete="off" />
+          <button type="button" class="link-btn" onclick="toggleTgTokenVisibility()">
+            <span id="tgTokenToggleLabel">แสดง token</span>
+          </button>
+        </div>
+
+        <div class="tg-webhook-hint" id="tgWebhookHint" style="display:none;">
+          <p style="margin:0 0 4px;">✅ เชื่อมต่อและลงทะเบียน Webhook แล้ว</p>
+          <div class="tg-webhook-url">
+            <code id="tgWebhookUrl"></code>
+            <button type="button" class="link-btn" onclick="copyTgWebhookUrl()">คัดลอก</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeTelegramConnModal()">ยกเลิก</button>
+        <button class="btn btn-danger" id="tgDisconnectBtn" onclick="disconnectTelegram()" style="display:none;">ลบการเชื่อมต่อ</button>
+        <button class="btn" id="tgEnableToggleBtn" onclick="toggleTelegramEnabled()" style="display:none;"></button>
+        <button class="btn btn-primary" id="tgSaveBtn" onclick="saveTelegramConn()">
+          <i data-lucide="save"></i> บันทึก &amp; เชื่อมต่อ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       ANTI-DUPLICATE SETTINGS MODAL
+       ============================================================ -->
+  <div id="antidupModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">ตั้งค่าการตรวจสอบรายการซ้ำ</h3>
+        <button class="modal-close" onclick="closeAntidupModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom:12px;font-size:0.85rem;">
+          เปิดสวิทช์เพื่อให้ระบบตรวจว่าลูกค้าเคยได้รับเครดิตยอดเดียวกันภายใน 1 นาทีไปแล้วหรือยัง ก่อนเติมครั้งใหม่
+        </p>
+        <div id="antidupAccountList">
+          <div class="loading" style="margin:auto;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeAntidupModal()">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       API KEYS MODAL (Multi-provider: EasySlip / Slip2Go)
+       ============================================================ -->
+  <div id="apiKeysModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 720px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i data-lucide="key-round"></i> ตั้งค่า API Keys</h3>
+        <button class="modal-close" onclick="closeApiKeysModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom:12px;font-size:0.85rem;line-height:1.5;">
+          API Key ที่ตั้งที่นี่จะใช้ระดับทีม — <strong>Upload</strong> / <strong>Telegram</strong> จะใช้ key เหล่านี้
+          <span style="color:#888;">(LINE OA ยังคงใช้ key ตามแต่ละเว็บ)</span><br>
+          <strong>Key บนสุด</strong> = ตัวหลักของ service นั้น สามารถลากเลื่อน / ใช้ปุ่มขึ้น-ลง / ลบได้
+        </p>
+
+        <div id="apiKeysList" class="api-keys-list">
+          <div style="padding:20px; text-align:center; color:#888;">กำลังโหลด...</div>
+        </div>
+
+        <hr style="margin: 16px 0;">
+
+        <h4 style="margin: 0 0 8px;">เพิ่ม Key ใหม่</h4>
+        <div class="api-key-add-form">
+          <div class="form-group">
+            <label class="form-label">บริการ</label>
+            <select id="newKeyService" class="form-input">
+              <option value="easyslip">EasySlip</option>
+              <option value="slip2go">Slip2Go</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">ชื่อกำกับ (ไม่บังคับ)</label>
+            <input type="text" id="newKeyLabel" class="form-input" placeholder="เช่น Key หลัก / สำรอง">
+          </div>
+          <div class="form-group">
+            <label class="form-label">API Key / Token</label>
+            <input type="text" id="newKeyToken" class="form-input" placeholder="วาง API Key ที่นี่">
+          </div>
+          <div style="text-align:right;">
+            <button class="btn btn-primary" onclick="addApiKey()" id="addApiKeyBtn">
+              <i data-lucide="plus"></i> เพิ่ม Key
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeApiKeysModal()">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
-  <script src="js/config.js?v=1.4"></script>
-  <script src="js/api.js?v=1.7"></script>
-  <script src="js/ui.js?v=1.5"></script>
+  <script src="js/config.js?v=1.5"></script>
+  <script src="js/api.js?v=1.9"></script>
+  <script src="js/ui.js?v=1.7"></script>
   <script src="js/reply-message.js?v=1.2"></script>
-  <script src="js/app.js?v=1.16"></script>
-  <script src="js/realtime.js?v=1.1"></script>
+  <script src="js/telegram-connect.js?v=1.4"></script>
+  <script src="js/app.js?v=1.20"></script>
+  <script src="js/realtime.js?v=1.2"></script>
   
   <script>
     // Initialize Lucide icons

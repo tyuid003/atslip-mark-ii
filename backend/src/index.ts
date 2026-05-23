@@ -4,6 +4,7 @@ import * as TenantsAPI from './api/tenants';
 import * as LineOAsAPI from './api/lineoas';
 import * as PendingAPI from './api/pending';
 import * as TeamsAPI from './api/teams';
+import { TeamApiKeysAPI } from './api/team-api-keys';
 import { AutoDepositAPI } from './api/auto-deposit';
 import { AdminLoginAPI } from './api/admin-login';
 import { BankRefreshService } from './services/bank-refresh.service';
@@ -22,8 +23,12 @@ import {
   handleUpdateLineMessageSettings,
 } from './api/line-message-settings';
 import { handleLineWebhook } from './api/line-webhook';
+import { handleTelegramWebhook } from './api/telegram-webhook';
+import * as TelegramConnectionsAPI from './api/telegram-connections';
+import { processQueueOnce } from './services/scan-queue.service';
 import * as ReportAPI from './api/report';
 import * as ReportLogsAPI from './api/report-logs';
+import { AntidupSettingsAPI } from './api/antidup-settings';
 
 // ============================================================
 // MAIN ROUTER
@@ -50,10 +55,45 @@ export default {
     }
 
     // GET /api/teams/:slug - ดูข้อมูล team ตาม slug
+    // PATCH /api/teams/:slug/settings - อัพเดท team-level easyslip_token
     const getTeamMatch = pathname.match(/^\/api\/teams\/([^\/]+)$/);
-    if (method === 'GET' && getTeamMatch) {
+    if (getTeamMatch) {
       const slug = decodeURIComponent(getTeamMatch[1]);
-      return await TeamsAPI.handleGetTeamBySlug(env, slug);
+      if (method === 'GET') return await TeamsAPI.handleGetTeamBySlug(env, slug);
+    }
+
+    const patchTeamMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/settings$/);
+    if (method === 'PATCH' && patchTeamMatch) {
+      const slug = decodeURIComponent(patchTeamMatch[1]);
+      return await TeamsAPI.handleUpdateTeamSettings(request, env, slug);
+    }
+
+    // ============================================================
+    // TEAM API KEYS (multi-provider EasySlip / Slip2Go)
+    // ============================================================
+    const apiKeysListMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/api-keys$/);
+    if (apiKeysListMatch) {
+      const slug = decodeURIComponent(apiKeysListMatch[1]);
+      if (method === 'GET')  return await TeamApiKeysAPI.list(request, env, slug);
+      if (method === 'POST') return await TeamApiKeysAPI.create(request, env, slug);
+    }
+    const apiKeysReorderMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/api-keys\/reorder$/);
+    if (method === 'POST' && apiKeysReorderMatch) {
+      const slug = decodeURIComponent(apiKeysReorderMatch[1]);
+      return await TeamApiKeysAPI.reorder(request, env, slug);
+    }
+    const apiKeysMoveMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/api-keys\/([^\/]+)\/move$/);
+    if (method === 'POST' && apiKeysMoveMatch) {
+      const slug = decodeURIComponent(apiKeysMoveMatch[1]);
+      const keyId = decodeURIComponent(apiKeysMoveMatch[2]);
+      return await TeamApiKeysAPI.move(request, env, slug, keyId);
+    }
+    const apiKeysItemMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/api-keys\/([^\/]+)$/);
+    if (apiKeysItemMatch) {
+      const slug = decodeURIComponent(apiKeysItemMatch[1]);
+      const keyId = decodeURIComponent(apiKeysItemMatch[2]);
+      if (method === 'PATCH')  return await TeamApiKeysAPI.update(request, env, slug, keyId);
+      if (method === 'DELETE') return await TeamApiKeysAPI.remove(request, env, slug, keyId);
     }
 
     // ============================================================
@@ -255,6 +295,39 @@ export default {
     }
 
     // ============================================================
+    // TELEGRAM ROUTES (Phase A — connection mgmt + webhook skeleton)
+    // ============================================================
+
+    // POST /api/telegram-webhook/:groupId - รับ webhook จาก Telegram bot
+    const tgWebhookMatch = pathname.match(/^\/api\/telegram-webhook\/([^\/]+)$/);
+    if (method === 'POST' && tgWebhookMatch) {
+      const groupId = decodeURIComponent(tgWebhookMatch[1]);
+      return await handleTelegramWebhook(request, env, ctx, groupId);
+    }
+
+    // GET    /api/teams/:teamId/telegram-connection
+    // PUT    /api/teams/:teamId/telegram-connection
+    // DELETE /api/teams/:teamId/telegram-connection
+    const tgConnMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/telegram-connection$/);
+    if (tgConnMatch) {
+      const teamId = decodeURIComponent(tgConnMatch[1]);
+      if (method === 'GET') return await TelegramConnectionsAPI.handleGetTelegramConnection(env, teamId);
+      if (method === 'PUT') return await TelegramConnectionsAPI.handleUpsertTelegramConnection(request, env, teamId);
+      if (method === 'DELETE') return await TelegramConnectionsAPI.handleDeleteTelegramConnection(env, teamId);
+    }
+
+    // POST /api/teams/:teamId/telegram-connection/enable | disable | register-webhook | sync-commands
+    const tgEnableMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/telegram-connection\/(enable|disable|register-webhook|sync-commands)$/);
+    if (method === 'POST' && tgEnableMatch) {
+      const teamId = decodeURIComponent(tgEnableMatch[1]);
+      const action = tgEnableMatch[2];
+      if (action === 'enable') return await TelegramConnectionsAPI.handleEnableTelegram(env, teamId);
+      if (action === 'disable') return await TelegramConnectionsAPI.handleDisableTelegram(env, teamId);
+      if (action === 'register-webhook') return await TelegramConnectionsAPI.handleRegisterWebhook(request, env, teamId);
+      if (action === 'sync-commands') return await TelegramConnectionsAPI.handleSyncCommands(env, teamId);
+    }
+
+    // ============================================================
     // USER SEARCH ROUTES
     // ============================================================
 
@@ -352,6 +425,16 @@ export default {
     }
 
     // ============================================================
+    // ANTI-DUP SETTINGS ROUTES
+    // ============================================================
+    if (method === 'GET' && pathname === '/api/settings/antidup') {
+      return await AntidupSettingsAPI.handleGet(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/settings/antidup') {
+      return await AntidupSettingsAPI.handlePost(request, env);
+    }
+
+    // ============================================================
     // 404 NOT FOUND
     // ============================================================
 
@@ -363,12 +446,19 @@ export default {
   // ============================================================
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log('[Scheduled] Starting cron job at', new Date(event.scheduledTime).toISOString());
-    
+
     // ดึงบัญชีธนาคารสำหรับทุก tenant ที่มี active session
     ctx.waitUntil(
       BankRefreshService.refreshAllTenantBankAccounts(env)
         .then(() => console.log('[Scheduled] Bank refresh completed'))
         .catch((err) => console.error('[Scheduled] Bank refresh error:', err))
+    );
+
+    // เก็บงานคิวที่ค้าง (retry / orphan / scheduled jobs)
+    ctx.waitUntil(
+      processQueueOnce(env, { limit: 20 })
+        .then((r) => console.log('[Scheduled] Queue worker processed:', r.processed))
+        .catch((err) => console.error('[Scheduled] Queue worker error:', err))
     );
   },
 };

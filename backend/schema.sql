@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS teams (
   slug TEXT UNIQUE NOT NULL,
   description TEXT,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  telegram_enabled INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -99,7 +100,7 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   matched_user_id TEXT,
   matched_username TEXT,
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'matched', 'credited', 'duplicate', 'failed')),
-  source TEXT DEFAULT 'webhook' CHECK(source IN ('webhook', 'manual', 'upload')),
+  source TEXT DEFAULT 'webhook' CHECK(source IN ('webhook', 'manual', 'upload', 'telegram')),
   error_message TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,

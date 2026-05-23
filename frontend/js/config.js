@@ -33,14 +33,16 @@ function getRouteInfoFromURL() {
   const hash = window.location.hash || '';
   if (hash.startsWith('#/')) {
     const path = hash.substring(2).split('/').filter(Boolean);
-    const teamSlug = path[0] || 'default';
-    const page = path[1] || 'dashboard';
+    const rawTeamSlug = (path[0] || 'default').toString().trim().toLowerCase();
+    const teamSlug = rawTeamSlug.replace(/[^a-z0-9-]/g, '') || 'default';
+    const page = (path[1] || 'dashboard').toString().trim().toLowerCase();
     return { teamSlug, page };
   }
 
   const params = new URLSearchParams(window.location.search);
-  const teamParam = params.get('team') || 'default';
-  const pageParam = params.get('page') || 'dashboard';
+  const rawTeamParam = (params.get('team') || 'default').toString().trim().toLowerCase();
+  const teamParam = rawTeamParam.replace(/[^a-z0-9-]/g, '') || 'default';
+  const pageParam = (params.get('page') || 'dashboard').toString().trim().toLowerCase();
   return { teamSlug: teamParam, page: pageParam };
 }
 

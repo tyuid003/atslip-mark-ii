@@ -6,6 +6,9 @@ export interface Env {
   DB: D1Database;
   BANK_KV: KVNamespace;
   PENDING_NOTIFICATIONS: DurableObjectNamespace;
+  // Optional Telegram secret key สำหรับ encrypt bot_token ก่อนเก็บ DB
+  // ตั้งค่าด้วย `npx wrangler secret put TELEGRAM_TOKEN_KEY`
+  TELEGRAM_TOKEN_KEY?: string;
 }
 
 // ============================================================
@@ -134,7 +137,7 @@ export interface PendingTransaction {
   matched_user_id: string | null;
   matched_username: string | null;
   status: 'pending' | 'matched' | 'credited' | 'duplicate' | 'failed';
-  source: 'webhook' | 'manual' | 'upload';
+  source: 'webhook' | 'manual' | 'upload' | 'telegram';
   error_message: string | null;
   created_at: number;
   updated_at: number;
@@ -160,4 +163,115 @@ export interface PaginatedResponse<T> {
     total: number;
     totalPages: number;
   };
+}
+
+// ============================================================
+// TELEGRAM TYPES (Phase A scaffold)
+// ============================================================
+
+export interface TeamTelegramConnection {
+  id: string;
+  team_id: string;
+  telegram_group_id: string;
+  telegram_group_title: string | null;
+  telegram_bot_id: string;
+  telegram_bot_token: string; // stored encrypted; service layer must decrypt
+  webhook_secret: string | null;
+  status: 'active' | 'inactive';
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CreateTelegramConnectionRequest {
+  team_id: string;
+  telegram_group_id: string;
+  telegram_group_title?: string;
+  telegram_bot_id: string;
+  telegram_bot_token: string;
+}
+
+export interface UpdateTelegramConnectionRequest {
+  telegram_group_id?: string;
+  telegram_group_title?: string;
+  telegram_bot_id?: string;
+  telegram_bot_token?: string;
+  status?: 'active' | 'inactive';
+}
+
+export interface TelegramMessageLink {
+  id: string;
+  team_id: string;
+  telegram_group_id: string;
+  telegram_message_id: string;
+  pending_transaction_id: string;
+  message_type: 'scan_result' | 'status_update' | 'manual_prompt';
+  created_at: number;
+}
+
+export interface TelegramChatState {
+  id: string;
+  team_id: string;
+  telegram_group_id: string;
+  telegram_user_id: string;
+  state_key: string;
+  state_payload_json: string | null;
+  expires_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
+// Scan queue job (shared by all sources)
+export interface ScanJob {
+  id: string;
+  team_id: string;
+  tenant_id: string | null;
+  source: 'webhook' | 'manual' | 'upload' | 'telegram';
+  idempotency_key: string;
+  trace_id: string;
+  payload_json: string;
+  status: 'queued' | 'processing' | 'success' | 'failed' | 'dead_letter';
+  attempts: number;
+  max_attempts: number;
+  next_attempt_at: number;
+  last_error: string | null;
+  result_json: string | null;
+  pending_transaction_id: string | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
+}
+
+// ============================================================
+// TEAM TYPES (extension for telegram_enabled flag)
+// ============================================================
+
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: 'active' | 'inactive';
+  telegram_enabled: number; // 0 = off, 1 = on
+  easyslip_token: string | null; // team-level token สำหรับ Upload/Telegram (null = ใช้ token เว็บแรก)
+  created_at: number;
+  updated_at: number;
+}
+
+// ============================================================
+// TEAM API KEYS (multi-provider, multi-key per team)
+// ============================================================
+
+export type SlipServiceProvider = 'easyslip' | 'slip2go';
+
+export interface TeamApiKey {
+  id: string;
+  team_id: string;
+  service: SlipServiceProvider;
+  label: string | null;
+  api_key: string;
+  branch_id: string | null; // legacy column — Slip2Go ไม่ใช้ (always null)
+  priority: number;         // น้อย = บนสุด = primary
+  status: 'active' | 'disabled';
+  created_at: string;
+  updated_at: string;
 }

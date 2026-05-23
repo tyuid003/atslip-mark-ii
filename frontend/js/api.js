@@ -36,10 +36,17 @@ class API {
         console.error('[API] Got HTML instead of JSON! First 300 chars:', text.substring(0, 300));
         throw new Error('Server returned HTML instead of JSON');
       }
-      const data = JSON.parse(text);
+
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (parseError) {
+        const snippet = (text || '').trim().slice(0, 180);
+        throw new Error(`Server returned invalid JSON (${response.status}): ${snippet || 'empty response'}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Request failed');
+        throw new Error((data && (data.error || data.message)) || `Request failed (${response.status})`);
       }
 
       return data;
@@ -133,6 +140,49 @@ class API {
     return this.request('/api/teams');
   }
 
+  async updateTeamSettings(slug, data) {
+    return this.request(`/api/teams/${slug}/settings`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ============================================================
+  // TEAM API KEYS (multi-provider EasySlip / Slip2Go)
+  // ============================================================
+  async listTeamApiKeys(slug) {
+    return this.request(`/api/teams/${slug}/api-keys`);
+  }
+  async createTeamApiKey(slug, data) {
+    return this.request(`/api/teams/${slug}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+  async updateTeamApiKey(slug, keyId, data) {
+    return this.request(`/api/teams/${slug}/api-keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+  async deleteTeamApiKey(slug, keyId) {
+    return this.request(`/api/teams/${slug}/api-keys/${keyId}`, {
+      method: 'DELETE',
+    });
+  }
+  async reorderTeamApiKeys(slug, ids) {
+    return this.request(`/api/teams/${slug}/api-keys/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  }
+  async moveTeamApiKey(slug, keyId, direction) {
+    return this.request(`/api/teams/${slug}/api-keys/${keyId}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    });
+  }
+
   // ============================================================
   // LINE OA APIs
   // ============================================================
@@ -176,31 +226,58 @@ class API {
   // SCAN APIs
   // ============================================================
 
-  async uploadSlip(file, tenantId = null) {
+  async uploadSlip(file, tenantId = null, service = null) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('source', 'manual');
     if (tenantId) {
       formData.append('tenant_id', tenantId);
     }
+    if (service) {
+      formData.append('service', service);
+    }
 
     const teamSlug = window.currentTeamSlug || window.getTeamFromURL();
     
-    const response = await fetch(`${this.baseURL}/api/scan/upload`, {
-      method: 'POST',
-      headers: {
-        'X-Team-Slug': teamSlug,
-      },
-      body: formData,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-    const data = await response.json();
+    try {
+      const response = await fetch(`${this.baseURL}/api/scan/upload`, {
+        method: 'POST',
+        headers: {
+          'X-Team-Slug': teamSlug,
+        },
+        body: formData,
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Upload failed');
+      const text = await response.text();
+      let data = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        const raw = (text || '').trim();
+        if (!response.ok) {
+          throw new Error(`EASYSLIP upstream error (${response.status}): ${raw || 'no response body'}`);
+        }
+        throw new Error(`Upload response is invalid JSON (${response.status})`);
+      }
+
+      if (!response.ok) {
+        throw new Error((data && (data.error || data.message)) || `Upload failed (${response.status})`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Upload timeout: EASYSLIP ใช้เวลานานเกิน 45 วินาที');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return data;
   }
 
   // ============================================================

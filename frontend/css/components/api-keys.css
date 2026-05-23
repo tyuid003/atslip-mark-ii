@@ -1,0 +1,190 @@
+/* ===========================================================
+ * Provider Upload Zones + API Keys Manager
+ * =========================================================== */
+
+/* === Provider upload row (scan page) === */
+.provider-upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.provider-upload-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.provider-upload-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.provider-upload-label {
+  color: var(--color-gray-700);
+  font-size: 0.9rem;
+}
+
+.provider-upload-head .btn {
+  margin-left: auto;
+}
+
+.provider-paste-zone {
+  border: 1px dashed var(--color-gray-300);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  min-height: 110px;
+  background: var(--color-gray-50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: text;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.provider-paste-zone.is-focused,
+.provider-paste-zone:focus {
+  border-color: var(--color-primary, #2563eb);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.provider-paste-hint {
+  color: var(--color-gray-500);
+  font-size: 0.85rem;
+}
+
+/* preview รูปภาพหลังเลือก/วาง */
+.provider-paste-zone .upload-preview {
+  width: 100%;
+}
+
+/* === Provider badge === */
+.provider-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.provider-badge-easyslip {
+  background: #e6f0ff;
+  color: #1e40af;
+  border-color: #c7dafd;
+}
+
+.provider-badge-slip2go {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #bcebd6;
+}
+
+/* === API Keys list (modal) === */
+.api-keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: var(--space-sm);
+}
+
+.api-key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--color-gray-200);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.api-key-row:first-child {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.api-key-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.api-key-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.api-key-row-actions .btn-icon {
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+.api-key-row-actions .btn-icon:hover {
+  background: var(--color-gray-100);
+}
+.api-key-row-actions .btn-icon[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.api-key-primary-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f59e0b;
+  color: #fff;
+}
+
+.api-key-label {
+  font-weight: 600;
+  color: var(--color-gray-800, #1f2937);
+}
+
+.api-key-token {
+  cursor: pointer;
+  user-select: none;
+}
+.api-key-token code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  color: var(--color-gray-700, #374151);
+  background: var(--color-gray-100, #f3f4f6);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.api-key-meta {
+  font-size: 0.8rem;
+  color: var(--color-gray-600);
+}
+.api-key-meta code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  background: var(--color-gray-100);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.api-key-add-form .form-group {
+  margin-bottom: 10px;
+}

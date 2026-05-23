@@ -4,6 +4,7 @@
 import { jsonResponse, errorResponse, successResponse } from '../utils/helpers';
 import { ScanService } from '../services/scan.service';
 import { CreditService } from '../services/credit.service';
+import { AntidupSettingsAPI } from './antidup-settings';
 import type { Env } from '../types';
 
 interface BankAccountListItem {
@@ -152,18 +153,30 @@ export const ScanAPI = {
       const file = fileValue as File;
 
       // ตรวจสอบว่าเป็นไฟล์รูปหรือไม่
-      if (!file.type.startsWith('image/')) {
+      // รองรับ MIME type ที่ถูกต้อง, application/octet-stream (จาก Telegram), หรือ นามสกุลไฟล์รูป
+      const isImageMime = file.type.startsWith('image/');
+      const isOctetStream = file.type === 'application/octet-stream' || file.type === '';
+      const isImageExt = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|heic)$/i.test(file.name);
+      if (!isImageMime && !isOctetStream && !isImageExt) {
+        log('[ScanAPI] Invalid file type:', file.name, file.type);
         return errorResponse('File must be an image', 400);
       }
 
       log('[ScanAPI] Received slip upload:', file.name, file.type, file.size);
 
-      // ส่งไปสแกนที่ EASYSLIP (ใช้ token ของ tenant ใดก็ได้ที่ active)
-      // หรืออาจจะส่งมา tenant_id ใน form data
+      // ส่งไปสแกนที่ provider (EasySlip / Slip2Go) — เลือกตาม form field "service"
+      // หรืออาจจะส่งมา tenant_id ใน form data (LINE OA flow)
       const tenantId = formData.get('tenant_id') as string | null;
+      const requestedServiceRaw = String(formData.get('service') || '').toLowerCase().trim();
+      const requestedService: 'easyslip' | 'slip2go' | null =
+        requestedServiceRaw === 'slip2go' ? 'slip2go'
+        : requestedServiceRaw === 'easyslip' ? 'easyslip'
+        : null;
       const sourceRaw = String(formData.get('source') || '').trim().toLowerCase();
-      const source: 'webhook' | 'manual' | 'upload' =
-        sourceRaw === 'webhook' || sourceRaw === 'manual' ? (sourceRaw as 'webhook' | 'manual') : 'upload';
+      const source: 'webhook' | 'manual' | 'upload' | 'telegram' =
+        sourceRaw === 'webhook' || sourceRaw === 'manual' || sourceRaw === 'telegram'
+          ? (sourceRaw as 'webhook' | 'manual' | 'telegram')
+          : 'upload';
       const isManualScan = source === 'manual';
       const lineOAIdRaw = String(formData.get('line_oa_id') || '').trim();
       const lineOAId = lineOAIdRaw.length > 0 ? lineOAIdRaw : null;
@@ -171,13 +184,19 @@ export const ScanAPI = {
       log('[ScanAPI] Scan source:', {
         source,
         isManualScan,
+        requestedService,
         teamSlugHeader: request.headers.get('X-Team-Slug') || null,
       });
 
+      // ผลลัพธ์ของขั้นตอนเลือก key:
+      //   activeProvider: 'easyslip' | 'slip2go'
+      //   easyslipToken / slip2goApiKey
+      let activeProvider: 'easyslip' | 'slip2go' = 'easyslip';
       let easyslipToken = '';
+      let slip2goApiKey = '';
 
       if (tenantId) {
-        // ดึง token ของ tenant นี้
+        // ดึง token ของ tenant นี้ (LINE OA flow — ใช้ EasySlip ของ tenant เสมอ)
         const tenant = await env.DB.prepare(
           'SELECT easyslip_token FROM tenants WHERE id = ? AND status = ?'
         )
@@ -190,54 +209,143 @@ export const ScanAPI = {
         }
 
         easyslipToken = tenant.easyslip_token as string;
-        log('[ScanAPI] Using tenant-specific token:', {
+        activeProvider = 'easyslip';
+        log('[ScanAPI] Using tenant-specific EasySlip token:', {
           tenantId,
           hasToken: !!easyslipToken,
           tokenLength: easyslipToken?.length || 0,
         });
       } else {
-        // ใช้ token ของ tenant active ตัวแรก
-        const tenant = await env.DB.prepare(
-          'SELECT id, name, easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
-        )
-          .bind('active', '')
-          .first();
+        // ไม่มี tenant_id → ใช้ X-Team-Slug + form field "service" (ถ้ามี) เลือก key จาก team_api_keys
+        // ลำดับการเลือก:
+        //   1) team_api_keys (priority สูงสุด) ของ service ที่ frontend ระบุ
+        //   2) team_api_keys (priority สูงสุด) ใดก็ได้ของทีม (กรณีไม่ระบุ service)
+        //   3) teams.easyslip_token (legacy fallback)
+        //   4) tenant แรกในทีม (legacy fallback)
+        //   5) tenant แรกในระบบ (legacy fallback สุดท้าย)
+        const teamSlugForToken = request.headers.get('X-Team-Slug')?.trim() || null;
+        let tenant: any = null;
+        let picked = false;
 
-        if (!tenant) {
-          log('[ScanAPI] ❌ No active tenant with EASYSLIP token found');
-          return errorResponse('No active tenant with EASYSLIP token found. Please configure EASYSLIP token in tenant settings.', 404);
+        if (teamSlugForToken) {
+          // (1)+(2) เลือกจาก team_api_keys
+          let q: string;
+          let binds: any[];
+          if (requestedService) {
+            q = `SELECT k.id, k.service, k.api_key, k.branch_id, k.priority
+                 FROM team_api_keys k
+                 JOIN teams tm ON tm.id = k.team_id
+                 WHERE tm.slug = ? AND k.service = ? AND k.status = 'active'
+                 ORDER BY k.priority ASC LIMIT 1`;
+            binds = [teamSlugForToken, requestedService];
+          } else {
+            q = `SELECT k.id, k.service, k.api_key, k.branch_id, k.priority
+                 FROM team_api_keys k
+                 JOIN teams tm ON tm.id = k.team_id
+                 WHERE tm.slug = ? AND k.status = 'active'
+                 ORDER BY k.priority ASC LIMIT 1`;
+            binds = [teamSlugForToken];
+          }
+          const keyRow = await env.DB.prepare(q).bind(...binds).first<{
+            id: string; service: 'easyslip' | 'slip2go'; api_key: string; branch_id: string | null; priority: number;
+          }>();
+
+          if (keyRow) {
+            activeProvider = keyRow.service;
+            if (keyRow.service === 'slip2go') {
+              slip2goApiKey = keyRow.api_key;
+            } else {
+              easyslipToken = keyRow.api_key;
+            }
+            picked = true;
+            log('[ScanAPI] ✅ Using team_api_keys:', {
+              keyId: keyRow.id, service: keyRow.service, priority: keyRow.priority,
+            });
+          }
+
+          // (3) legacy: teams.easyslip_token
+          if (!picked) {
+            const teamRow = await env.DB.prepare(
+              `SELECT id, name, slug, easyslip_token FROM teams WHERE slug = ? LIMIT 1`
+            ).bind(teamSlugForToken).first<{ id: string; name: string; slug: string; easyslip_token: string | null }>();
+
+            if (teamRow?.easyslip_token) {
+              easyslipToken = teamRow.easyslip_token;
+              activeProvider = 'easyslip';
+              picked = true;
+              log('[ScanAPI] ✅ Using legacy teams.easyslip_token for team:', teamSlugForToken);
+            } else {
+              // (4) legacy: first active tenant within the team
+              tenant = await env.DB.prepare(
+                `SELECT t.id, t.name, t.easyslip_token
+                 FROM tenants t
+                 JOIN teams tm ON tm.id = t.team_id
+                 WHERE tm.slug = ? AND t.status = 'active'
+                   AND t.easyslip_token IS NOT NULL AND t.easyslip_token != ''
+                 ORDER BY t.created_at ASC LIMIT 1`
+              ).bind(teamSlugForToken).first();
+
+              if (tenant) {
+                log('[ScanAPI] Using legacy first-tenant token within team:', {
+                  teamSlug: teamSlugForToken,
+                  tenantId: (tenant as any).id,
+                  hint: 'Add team-level API key in ตั้งค่า API Keys',
+                });
+              }
+            }
+          }
         }
 
-        easyslipToken = tenant.easyslip_token as string;
-        log('[ScanAPI] Using default tenant token:', {
-          tenantId: tenant.id,
-          tenantName: tenant.name,
-          hasToken: !!easyslipToken,
-          tokenLength: easyslipToken?.length || 0,
-        });
+        // (5) legacy global fallback
+        if (!picked && !tenant) {
+          tenant = await env.DB.prepare(
+            'SELECT id, name, easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
+          ).bind('active', '').first();
+        }
+
+        if (!picked && tenant) {
+          easyslipToken = (tenant as any).easyslip_token as string;
+          activeProvider = 'easyslip';
+          picked = true;
+          log('[ScanAPI] Using legacy fallback tenant token:', {
+            tenantId: (tenant as any).id,
+            tenantName: (tenant as any).name,
+          });
+        }
+
+        if (!picked) {
+          log('[ScanAPI] ❌ No API key found for team');
+          return errorResponse('ยังไม่มี API key สำหรับทีมนี้ — กรุณาไปที่เมนู "ตั้งค่า API Keys" เพื่อเพิ่ม EasySlip หรือ Slip2Go', 404);
+        }
       }
 
-      // ตรวจสอบว่า token มีค่าหรือไม่
-      if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
-        log('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
-        return errorResponse('EASYSLIP token is not configured or invalid. Please update tenant settings with a valid EASYSLIP API token.', 400);
-      }
+      log('[ScanAPI] Active provider:', activeProvider);
 
       // สแกนสลิป
       let slipData: any;
       try {
-        slipData = await ScanService.scanSlip(file, easyslipToken);
-        log('[ScanAPI] ScanService.scanSlip() returned:', {
+        if (activeProvider === 'slip2go') {
+          slipData = await ScanService.scanSlipWithSlip2Go(file, slip2goApiKey);
+        } else {
+          // ตรวจสอบว่า token มีค่าหรือไม่
+          if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
+            log('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
+            return errorResponse('EASYSLIP token is not configured or invalid.', 400);
+          }
+          slipData = await ScanService.scanSlip(file, easyslipToken);
+        }
+        log('[ScanAPI] ScanService returned:', {
+          provider: activeProvider,
           success: slipData?.success,
           hasData: !!slipData?.data,
-          dataKeys: slipData?.data ? Object.keys(slipData.data) : [],
         });
       } catch (scanError: any) {
-        log('[ScanAPI] ❌ ScanService.scanSlip() threw exception:', scanError.message);
-        return errorResponse(`EASYSLIP error: ${scanError.message}`, 400);
+        log('[ScanAPI] ❌ ScanService threw exception:', scanError.message);
+        return errorResponse(`${activeProvider.toUpperCase()} error: ${scanError.message}`, 400);
       }
 
-      log('[ScanAPI] EASYSLIP response:', {
+      log('[ScanAPI] Provider response:', {
+        provider: activeProvider,
         success: slipData?.success,
         status: slipData?.data?.status,
         message: slipData.data?.message,
@@ -245,13 +353,13 @@ export const ScanAPI = {
       });
 
       if (!slipData.success) {
-        log('[ScanAPI] ❌ EASYSLIP API call failed:', JSON.stringify(slipData, null, 2));
-        return errorResponse(`EASYSLIP error: ${slipData.data?.message || 'API request failed'}`, 400);
+        log('[ScanAPI] ❌ Provider call failed:', JSON.stringify(slipData, null, 2));
+        return errorResponse(`${activeProvider.toUpperCase()} error: ${slipData.data?.message || 'API request failed'}`, 400);
       }
 
       if (slipData.data.status !== 200) {
-        log('[ScanAPI] ❌ EASYSLIP returned non-200 status:', JSON.stringify(slipData.data, null, 2));
-        return errorResponse(`EASYSLIP error (${slipData.data.status}): ${slipData.data?.message || 'Scan failed'}`, 400);
+        log('[ScanAPI] ❌ Provider returned non-200:', JSON.stringify(slipData.data, null, 2));
+        return errorResponse(`${activeProvider.toUpperCase()} error (${slipData.data.status}): ${slipData.data?.message || 'Scan failed'}`, 400);
       }
 
       const slip = slipData.data.data;
@@ -392,6 +500,57 @@ export const ScanAPI = {
 
       log('[ScanAPI] 🔍 ===== SENDER MATCHING END =====');
 
+      // ── Anti-Dup check (ตรวจสอบรายการซ้ำกับระบบ admin) ────────────────────
+      if (matchedUser && matchedUser.id) {
+        try {
+          const accIdForAntidup = receiverAccount && sessionForAntidup
+            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionForAntidup, receiverAccount, env)
+            : null;
+          const antidupEnabled = accIdForAntidup
+            ? await AntidupSettingsAPI.isEnabled(env, matchedTenant.team_id, accIdForAntidup)
+            : false;
+
+          if (antidupEnabled && sessionForAntidup) {
+            log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup);
+            const txListResp = await fetch(
+              `${matchedTenant.admin_api_url}/api/user-transactions/list?page=1&limit=20&sortCol=transfer_at&sortAsc=desc&userId=${matchedUser.id}`,
+              { headers: { Authorization: `Bearer ${sessionForAntidup}`, Accept: 'application/json' } },
+            );
+            if (txListResp.ok) {
+              const txListData = await txListResp.json() as { list?: any[] };
+              const deposits = (txListData.list || []).filter((t: any) => t.typeName === 'ฝาก');
+              const slipTime = slip.date ? new Date(slip.date).getTime() : null;
+              const slipAmount = slip.amount?.amount;
+              for (const dep of deposits) {
+                if (dep.creditAmount === slipAmount && dep.transferAt && slipTime) {
+                  const depTime = new Date(dep.transferAt).getTime();
+                  if (Math.abs(depTime - slipTime) <= 60000) {
+                    log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', { amount: slipAmount, transferAt: dep.transferAt });
+                    return jsonResponse({
+                      success: false,
+                      error: 'พบรายการฝากซ้ำในระบบ (Anti-Dup)',
+                      data: {
+                        status: 'duplicate',
+                        tenant: { id: matchedTenant.id, name: matchedTenant.name },
+                        slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
+                        sender: {
+                          id: matchedUser.id,
+                          name: matchedUser.fullname || senderNameTh || senderNameEn || 'Unknown',
+                          username: matchedUser.memberCode || matchedUser.username || null,
+                          matched: true,
+                        },
+                      },
+                    }, 400);
+                  }
+                }
+              }
+            }
+          }
+        } catch (antidupErr: any) {
+          log('[ScanAPI] ⚠️ Anti-dup check error (non-blocking):', antidupErr?.message);
+        }
+      }
+
       // ตรวจสอบสลิปซ้ำก่อนบันทึก
       const existingSlip = await env.DB.prepare(
         `SELECT id FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
@@ -406,6 +565,7 @@ export const ScanAPI = {
           error: 'สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)',
           data: {
             status: 'duplicate',
+            tenant: { id: matchedTenant.id, name: matchedTenant.name },
             slip: {
               ref: slip.transRef,
               amount: slip.amount?.amount || 0,
@@ -414,6 +574,7 @@ export const ScanAPI = {
             sender: {
               id: null,
               name: senderNameTh || senderNameEn || 'Unknown',
+              username: null,
               matched: false,
             },
           },
@@ -544,10 +705,12 @@ export const ScanAPI = {
                 ? {
                     id: matchedUser.id,
                     name: matchedUser.fullname,
+                    username: matchedUser.memberCode || matchedUser.username || null,
                     matched: true,
                   }
                 : {
                     name: senderNameTh || senderNameEn || 'Unknown',
+                    username: null,
                     matched: false,
                   },
               status: (matchedUser && (matchedUser?.memberCode || matchedUser?.username)) ? 'matched' : 'pending',
@@ -719,10 +882,12 @@ export const ScanAPI = {
           ? {
               id: matchedUser.id,
               name: matchedUser.fullname,
+              username: matchedUser.memberCode || matchedUser.username || null,
               matched: true,
             }
           : {
               name: senderNameTh || senderNameEn || 'Unknown',
+              username: null,
               matched: false,
             },
         status: creditResult?.success 

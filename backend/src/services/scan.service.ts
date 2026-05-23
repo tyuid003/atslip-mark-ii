@@ -79,6 +79,35 @@ interface MatchedTenant {
 
 export class ScanService {
   /**
+   * Bank code (รหัส 3 หลัก ตามมาตรฐาน BOT) → ข้อมูลธนาคาร
+   * ใช้แปลงผลลัพธ์ Slip2Go ให้เข้าโครง EasySlip ที่ downstream matcher ใช้
+   */
+  private static readonly BANK_CODE_MAP: Record<string, { id: string; short: string; name: string }> = {
+    '002': { id: '002', short: 'BBL',   name: 'ธนาคารกรุงเทพ' },
+    '004': { id: '004', short: 'KBANK', name: 'ธนาคารกสิกรไทย' },
+    '006': { id: '006', short: 'KTB',   name: 'ธนาคารกรุงไทย' },
+    '011': { id: '011', short: 'TTB',   name: 'ธนาคารทหารไทยธนชาต' },
+    '014': { id: '014', short: 'SCB',   name: 'ธนาคารไทยพาณิชย์' },
+    '022': { id: '022', short: 'CIMBT', name: 'ธนาคารซีไอเอ็มบีไทย' },
+    '024': { id: '024', short: 'UOBT',  name: 'ธนาคารยูโอบี' },
+    '025': { id: '025', short: 'BAY',   name: 'ธนาคารกรุงศรีอยุธยา' },
+    '030': { id: '030', short: 'GSB',   name: 'ธนาคารออมสิน' },
+    '033': { id: '033', short: 'GHB',   name: 'ธนาคารอาคารสงเคราะห์' },
+    '034': { id: '034', short: 'BAAC',  name: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร' },
+    '035': { id: '035', short: 'EXIM',  name: 'ธนาคารเพื่อการส่งออกและนำเข้า' },
+    '067': { id: '067', short: 'TISCO', name: 'ธนาคารทิสโก้' },
+    '069': { id: '069', short: 'KKP',   name: 'ธนาคารเกียรตินาคินภัทร' },
+    '070': { id: '070', short: 'ICBCT', name: 'ธนาคารไอซีบีซี (ไทย)' },
+    '071': { id: '071', short: 'TCD',   name: 'ธนาคารไทยเครดิตเพื่อรายย่อย' },
+    '073': { id: '073', short: 'LHFG',  name: 'ธนาคารแลนด์ แอนด์ เฮ้าส์' },
+    '098': { id: '098', short: 'SME',   name: 'ธนาคารพัฒนาวิสาหกิจขนาดกลางและขนาดย่อม' },
+  };
+
+  private static bankFromCode(code: string | undefined): { id?: string; short?: string; name?: string } {
+    if (!code) return {};
+    return this.BANK_CODE_MAP[code] || { id: code };
+  }
+  /**
    * สแกนสลิปโดยใช้ EASYSLIP API
    */
   static async scanSlip(imageFile: File, easyslipToken: string): Promise<EasySlipResponse> {
@@ -97,16 +126,40 @@ export class ScanService {
       fileType: imageFile.type,
     });
 
-    const response = await fetch('https://developer.easyslip.com/api/v1/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${easyslipToken}`,
-      },
-      body: formData,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    // EASYSLIP คืนค่าโดยตรงเป็น { status: 200, data: {...} } หรือ { status: 400, message: "..." }
-    const result = await response.json() as any;
+    let response: Response;
+    try {
+      response = await fetch('https://developer.easyslip.com/api/v1/verify', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${easyslipToken}`,
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('EASYSLIP timeout: ใช้เวลานานเกิน 30 วินาที');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const rawText = await response.text();
+    let result: any;
+    try {
+      // EASYSLIP คืนค่าโดยตรงเป็น { status: 200, data: {...} } หรือ { status: 400, message: "..." }
+      result = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      const snippet = String(rawText || '').trim().slice(0, 220);
+      if (!response.ok) {
+        throw new Error(`EASYSLIP API error (${response.status}): ${snippet || response.statusText || 'invalid response'}`);
+      }
+      throw new Error(`EASYSLIP invalid JSON response (${response.status})`);
+    }
     
     console.log('[ScanService] 📥 EASYSLIP Response:', {
       httpStatus: response.status,
@@ -156,6 +209,121 @@ export class ScanService {
     return {
       success: true,
       data: result, // { status: 200, data: {...} }
+    };
+  }
+
+  /**
+   * สแกนสลิปโดยใช้ Slip2Go API (https://connect.slip2go.com)
+   * ใช้ API Secret เดียวต่อร้าน — ไม่ต้องระบุ branch ID
+   * คืนค่าเป็นรูปแบบเดียวกับ EasySlip เพื่อให้ downstream matcher ใช้ได้โดยไม่ต้องแก้
+   */
+  static async scanSlipWithSlip2Go(
+    imageFile: File,
+    apiKey: string
+  ): Promise<EasySlipResponse> {
+    if (!apiKey || !apiKey.trim()) throw new Error('Slip2Go API key is empty');
+
+    const formData = new FormData();
+    formData.append('file', imageFile);
+
+    console.log('[ScanService] Calling Slip2Go API...', {
+      apiKeyLen: apiKey.length,
+      fileSize: imageFile.size,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let response: Response;
+    try {
+      response = await fetch('https://connect.slip2go.com/api/verify-slip/qr-image/info', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') throw new Error('Slip2Go timeout: ใช้เวลานานเกิน 30 วินาที');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const raw = await response.text();
+    let result: any;
+    try { result = raw ? JSON.parse(raw) : {}; }
+    catch {
+      throw new Error(`Slip2Go invalid JSON (HTTP ${response.status}): ${String(raw).slice(0, 200)}`);
+    }
+
+    const code = String(result?.code ?? '');
+    const msg = String(result?.message || response.statusText || 'Scan failed');
+
+    console.log('[ScanService] 📥 Slip2Go Response:', {
+      httpStatus: response.status,
+      code,
+      message: msg,
+      hasData: !!result?.data,
+    });
+
+    // success codes: 200000 = found, 200200 = found+valid
+    // 200501 = duplicate slip (จัดการแบบ EasySlip duplicate)
+    // 200404 = slip not found
+    // 400xxx / 401xxx / 500xxx = error
+    if (!response.ok || (code !== '200000' && code !== '200200')) {
+      throw new Error(`Slip2Go error (${code || response.status}): ${msg}`);
+    }
+
+    const s = result.data || {};
+    const senderAccount = s.sender?.account?.bank?.account ? String(s.sender.account.bank.account) : '';
+    const receiverAccount = s.receiver?.account?.bank?.account ? String(s.receiver.account.bank.account) : '';
+    const senderName = String(s.sender?.account?.name || '');
+    const receiverName = String(s.receiver?.account?.name || '');
+    const senderBankId = s.sender?.bank?.id ? String(s.sender.bank.id) : '';
+    const receiverBankId = s.receiver?.bank?.id ? String(s.receiver.bank.id) : '';
+
+    // Map → EasySlip shape ที่ downstream คาดหวัง
+    const mapped = {
+      payload: String(s.referenceId || ''),
+      transRef: String(s.transRef || ''),
+      date: String(s.dateTime || ''),
+      countryCode: 'TH',
+      amount: {
+        amount: Number(s.amount || 0),
+        local: {
+          amount: Number(s.amount || 0),
+          currency: '764',
+        },
+      },
+      fee: 0,
+      ref1: s.ref1 || '',
+      ref2: s.ref2 || '',
+      ref3: s.ref3 || '',
+      sender: {
+        bank: this.bankFromCode(senderBankId),
+        account: {
+          name: { th: senderName, en: senderName },
+          bank: senderAccount ? { type: 'BANKAC' as const, account: senderAccount } : undefined,
+          proxy: s.sender?.account?.proxy?.account
+            ? { type: (s.sender.account.proxy.type || 'MSISDN') as any, account: String(s.sender.account.proxy.account) }
+            : undefined,
+        },
+      },
+      receiver: {
+        bank: this.bankFromCode(receiverBankId),
+        account: {
+          name: { th: receiverName, en: receiverName },
+          bank: receiverAccount ? { type: 'BANKAC' as const, account: receiverAccount } : undefined,
+          proxy: s.receiver?.account?.proxy?.account
+            ? { type: (s.receiver.account.proxy.type || 'MSISDN') as any, account: String(s.receiver.account.proxy.account) }
+            : undefined,
+        },
+      },
+    };
+
+    return {
+      success: true,
+      data: { status: 200, data: mapped as any },
     };
   }
 
@@ -741,57 +909,35 @@ export class ScanService {
         accountMatched: x.bestAccountScore >= minAccountDigits,
       })));
 
-      if (accountMatchedCandidates.length === 1) {
-        log('[ScanService] ✅ RESULT: Unique candidate after account matching', {
-          fullname: accountMatchedCandidates[0].user.fullname,
-          memberCode: accountMatchedCandidates[0].user.memberCode,
-          category: accountMatchedCandidates[0].user.category,
-          bestNameScore: accountMatchedCandidates[0].bestNameScore,
-          bestAccountScore: accountMatchedCandidates[0].bestAccountScore,
-          bestAccountChunk: accountMatchedCandidates[0].bestAccountChunk,
-        });
-        log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
-        return accountMatchedCandidates[0].user;
-      }
-
-      if (accountMatchedCandidates.length > 1) {
-        // ถ้าชื่อซ้ำและเลขบัญชีซ้ำ ให้เลือกคนที่ชื่อตรงกันเยอะกว่า
-        accountMatchedCandidates.sort((a, b) => {
-          if (b.bestNameScore !== a.bestNameScore) return b.bestNameScore - a.bestNameScore;
-          return b.bestAccountScore - a.bestAccountScore;
-        });
-
-        const selected = accountMatchedCandidates[0];
-        log('[ScanService] ⚠️ RESULT: Multiple account matches, selected by highest name score', {
+      // ชื่อชนกัน → ไม่ auto-match แม้บัญชีจะตรงเพียงคนเดียว เพราะอาจผิดพลาดได้
+      if (accountMatchedCandidates.length >= 1) {
+        log('[ScanService] ⚠️ RESULT: Multiple account matches — returning null (pending, manual match required)', {
           totalCandidates: accountMatchedCandidates.length,
-          selected: {
-            fullname: selected.user.fullname,
-            memberCode: selected.user.memberCode,
-            category: selected.user.category,
-            bestNameScore: selected.bestNameScore,
-            bestAccountScore: selected.bestAccountScore,
-          },
+          candidates: accountMatchedCandidates.map((x) => ({
+            fullname: x.user.fullname,
+            memberCode: x.user.memberCode,
+            bestNameScore: x.bestNameScore,
+            bestAccountScore: x.bestAccountScore,
+          })),
         });
-        log('[ScanService] 🔍 ===== SENDER MATCHING END (BEST MATCH) =====');
-        return selected.user;
+        log('[ScanService] 🔍 ===== SENDER MATCHING END (AMBIGUOUS — PENDING) =====');
+        return null;
       }
     } else {
       log('[ScanService] ⏭️ Skipped account scoring: sender account missing or < 3 digits');
     }
 
-    // fallback: เลือกคนที่ชื่อตรงกันเยอะที่สุด
-    nameMatchedCandidates.sort((a, b) => b.bestNameScore - a.bestNameScore);
-    const selected = nameMatchedCandidates[0];
-    log('[ScanService] ⚠️ RESULT: Selected by highest name score (no decisive account match)', {
+    // ถ้ายังมีหลาย candidates หลังจากผ่าน account scoring → pending (ให้ manual match)
+    log('[ScanService] ⚠️ RESULT: Multiple name matches, no decisive account match — returning null (pending)', {
       totalCandidates: nameMatchedCandidates.length,
-      selected: {
-        fullname: selected.user.fullname,
-        memberCode: selected.user.memberCode,
-        category: selected.user.category,
-        bestNameScore: selected.bestNameScore,
-      },
+      candidates: nameMatchedCandidates.map((x) => ({
+        fullname: x.user.fullname,
+        memberCode: x.user.memberCode,
+        category: x.user.category,
+        bestNameScore: x.bestNameScore,
+      })),
     });
-    log('[ScanService] 🔍 ===== SENDER MATCHING END (BEST MATCH) =====');
-    return selected.user;
+    log('[ScanService] 🔍 ===== SENDER MATCHING END (AMBIGUOUS — PENDING) =====');
+    return null;
   }
 }

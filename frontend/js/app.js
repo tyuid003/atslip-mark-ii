@@ -24,17 +24,94 @@ let pendingSortOrder = 'DESC'; // Sort order (ASC/DESC)
 let pendingSearchQuery = ''; // Search query
 let allPendingTransactions = []; // Store all pending data before filtering/sorting
 
+function levenshteinDistance(a, b) {
+  const s = String(a || '');
+  const t = String(b || '');
+  const dp = Array.from({ length: s.length + 1 }, () => Array(t.length + 1).fill(0));
+
+  for (let i = 0; i <= s.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= t.length; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= s.length; i++) {
+    for (let j = 1; j <= t.length; j++) {
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[s.length][t.length];
+}
+
+async function resolveValidTeamSlug(slug) {
+  const inputSlug = String(slug || '').trim().toLowerCase();
+  if (!inputSlug || inputSlug === 'default') {
+    return inputSlug || 'default';
+  }
+
+  try {
+    await api.getTeamBySlug(inputSlug);
+    return inputSlug;
+  } catch (error) {
+    const msg = String(error?.message || '').toLowerCase();
+    if (!msg.includes('team not found')) {
+      return inputSlug;
+    }
+  }
+
+  try {
+    const allTeamsResp = await api.getAllTeams();
+    const slugs = (allTeamsResp?.data || [])
+      .map((t) => String(t?.slug || '').trim().toLowerCase())
+      .filter(Boolean);
+
+    if (slugs.length === 0) {
+      return inputSlug;
+    }
+
+    const exact = slugs.find((s) => s === inputSlug);
+    if (exact) {
+      return exact;
+    }
+
+    const closeMatches = slugs.filter((s) =>
+      s.startsWith(inputSlug) ||
+      inputSlug.startsWith(s) ||
+      levenshteinDistance(s, inputSlug) <= 1
+    );
+
+    if (closeMatches.length === 1) {
+      return closeMatches[0];
+    }
+
+    return inputSlug;
+  } catch {
+    return inputSlug;
+  }
+}
+
 // ============================================================
 // INITIALIZATION
 // ============================================================
 
 async function init() {
   const routeInfo = window.getRouteInfoFromURL();
-  currentTeamSlug = routeInfo.teamSlug;
+  currentTeamSlug = await resolveValidTeamSlug(routeInfo.teamSlug);
   currentPage = routeInfo.page || 'dashboard';
   window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
   window.currentPage = currentPage;
   window.currentTeamId = null;
+
+  if (currentTeamSlug !== routeInfo.teamSlug) {
+    const safePage = currentPage && currentPage !== 'dashboard' ? `/${currentPage}` : '';
+    const newHash = `#/${currentTeamSlug}${safePage}`;
+    history.replaceState(null, '', `${window.location.pathname}${window.location.search}${newHash}`);
+    addNotification(`ℹ️ พบ URL ทีมสะกดผิด ระบบแก้เป็น ${currentTeamSlug} ให้อัตโนมัติ`);
+  }
+
   console.log('Current Team Slug:', currentTeamSlug);
 
   if (typeof window.setLayoutForPage === 'function') {
@@ -1505,6 +1582,9 @@ function translateErrorMessage(errorMsg) {
   if (errorLower.includes('authentication') || errorLower.includes('unauthorized')) {
     return 'การยืนยันตัวตนล้มเหลว กรุณาตรวจสอบ Token';
   }
+  if (errorLower.includes('easyslip upstream error') || errorLower.includes('error code: 502') || errorLower.includes('easyslip api error (502)')) {
+    return 'EASYSLIP มีปัญหาชั่วคราว (502) กรุณาลองใหม่อีกครั้งใน 10-30 วินาที';
+  }
   
   // Network errors
   if (errorLower.includes('network') || errorLower.includes('fetch')) {
@@ -1519,65 +1599,84 @@ function translateErrorMessage(errorMsg) {
 }
 
 // ============================================================
-// SLIP UPLOAD (UI ONLY)
+// SLIP UPLOAD (UI ONLY) — 2 paste-focus zones (EasySlip / Slip2Go)
 // ============================================================
 
+// Track currently focused provider zone (for paste routing)
+let _focusedProviderService = null;
+
 function bindUploadEvents() {
-  const dropzone = document.getElementById('slipDropzone');
-  const input = document.getElementById('slipUploadInput');
+  const services = ['easyslip', 'slip2go'];
 
-  if (!dropzone || !input) {
-    return;
-  }
+  for (const svc of services) {
+    const zone = document.getElementById(`slipDropzone-${svc}`);
+    const input = document.getElementById(`slipUploadInput-${svc}`);
+    if (!zone || !input) continue;
 
-  // เปลี่ยนจาก dropzone click เป็นตรวจสอบว่าคลิกที่ preview หรือไม่
-  dropzone.addEventListener('click', (e) => {
-    // ถ้าคลิกที่ปุ่มหรือ element ภายใน upload-preview ให้ข้ามไป
-    if (e.target.closest('.upload-preview') || e.target.closest('button')) {
-      return;
-    }
-    input.click();
-  });
+    // Avoid double binding (resetSlipUpload re-renders only the inner zone)
+    if (zone.dataset._bound === '1') continue;
+    zone.dataset._bound = '1';
 
-  input.addEventListener('change', () => {
-    const file = input.files && input.files[0];
-    handleSelectedSlip(file);
-  });
-
-  dropzone.addEventListener('dragover', (event) => {
-    event.preventDefault();
-  });
-
-  dropzone.addEventListener('drop', (event) => {
-    event.preventDefault();
-    const file = event.dataTransfer?.files && event.dataTransfer.files[0];
-    handleSelectedSlip(file);
-  });
-
-  // เพิ่ม Ctrl+V เพื่อ paste รูปจาก clipboard
-  document.addEventListener('paste', (event) => {
-    const items = event.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.indexOf('image') !== -1) {
-        event.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          handleSelectedSlip(file);
-        }
-        break;
+    // คลิก zone → focus only (ไม่เปิด file picker)
+    zone.addEventListener('click', (e) => {
+      // ถ้าคลิกที่ปุ่มหรือ preview ให้ข้ามไป (let inner buttons work)
+      if (e.target.closest('.upload-preview') || e.target.closest('button')) {
+        return;
       }
-    }
-  });
+      zone.focus();
+    });
+
+    zone.addEventListener('focus', () => {
+      _focusedProviderService = svc;
+      zone.classList.add('is-focused');
+    });
+    zone.addEventListener('blur', () => {
+      zone.classList.remove('is-focused');
+      // Don't clear _focusedProviderService immediately — paste may fire just after blur
+    });
+
+    // Drag & drop ลงโดยตรงบน zone ก็ใช้ provider ของ zone นั้น
+    zone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+    });
+    zone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const file = event.dataTransfer?.files && event.dataTransfer.files[0];
+      handleSelectedSlip(file, svc);
+    });
+
+    // Paste — ฟังเฉพาะเมื่อ zone นี้ focus อยู่
+    zone.addEventListener('paste', (event) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          event.preventDefault();
+          const file = item.getAsFile();
+          if (file) handleSelectedSlip(file, svc);
+          break;
+        }
+      }
+    });
+
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      handleSelectedSlip(file, svc);
+    });
+  }
 }
 
+function openProviderPicker(service) {
+  document.getElementById(`slipUploadInput-${service}`)?.click();
+}
+
+// Backwards compat (legacy) — ถ้าโค้ดเก่ายังเรียก openSlipPicker
 function openSlipPicker() {
-  document.getElementById('slipUploadInput')?.click();
+  openProviderPicker(_focusedProviderService || 'easyslip');
 }
 
-function handleSelectedSlip(file) {
+function handleSelectedSlip(file, service = 'easyslip') {
   if (!file) {
     return;
   }
@@ -1592,11 +1691,11 @@ function handleSelectedSlip(file) {
   const hint = document.getElementById('slipUploadHint');
   if (hint) {
     const truncatedName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
-    hint.textContent = `ไฟล์ที่เลือก: ${truncatedName}`;
+    hint.textContent = `ไฟล์ที่เลือก (${service.toUpperCase()}): ${truncatedName}`;
   }
 
-  // แสดง preview รูปภาพ
-  const dropzone = document.getElementById('slipDropzone');
+  // แสดง preview รูปภาพใน zone ของ service นั้น
+  const dropzone = document.getElementById(`slipDropzone-${service}`);
   if (file.type.startsWith('image/') && dropzone) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1623,13 +1722,13 @@ function handleSelectedSlip(file) {
     reader.readAsDataURL(file);
   }
 
-  addNotification(`📄 กำลังสแกนสลิป: ${file.name}...`);
-  
+  addNotification(`📄 กำลังสแกนสลิป (${service.toUpperCase()}): ${file.name}...`);
+
   // ส่งไปสแกนทันที
-  uploadAndScanSlip(file);
+  uploadAndScanSlip(file, service);
 }
 
-async function uploadAndScanSlip(file) {
+async function uploadAndScanSlip(file, service = 'easyslip') {
   const loadingIcon = document.getElementById('uploadLoadingIcon');
   
   try {
@@ -1643,7 +1742,7 @@ async function uploadAndScanSlip(file) {
       lucide.createIcons();
     }
     
-    const result = await api.uploadSlip(file);
+    const result = await api.uploadSlip(file, null, service);
     
     // Display debug logs in console
     if (result.data && result.data.debug) {
@@ -1707,34 +1806,28 @@ async function uploadAndScanSlip(file) {
 }
 
 function resetSlipUpload() {
-  const dropzone = document.getElementById('slipDropzone');
-  const input = document.getElementById('slipUploadInput');
+  const services = ['easyslip', 'slip2go'];
   const loadingIcon = document.getElementById('uploadLoadingIcon');
   const hint = document.getElementById('slipUploadHint');
-  
-  if (input) {
-    input.value = '';
-  }
-  
-  // ซ่อน loading icon
+
   if (loadingIcon) {
     loadingIcon.style.display = 'none';
     loadingIcon.classList.remove('spin-icon');
   }
-  
-  // รีเซ็ต hint text
   if (hint) {
-    hint.textContent = 'รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG)';
+    hint.textContent = 'รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG) — เลือกบริการที่ต้องการแล้ววางรูปสลิปลงในช่องของบริการนั้น';
   }
-  
-  if (dropzone) {
-    dropzone.innerHTML = `
-      <i data-lucide="upload-cloud"></i>
-      <p>ลากไฟล์สลิปมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
-    `;
-    lucide.createIcons();
-    bindUploadEvents();
+
+  for (const svc of services) {
+    const input = document.getElementById(`slipUploadInput-${svc}`);
+    if (input) input.value = '';
+    const zone = document.getElementById(`slipDropzone-${svc}`);
+    if (zone) {
+      zone.innerHTML = `<span class="provider-paste-hint">คลิกแล้วกด Ctrl+V เพื่อวางรูปสลิป หรือลากไฟล์มาวาง</span>`;
+      // ไม่ต้อง re-bind เพราะ zone element เดิมยังอยู่ (listeners ติดตัว element)
+    }
   }
+  if (window.lucide) lucide.createIcons();
 }
 
 // ============================================================

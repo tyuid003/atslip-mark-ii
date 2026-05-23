@@ -8,8 +8,11 @@ class RealtimeClient {
     this.ws = null;
     this.url = '';
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 10;
+    this.maxReconnectAttempts = 3;
     this.reconnectDelay = 1000; // Start with 1 second, exponential backoff
+    this.connectionTimeoutMs = 8000;
+    this.connectTimeoutId = null;
+    this.pollingIntervalId = null;
 
     // Auto-connect on page load
     if (document.readyState === 'loading') {
@@ -35,10 +38,12 @@ class RealtimeClient {
 
     try {
       this.ws = new WebSocket(this.url);
+      this.armConnectionTimeout();
 
       // Handle connection open
       this.ws.addEventListener('open', () => {
         console.log('[Realtime] ✅ Connected');
+        this.clearConnectionTimeout();
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         this.onConnected();
@@ -67,23 +72,47 @@ class RealtimeClient {
         } catch (error) {
           console.error('[Realtime] Failed to parse message:', error, 'Data:', event.data?.substring(0, 200));
         }
-      });;
+      });
 
       // Handle errors
       this.ws.addEventListener('error', (event) => {
         console.error('[Realtime] ❌ WebSocket error:', event);
+        this.clearConnectionTimeout();
         this.onError(event);
       });
 
       // Handle disconnect
       this.ws.addEventListener('close', () => {
         console.log('[Realtime] 🔌 Disconnected');
+        this.clearConnectionTimeout();
         this.ws = null;
         this.attemptReconnect();
       });
     } catch (error) {
       console.error('[Realtime] Failed to create WebSocket:', error);
+      this.clearConnectionTimeout();
       this.attemptReconnect();
+    }
+  }
+
+  armConnectionTimeout() {
+    this.clearConnectionTimeout();
+    this.connectTimeoutId = setTimeout(() => {
+      if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+        console.warn('[Realtime] Connection timeout, forcing reconnect/fallback');
+        try {
+          this.ws.close();
+        } catch {
+          // ignore close errors
+        }
+      }
+    }, this.connectionTimeoutMs);
+  }
+
+  clearConnectionTimeout() {
+    if (this.connectTimeoutId) {
+      clearTimeout(this.connectTimeoutId);
+      this.connectTimeoutId = null;
     }
   }
 
@@ -252,6 +281,10 @@ class RealtimeClient {
    * Enable polling fallback (for when WebSocket is unavailable)
    */
   enablePollingFallback() {
+    if (this.pollingIntervalId) {
+      return;
+    }
+
     console.log('[Realtime] Enabling polling fallback (check every 5 seconds)');
 
     if (typeof showToast === 'function') {
@@ -259,7 +292,7 @@ class RealtimeClient {
     }
 
     // Poll every 5 seconds if WebSocket is unavailable
-    setInterval(() => {
+    this.pollingIntervalId = setInterval(() => {
       if (typeof refreshPendingTransactions === 'function') {
         console.log('[Realtime] Polling refresh...');
         refreshPendingTransactions();
@@ -302,6 +335,13 @@ class RealtimeClient {
     if (this.ws) {
       this.ws.close();
       this.ws = null;
+    }
+
+    this.clearConnectionTimeout();
+
+    if (this.pollingIntervalId) {
+      clearInterval(this.pollingIntervalId);
+      this.pollingIntervalId = null;
     }
   }
 }

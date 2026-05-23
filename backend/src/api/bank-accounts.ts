@@ -12,7 +12,9 @@ export const BankAccountsAPI = {
    */
   async handleSyncBankAccounts(env: Env, tenantId: string): Promise<Response> {
     try {
-      // ดึงข้อมูล tenant
+      // ดึงข้อมูล tenant + session token พร้อมกัน
+      const now = Math.floor(Date.now() / 1000);
+
       const tenant = await env.DB.prepare(
         'SELECT id, team_id, admin_api_url FROM tenants WHERE id = ?'
       )
@@ -25,108 +27,77 @@ export const BankAccountsAPI = {
 
       const teamId = tenant.team_id as string;
 
-      // ✅ เรียก /api/accounting/bankaccounts/list เพื่อดึง Account List พร้อม Account IDs
-      let bankAccountsList: Array<{ 
-        id: number;           // ← Account ID (ใช้สำหรับ toAccountId!)
-        accountNumber: string; 
-        bankId: number; 
-        bankCode?: string 
-      }> = [];
-      
-      try {
-        const accountsResponse = await fetch(`${tenant.admin_api_url}/api/accounting/bankaccounts/list`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+      // ดึง session token จาก D1 เพื่อใช้ auth กับ admin API
+      const sessionRow = await env.DB.prepare(
+        `SELECT session_token FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
+      ).bind(tenantId, now).first<{ session_token: string }>();
+      const sessionToken = sessionRow?.session_token || '';
 
-        if (accountsResponse.ok) {
-          const accountsData = await accountsResponse.json() as { list?: typeof bankAccountsList };
-          bankAccountsList = accountsData.list || [];
-
-          console.log('[BankAccountsAPI] 💳 Bank Accounts fetched:', bankAccountsList.length, 'accounts');
-          console.log('[BankAccountsAPI] 📝 Sample account:', bankAccountsList[0] ? {
-            id: bankAccountsList[0].id,
-            accountNumber: bankAccountsList[0].accountNumber,
-            bankId: bankAccountsList[0].bankId,
-          } : 'none');
-
-          // เก็บ account list ใน KV พร้อม Account IDs สำหรับ lookup
-          const accountListKey = `tenant:${tenantId}:bank-accounts-list`;
-          await env.BANK_KV.put(
-            accountListKey,
-            JSON.stringify({
-              accounts: bankAccountsList,
-              cached_at: Math.floor(Date.now() / 1000),
-            }),
-            { expirationTtl: 86400 } // 24 hours
+      // ──────────────────────────────────────────────────────────────
+      // ดึงบัญชีสดจาก admin API (ใช้ auth ถ้ามี) → อัปเดท KV ด้วย
+      // ──────────────────────────────────────────────────────────────
+      let accounts: any[] = [];
+      if (sessionToken) {
+        try {
+          const freshResp = await fetch(
+            `${tenant.admin_api_url}/api/accounting/bankaccounts/list?limit=200`,
+            { headers: { Authorization: `Bearer ${sessionToken}`, Accept: 'application/json' } },
           );
-
-          console.log('[BankAccountsAPI] ✅ Bank accounts list cached in KV');
-        } else {
-          const errorText = await accountsResponse.text();
-          console.log('[BankAccountsAPI] ⚠️ Failed to fetch bank accounts:', accountsResponse.status, errorText);
+          if (freshResp.ok) {
+            const freshData = await freshResp.json() as { list?: any[]; data?: any[]; accounts?: any[] };
+            accounts = freshData.list || freshData.data || freshData.accounts || [];
+            // อัปเดท KV `tenant:{id}:banks` ด้วยข้อมูลสด
+            const expiresAt = now + 24 * 60 * 60;
+            await env.BANK_KV.put(
+              `tenant:${tenantId}:banks`,
+              JSON.stringify({ tenant_id: tenantId, accounts, cached_at: now, expires_at: expiresAt }),
+              { expirationTtl: 24 * 60 * 60 },
+            );
+            console.log('[BankAccountsAPI] 🔄 Fresh accounts from admin API:', accounts.length);
+          } else {
+            console.warn('[BankAccountsAPI] ⚠️ admin API returned', freshResp.status, '— falling back to KV');
+          }
+        } catch (e: any) {
+          console.warn('[BankAccountsAPI] ⚠️ admin API fetch error:', e?.message);
         }
-      } catch (accountError: any) {
-        console.log('[BankAccountsAPI] ⚠️ Network error fetching bank accounts:', accountError.message);
-        // Continue even if account list fetch fails
       }
 
-      // ✅ เรียก /api/accounting/banks/list เพื่อ cache master list
-      let masterBanks: Array<{ id: number; code: string; name: string }> = [];
-      const bankIdToCode: { [key: number]: string } = {};
-      
-      try {
-        const banksResponse = await fetch(`${tenant.admin_api_url}/api/accounting/banks/list`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+      // Fallback: ใช้ KV ถ้าไม่มี session หรือ fetch ล้มเหลว
+      if (accounts.length === 0) {
+        const bankKey = `tenant:${tenantId}:banks`;
+        const bankData = await env.BANK_KV.get(bankKey);
+        if (!bankData) {
+          return errorResponse('No bank accounts found. Please reconnect the website first.', 404);
+        }
+        const cache = JSON.parse(bankData);
+        accounts = cache.accounts || [];
+        console.log('[BankAccountsAPI] 📦 Using KV cache:', accounts.length, 'accounts');
+      }
 
+      // ──────────────────────────────────────────────────────────────
+      // เรียก /api/accounting/banks/list เพื่อ cache master bank list
+      // ──────────────────────────────────────────────────────────────
+      const bankIdToCode: { [key: number]: string } = {};
+      try {
+        const authHeaders: Record<string, string> = { Accept: 'application/json' };
+        if (sessionToken) authHeaders['Authorization'] = `Bearer ${sessionToken}`;
+        const banksResponse = await fetch(`${tenant.admin_api_url}/api/accounting/banks/list`, {
+          headers: authHeaders,
+        });
         if (banksResponse.ok) {
           const banksData = await banksResponse.json() as { list?: Array<{ id: number; code: string; name: string }> };
-          masterBanks = banksData.list || [];
-
-          // สร้าง mapping: bankId → code
-          masterBanks.forEach(bank => {
-            bankIdToCode[bank.id] = bank.code;
-          });
-
-          console.log('[BankAccountsAPI] 🏦 Master banks fetched:', masterBanks.length, 'banks');
-          console.log('[BankAccountsAPI] 📝 Bank ID to Code mapping:', bankIdToCode);
-
-          // เก็บ master list ใน KV
-          const masterBankKey = `tenant:${tenantId}:master-banks`;
+          const masterBanks = banksData.list || [];
+          masterBanks.forEach(bank => { bankIdToCode[bank.id] = bank.code; });
           await env.BANK_KV.put(
-            masterBankKey,
-            JSON.stringify({
-              banks: masterBanks,
-              cached_at: Math.floor(Date.now() / 1000),
-            }),
-            { expirationTtl: 86400 } // 24 hours
+            `tenant:${tenantId}:master-banks`,
+            JSON.stringify({ banks: masterBanks, cached_at: now }),
+            { expirationTtl: 86400 },
           );
-        } else {
-          const errorText = await banksResponse.text();
-          console.log('[BankAccountsAPI] ⚠️ Failed to fetch master banks:', banksResponse.status, errorText);
+          console.log('[BankAccountsAPI] 🏦 Master banks fetched:', masterBanks.length);
         }
-      } catch (bankError: any) {
-        console.log('[BankAccountsAPI] ⚠️ Network error fetching master banks:', bankError.message);
-        // Continue even if master list fetch fails
+      } catch (e: any) {
+        console.warn('[BankAccountsAPI] ⚠️ master banks fetch error:', e?.message);
       }
-
-      // ดึงบัญชีจาก KV
-      const bankKey = `tenant:${tenantId}:banks`;
-      const bankData = await env.BANK_KV.get(bankKey);
-
-      if (!bankData) {
-        return errorResponse('No bank accounts found in cache', 404);
-      }
-
-      const cache = JSON.parse(bankData);
-      const accounts = cache.accounts || [];
-      const now = Math.floor(Date.now() / 1000);
 
       let syncedCount = 0;
       let skippedCount = 0;
@@ -206,13 +177,49 @@ export const BankAccountsAPI = {
 
       console.log(`[BankAccountsAPI] ✅ Sync complete: ${syncedCount} inserted, ${skippedCount} updated`);
 
+      // Deactivate accounts ที่ไม่อยู่ใน sync list ปัจจุบัน
+      // Normalize id: "10.0" → "10" เพื่อ comparison ถูกต้อง
+      const normalizeId = (v: any): string => {
+        const s = String(v ?? '');
+        // ถ้าเป็น numeric string ที่มี .0 ต่อท้าย ให้ตัดออก
+        return s.replace(/\.0+$/, '');
+      };
+      const currentAccountIds = accounts
+        .map((a: any) => a.id ?? a.accountId ?? null)
+        .filter((v: any) => v != null)
+        .map(normalizeId);
+
+      let deactivatedCount = 0;
+      if (currentAccountIds.length > 0) {
+        // ดึง account_id ทั้งหมดจาก D1 ที่ยัง active
+        const existingRows = await env.DB.prepare(
+          `SELECT account_id FROM tenant_bank_accounts WHERE tenant_id = ? AND status = 'active'`
+        ).bind(tenantId).all<{ account_id: string }>();
+
+        const toDeactivate = (existingRows.results || [])
+          .map(r => r.account_id)
+          .filter(id => !currentAccountIds.includes(normalizeId(id)));
+
+        for (const accountId of toDeactivate) {
+          await env.DB.prepare(
+            `UPDATE tenant_bank_accounts SET status = 'inactive', updated_at = ? WHERE tenant_id = ? AND account_id = ?`
+          ).bind(now, tenantId, accountId).run();
+          deactivatedCount++;
+        }
+
+        if (deactivatedCount > 0) {
+          console.log(`[BankAccountsAPI] 🗑️ Deactivated ${deactivatedCount} removed account(s)`);
+        }
+      }
+
       return successResponse(
         {
           synced: syncedCount,
           updated: skippedCount,
+          deactivated: deactivatedCount,
           total: accounts.length,
         },
-        `Synced ${syncedCount} new accounts, updated ${skippedCount} existing accounts`
+        `Synced ${syncedCount} new accounts, updated ${skippedCount} existing accounts, deactivated ${deactivatedCount}`
       );
     } catch (error: any) {
       return errorResponse(error.message, 500);
