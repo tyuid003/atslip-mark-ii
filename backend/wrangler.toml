@@ -36,7 +36,7 @@ routes = [
 
 # Scheduled Jobs (Cron)
 [triggers]
-crons = ["*/30 * * * *"]  # ทุก 30 นาที
+crons = ["* * * * *"]  # ทุก 1 นาที
 
 # Environment Variables (set via Cloudflare dashboard or wrangler secret)
 # EASYSLIP_API_KEY = "your-easyslip-key"

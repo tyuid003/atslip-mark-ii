@@ -103,6 +103,10 @@ export async function handleTelegramWebhook(
         ctx.waitUntil(handleListCommand(env, conn, update.message, 'pending', 0));
         return jsonResponse({ success: true, data: { handled: 'list_pending' } });
       }
+      if (cmd === '/changeapikey') {
+        ctx.waitUntil(handleChangeApiKeyCommand(env, conn, update.message));
+        return jsonResponse({ success: true, data: { handled: 'changeapikey' } });
+      }
       // /connect_<slug> — เช่น /connect_betax2 หรือ /connect_betax2@botname
       if (cmd.startsWith('/connect_')) {
         const slug = cmd.slice('/connect_'.length).toLowerCase().trim();
@@ -420,6 +424,30 @@ async function handleCallbackQuery(env: Env, conn: TeamTelegramConnection, cq: a
           JSON.stringify({ action, txIds: listState.txIds, type: listState.type }),
           { expirationTtl: 300 },
         );
+      }
+      return;
+    }
+
+    // ── เลือก API Key (/changeapikey) ───────────────────────────────────────────────────────
+    if (data.startsWith('ak:')) {
+      const keyId = data.slice(3);
+      if (!keyId) { await answerCallbackQuery(env, conn, cq.id, 'ข้อมูลไม่ถูกต้อง', true); return; }
+
+      const key = await env.DB.prepare(
+        `SELECT id, service, label FROM team_api_keys WHERE id = ? AND team_id = ? AND status = 'active' LIMIT 1`
+      ).bind(keyId, conn.team_id).first<{ id: string; service: string; label: string | null }>();
+      if (!key) { await answerCallbackQuery(env, conn, cq.id, 'ไม่พบ API Key', true); return; }
+
+      await env.DB.prepare(
+        `UPDATE team_telegram_connections SET selected_api_key_id = ?, updated_at = datetime('now') WHERE id = ?`
+      ).bind(keyId, conn.id).run();
+
+      const svcLabel = key.service === 'slip2go' ? 'Slip2Go' : 'EasySlip';
+      const displayLabel = key.label ? `${key.label} (${svcLabel})` : svcLabel;
+      await answerCallbackQuery(env, conn, cq.id, `✅ เปลี่ยนเป็น ${displayLabel} แล้ว`, false);
+      if (groupId && msgId) {
+        await editMessageText(env, conn, groupId, msgId,
+          `✅ เปลี่ยน API Key สำเร็จ\nตอนนี้ใช้: ${displayLabel}\n\nสแกนสลิปครั้งต่อไปจะใช้ key นี้โดยอัตโนมัติ`);
       }
       return;
     }
@@ -958,11 +986,53 @@ async function handleMenuCommand(env: Env, conn: TeamTelegramConnection, message
     '• /status → สถานะแต่ละเว็บ\n' +
     '• /list_all → รายการล่าสุด 20 รายการ\n' +
     '• /list_pending → รอจับคู่ล่าสุด 20 รายการ\n' +
+    '• /changeapikey → เปลี่ยน API Key ที่ใช้สแกนสลิป\n' +
     '• /menu → เมนูนี้\n',
     { reply_to_message_id: Number(message.message_id) });
 }
 
 // ดึง slug จาก admin_api_url hostname เช่น https://api.winsure24.com → winsure24
+async function handleChangeApiKeyCommand(env: Env, conn: TeamTelegramConnection, message: any): Promise<void> {
+  const chatId = String(message.chat.id);
+
+  const keys = await env.DB.prepare(
+    `SELECT id, service, label, priority FROM team_api_keys
+     WHERE team_id = ? AND status = 'active' ORDER BY priority ASC`
+  ).bind(conn.team_id).all<{ id: string; service: string; label: string | null; priority: number }>();
+  const list = keys.results || [];
+
+  if (list.length === 0) {
+    await sendMessage(env, conn, chatId,
+      '⚠️ ยังไม่มี API Key ในระบบ\nกรุณาเพิ่ม key ก่อนที่หน้าเว็บ → ตั้งค่า API Keys');
+    return;
+  }
+
+  const currentKeyId = conn.selected_api_key_id;
+  const keyboard = list.map((k, idx) => {
+    const svcLabel = k.service === 'slip2go' ? 'Slip2Go' : 'EasySlip';
+    const nameLabel = k.label ? `${k.label} (${svcLabel})` : svcLabel;
+    const isCurrent = k.id === currentKeyId;
+    const isPrimaryUnselected = idx === 0 && !currentKeyId;
+    const prefix = isCurrent ? '✅ ' : (isPrimaryUnselected ? '⭐ ' : '');
+    return [{ text: `${prefix}${nameLabel}`, callback_data: `ak:${k.id}` }];
+  });
+
+  const currentKey = currentKeyId ? list.find(k => k.id === currentKeyId) : null;
+  let currentLine: string;
+  if (currentKey) {
+    const s = currentKey.service === 'slip2go' ? 'Slip2Go' : 'EasySlip';
+    const label = currentKey.label ? `${currentKey.label} (${s})` : s;
+    currentLine = `\nKey ปัจจุบัน: ✅ ${label}`;
+  } else {
+    currentLine = '\n(ใช้ Key หลัก ⭐ โดยอัตโนมัติ)';
+  }
+
+  await sendMessage(env, conn, chatId,
+    `🔑 เลือก API Key ที่ต้องการใช้สแกนสลิป${currentLine}`, {
+      reply_markup: { inline_keyboard: keyboard },
+    });
+}
+
 function toTenantSlug(adminApiUrl: string): string {
   try {
     const host = new URL(adminApiUrl).hostname; // e.g. api.winsure24.com

@@ -12,9 +12,9 @@
   
   <!-- Styles -->
   <link rel="stylesheet" href="css/global.css?v=1.1">
-  <link rel="stylesheet" href="css/components/tenant-card.css">
+  <link rel="stylesheet" href="css/components/tenant-card-2.css">
   <link rel="stylesheet" href="css/components/toast.css">
-  <link rel="stylesheet" href="css/components/api-keys.css?v=2">
+  <link rel="stylesheet" href="css/components/api-keys-2.css">
   <link rel="stylesheet" href="css/components/reply-message.css">
   <link rel="stylesheet" href="css/telegram.css?v=1.1">
   
@@ -125,50 +125,11 @@
       <section class="card workbench-card">
         <div class="card-header">
           <h3 class="card-title">อัพโหลดสลิป</h3>
-          <i data-lucide="loader" id="uploadLoadingIcon" style="display: none; margin-left: auto;"></i>
         </div>
         <div class="card-body">
           <!-- Two paste-focus zones, one per provider -->
           <div class="provider-upload-list" id="providerUploadList">
-            <!-- EasySlip -->
-            <div class="provider-upload-row" data-service="easyslip">
-              <div class="provider-upload-head">
-                <span class="provider-badge provider-badge-easyslip">EasySlip</span>
-                <span class="provider-upload-label">เลือกรูปภาพ</span>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="openProviderPicker('easyslip')">เลือกไฟล์</button>
-                <input type="file" accept="image/*" hidden id="slipUploadInput-easyslip">
-              </div>
-              <div
-                class="provider-paste-zone"
-                id="slipDropzone-easyslip"
-                data-service="easyslip"
-                tabindex="0"
-                role="button"
-                aria-label="คลิกเพื่อโฟกัส แล้ววางรูปสลิปด้วย Ctrl+V (EasySlip)"
-              >
-                <span class="provider-paste-hint">คลิกแล้วกด Ctrl+V เพื่อวางรูปสลิป หรือลากไฟล์มาวาง</span>
-              </div>
-            </div>
-
-            <!-- Slip2Go -->
-            <div class="provider-upload-row" data-service="slip2go">
-              <div class="provider-upload-head">
-                <span class="provider-badge provider-badge-slip2go">Slip2Go</span>
-                <span class="provider-upload-label">เลือกรูปภาพ</span>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="openProviderPicker('slip2go')">เลือกไฟล์</button>
-                <input type="file" accept="image/*" hidden id="slipUploadInput-slip2go">
-              </div>
-              <div
-                class="provider-paste-zone"
-                id="slipDropzone-slip2go"
-                data-service="slip2go"
-                tabindex="0"
-                role="button"
-                aria-label="คลิกเพื่อโฟกัส แล้ววางรูปสลิปด้วย Ctrl+V (Slip2Go)"
-              >
-                <span class="provider-paste-hint">คลิกแล้วกด Ctrl+V เพื่อวางรูปสลิป หรือลากไฟล์มาวาง</span>
-              </div>
-            </div>
+            <!-- Rendered dynamically by renderProviderUploadZones() after API keys are loaded -->
           </div>
           <p id="slipUploadHint" class="form-help mt-2">รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG) — เลือกบริการที่ต้องการแล้ววางรูปสลิปลงในช่องของบริการนั้น</p>
         </div>
@@ -531,17 +492,6 @@
             >
           </div>
 
-          <div class="form-group">
-            <label class="form-label required" for="easyslipToken">EasySlip API Token</label>
-            <input 
-              type="text" 
-              id="easyslipToken" 
-              class="form-input" 
-              placeholder="กรุณาใส่ EasySlip API Token ของคุณ"
-              required
-            >
-            <p class="form-help">Token สำหรับเรียกใช้ EasySlip API</p>
-          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -861,8 +811,8 @@
   <script src="js/api.js?v=1.10"></script>
   <script src="js/ui.js?v=1.7"></script>
   <script src="js/reply-message.js?v=1.2"></script>
-  <script src="js/telegram-connect.js?v=1.5"></script>
-  <script src="js/app.js?v=1.21"></script>
+  <script src="js/telegram-connect.js?v=1.6"></script>
+  <script src="js/app-2.js"></script>
   <script src="js/realtime.js?v=1.2"></script>
   
   <script>

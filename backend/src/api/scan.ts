@@ -1,4 +1,4 @@
-// Scan API
+﻿// Scan API
 // POST /api/scan/upload - อัพโหลดสลิปและสแกน
 
 import { jsonResponse, errorResponse, successResponse } from '../utils/helpers';
@@ -168,18 +168,21 @@ export const ScanAPI = {
       // หรืออาจจะส่งมา tenant_id ใน form data (LINE OA flow)
       const tenantId = formData.get('tenant_id') as string | null;
       const requestedServiceRaw = String(formData.get('service') || '').toLowerCase().trim();
-      const requestedService: 'easyslip' | 'slip2go' | null =
+      const requestedService: 'easyslip' | 'slip2go' | 'slipok' | null =
         requestedServiceRaw === 'slip2go' ? 'slip2go'
+        : requestedServiceRaw === 'slipok' ? 'slipok'
         : requestedServiceRaw === 'easyslip' ? 'easyslip'
         : null;
       const sourceRaw = String(formData.get('source') || '').trim().toLowerCase();
-      const source: 'webhook' | 'manual' | 'upload' | 'telegram' =
-        sourceRaw === 'webhook' || sourceRaw === 'manual' || sourceRaw === 'telegram'
-          ? (sourceRaw as 'webhook' | 'manual' | 'telegram')
+      const source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line' =
+        sourceRaw === 'webhook' || sourceRaw === 'manual' || sourceRaw === 'telegram' || sourceRaw === 'line'
+          ? (sourceRaw as 'webhook' | 'manual' | 'telegram' | 'line')
           : 'upload';
       const isManualScan = source === 'manual';
       const lineOAIdRaw = String(formData.get('line_oa_id') || '').trim();
       const lineOAId = lineOAIdRaw.length > 0 ? lineOAIdRaw : null;
+      // api_key_id override: Telegram bot ส่งมาเมื่อผู้ใช้เลือก key ด้วย /changeapikey
+      const apiKeyIdOverride = String(formData.get('api_key_id') || '').trim() || null;
 
       log('[ScanAPI] Scan source:', {
         source,
@@ -188,178 +191,135 @@ export const ScanAPI = {
         teamSlugHeader: request.headers.get('X-Team-Slug') || null,
       });
 
-      // ผลลัพธ์ของขั้นตอนเลือก key:
-      //   activeProvider: 'easyslip' | 'slip2go'
-      //   easyslipToken / slip2goApiKey
-      let activeProvider: 'easyslip' | 'slip2go' = 'easyslip';
-      let easyslipToken = '';
-      let slip2goApiKey = '';
+      // pickedKeys = รายการ key เรียงตาม round-robin (id รวมอยู่ด้วยเพื่ออัพเดท last_used_at)
+      type PickedKey = { id: string; service: 'easyslip' | 'slip2go' | 'slipok'; api_key: string; branch_id?: string | null };
+      let pickedKeys: PickedKey[] = [];
+      let overridePicked = false;
 
-      if (tenantId) {
-        // ดึง token ของ tenant นี้ (LINE OA flow — ใช้ EasySlip ของ tenant เสมอ)
-        const tenant = await env.DB.prepare(
-          'SELECT easyslip_token FROM tenants WHERE id = ? AND status = ?'
-        )
-          .bind(tenantId, 'active')
-          .first();
-
-        if (!tenant) {
-          log('[ScanAPI] ❌ Tenant not found:', tenantId);
-          return errorResponse('Tenant not found or inactive', 404);
+      // (0) api_key_id override — ใช้ key ที่ระบุโดยตรง (Telegram /changeapikey flow)
+      if (apiKeyIdOverride) {
+        const teamSlugHeader = request.headers.get('X-Team-Slug')?.trim() || null;
+        if (teamSlugHeader) {
+          const overrideRow = await env.DB.prepare(
+            `SELECT k.id, k.service, k.api_key, k.branch_id
+             FROM team_api_keys k
+             JOIN teams tm ON tm.id = k.team_id
+             WHERE k.id = ? AND tm.slug = ? AND k.status = 'active' LIMIT 1`
+          ).bind(apiKeyIdOverride, teamSlugHeader).first<PickedKey>();
+          if (overrideRow) {
+            pickedKeys = [overrideRow];
+            overridePicked = true;
+            log('[ScanAPI] ✅ Using api_key_id override:', { keyId: apiKeyIdOverride, service: overrideRow.service });
+          }
         }
+      }
 
-        easyslipToken = tenant.easyslip_token as string;
-        activeProvider = 'easyslip';
-        log('[ScanAPI] Using tenant-specific EasySlip token:', {
-          tenantId,
-          hasToken: !!easyslipToken,
-          tokenLength: easyslipToken?.length || 0,
-        });
-      } else {
-        // ไม่มี tenant_id → ใช้ X-Team-Slug + form field "service" (ถ้ามี) เลือก key จาก team_api_keys
-        // ลำดับการเลือก:
-        //   1) team_api_keys (priority สูงสุด) ของ service ที่ frontend ระบุ
-        //   2) team_api_keys (priority สูงสุด) ใดก็ได้ของทีม (กรณีไม่ระบุ service)
-        //   3) teams.easyslip_token (legacy fallback)
-        //   4) tenant แรกในทีม (legacy fallback)
-        //   5) tenant แรกในระบบ (legacy fallback สุดท้าย)
-        const teamSlugForToken = request.headers.get('X-Team-Slug')?.trim() || null;
-        let tenant: any = null;
-        let picked = false;
+      if (!overridePicked) {
+        if (tenantId) {
+          // LINE OA flow — หา team_id ของ tenant แล้วดึง keys ทั้งหมดจาก team_api_keys
+          const tenant = await env.DB.prepare(
+            'SELECT id, team_id FROM tenants WHERE id = ? AND status = ?'
+          ).bind(tenantId, 'active').first<{ id: string; team_id: string }>();
 
-        if (teamSlugForToken) {
-          // (1)+(2) เลือกจาก team_api_keys
+          if (!tenant) {
+            log('[ScanAPI] ❌ Tenant not found:', tenantId);
+            return errorResponse('Tenant not found or inactive', 404);
+          }
+
           let q: string;
           let binds: any[];
           if (requestedService) {
-            q = `SELECT k.id, k.service, k.api_key, k.branch_id, k.priority
+            q = `SELECT k.id, k.service, k.api_key, k.branch_id
+               FROM team_api_keys k
+               WHERE k.team_id = ? AND k.service = ? AND k.status = 'active'
+               ORDER BY COALESCE(k.last_used_at, 0) ASC, k.priority ASC`;
+            binds = [tenant.team_id, requestedService];
+          } else {
+            q = `SELECT k.id, k.service, k.api_key, k.branch_id
+               FROM team_api_keys k
+               WHERE k.team_id = ? AND k.status = 'active'
+               ORDER BY COALESCE(k.last_used_at, 0) ASC, k.priority ASC`;
+            binds = [tenant.team_id];
+          }
+          const keyRows = await env.DB.prepare(q).bind(...binds).all<PickedKey>();
+          pickedKeys = keyRows.results || [];
+
+          if (pickedKeys.length === 0) {
+            log('[ScanAPI] ❌ No API key found for team (LINE OA flow):', tenant.team_id);
+            return errorResponse('ยังไม่มี API key สำหรับทีมนี้ — กรุณาไปที่เมนู "ตั้งค่า API Keys" เพื่อเพิ่ม EasySlip, Slip2Go หรือ SlipOK', 404);
+          }
+          log('[ScanAPI] ✅ Using team_api_keys (LINE OA flow):', {
+            count: pickedKeys.length, services: pickedKeys.map(k => k.service), tenantId,
+          });
+        } else {
+          // X-Team-Slug flow
+          const teamSlugForToken = request.headers.get('X-Team-Slug')?.trim() || null;
+
+          if (teamSlugForToken) {
+            let q: string;
+            let binds: any[];
+            if (requestedService) {
+              q = `SELECT k.id, k.service, k.api_key, k.branch_id
                  FROM team_api_keys k
                  JOIN teams tm ON tm.id = k.team_id
                  WHERE tm.slug = ? AND k.service = ? AND k.status = 'active'
-                 ORDER BY k.priority ASC LIMIT 1`;
-            binds = [teamSlugForToken, requestedService];
-          } else {
-            q = `SELECT k.id, k.service, k.api_key, k.branch_id, k.priority
+                 ORDER BY COALESCE(k.last_used_at, 0) ASC, k.priority ASC`;
+              binds = [teamSlugForToken, requestedService];
+            } else {
+              q = `SELECT k.id, k.service, k.api_key, k.branch_id
                  FROM team_api_keys k
                  JOIN teams tm ON tm.id = k.team_id
                  WHERE tm.slug = ? AND k.status = 'active'
-                 ORDER BY k.priority ASC LIMIT 1`;
-            binds = [teamSlugForToken];
-          }
-          const keyRow = await env.DB.prepare(q).bind(...binds).first<{
-            id: string; service: 'easyslip' | 'slip2go'; api_key: string; branch_id: string | null; priority: number;
-          }>();
-
-          if (keyRow) {
-            activeProvider = keyRow.service;
-            if (keyRow.service === 'slip2go') {
-              slip2goApiKey = keyRow.api_key;
-            } else {
-              easyslipToken = keyRow.api_key;
+                 ORDER BY COALESCE(k.last_used_at, 0) ASC, k.priority ASC`;
+              binds = [teamSlugForToken];
             }
-            picked = true;
-            log('[ScanAPI] ✅ Using team_api_keys:', {
-              keyId: keyRow.id, service: keyRow.service, priority: keyRow.priority,
-            });
-          }
-
-          // (3) legacy: teams.easyslip_token
-          if (!picked) {
-            const teamRow = await env.DB.prepare(
-              `SELECT id, name, slug, easyslip_token FROM teams WHERE slug = ? LIMIT 1`
-            ).bind(teamSlugForToken).first<{ id: string; name: string; slug: string; easyslip_token: string | null }>();
-
-            if (teamRow?.easyslip_token) {
-              easyslipToken = teamRow.easyslip_token;
-              activeProvider = 'easyslip';
-              picked = true;
-              log('[ScanAPI] ✅ Using legacy teams.easyslip_token for team:', teamSlugForToken);
-            } else {
-              // (4) legacy: first active tenant within the team
-              tenant = await env.DB.prepare(
-                `SELECT t.id, t.name, t.easyslip_token
-                 FROM tenants t
-                 JOIN teams tm ON tm.id = t.team_id
-                 WHERE tm.slug = ? AND t.status = 'active'
-                   AND t.easyslip_token IS NOT NULL AND t.easyslip_token != ''
-                 ORDER BY t.created_at ASC LIMIT 1`
-              ).bind(teamSlugForToken).first();
-
-              if (tenant) {
-                log('[ScanAPI] Using legacy first-tenant token within team:', {
-                  teamSlug: teamSlugForToken,
-                  tenantId: (tenant as any).id,
-                  hint: 'Add team-level API key in ตั้งค่า API Keys',
-                });
-              }
+            const keyRows = await env.DB.prepare(q).bind(...binds).all<PickedKey>();
+            pickedKeys = keyRows.results || [];
+            if (pickedKeys.length > 0) {
+              log('[ScanAPI] ✅ Using team_api_keys:', {
+                count: pickedKeys.length, services: pickedKeys.map(k => k.service),
+              });
             }
           }
-        }
 
-        // (5) legacy global fallback
-        if (!picked && !tenant) {
-          tenant = await env.DB.prepare(
-            'SELECT id, name, easyslip_token FROM tenants WHERE status = ? AND easyslip_token IS NOT NULL AND easyslip_token != ? LIMIT 1'
-          ).bind('active', '').first();
-        }
-
-        if (!picked && tenant) {
-          easyslipToken = (tenant as any).easyslip_token as string;
-          activeProvider = 'easyslip';
-          picked = true;
-          log('[ScanAPI] Using legacy fallback tenant token:', {
-            tenantId: (tenant as any).id,
-            tenantName: (tenant as any).name,
-          });
-        }
-
-        if (!picked) {
-          log('[ScanAPI] ❌ No API key found for team');
-          return errorResponse('ยังไม่มี API key สำหรับทีมนี้ — กรุณาไปที่เมนู "ตั้งค่า API Keys" เพื่อเพิ่ม EasySlip หรือ Slip2Go', 404);
+          if (pickedKeys.length === 0) {
+            log('[ScanAPI] ❌ No API key found for team');
+            return errorResponse('ยังไม่มี API key สำหรับทีมนี้ — กรุณาไปที่เมนู "ตั้งค่า API Keys" เพื่อเพิ่ม EasySlip, Slip2Go หรือ SlipOK', 404);
+          }
         }
       }
 
-      log('[ScanAPI] Active provider:', activeProvider);
-
-      // สแกนสลิป
+      // สแกนสลิป — round-robin: เลือก key ที่นานสุดที่ไม่ได้ใช้ก่อนเสมอ
+      // ทำเครื่องหมาย last_used_at ก่อนสแกน → request อื่นๆ ที่มาพร้อมกันจะเลือก key ถัดไปแทน
+      // ถ้า key แรกล้มเหลว → fallback ไป key ถัดไปแบบ sequential (ไม่ call ซ้อนกัน)
+      log('[ScanAPI] Key pool:', pickedKeys.map(k => `${k.service}(${k.id.slice(0, 6)})`).join(', '));
       let slipData: any;
-      try {
-        if (activeProvider === 'slip2go') {
-          slipData = await ScanService.scanSlipWithSlip2Go(file, slip2goApiKey);
-        } else {
-          // ตรวจสอบว่า token มีค่าหรือไม่
-          if (!easyslipToken || easyslipToken.trim() === '' || easyslipToken === 'null') {
-            log('[ScanAPI] ❌ EASYSLIP token is empty or invalid');
-            return errorResponse('EASYSLIP token is not configured or invalid.', 400);
-          }
-          slipData = await ScanService.scanSlip(file, easyslipToken);
+      let activeProvider = 'unknown';
+      const scanErrors: string[] = [];
+
+      for (const key of pickedKeys) {
+        await env.DB.prepare(`UPDATE team_api_keys SET last_used_at = ? WHERE id = ?`)
+          .bind(Math.floor(Date.now() / 1000), key.id)
+          .run();
+
+        log(`[ScanAPI] 🔑 Trying key ${key.service} (${key.id.slice(0, 6)}...)`);
+        try {
+          slipData = await ScanService.callProvider(file, key);
+          activeProvider = key.service;
+          log(`[ScanAPI] ✅ Provider ${key.service} succeeded`);
+          break;
+        } catch (err: any) {
+          scanErrors.push(`${key.service}: ${err?.message || 'unknown'}`);
+          log(`[ScanAPI] ❌ Provider ${key.service} failed: ${err?.message} — trying next key...`);
         }
-        log('[ScanAPI] ScanService returned:', {
-          provider: activeProvider,
-          success: slipData?.success,
-          hasData: !!slipData?.data,
-        });
-      } catch (scanError: any) {
-        log('[ScanAPI] ❌ ScanService threw exception:', scanError.message);
-        return errorResponse(`${activeProvider.toUpperCase()} error: ${scanError.message}`, 400);
       }
 
-      log('[ScanAPI] Provider response:', {
-        provider: activeProvider,
-        success: slipData?.success,
-        status: slipData?.data?.status,
-        message: slipData.data?.message,
-        hasData: !!slipData.data?.data,
-      });
-
-      if (!slipData.success) {
-        log('[ScanAPI] ❌ Provider call failed:', JSON.stringify(slipData, null, 2));
-        return errorResponse(`${activeProvider.toUpperCase()} error: ${slipData.data?.message || 'API request failed'}`, 400);
+      if (!slipData) {
+        return errorResponse(`Scan failed: ${scanErrors.join(' | ')}`, 400);
       }
 
-      if (slipData.data.status !== 200) {
-        log('[ScanAPI] ❌ Provider returned non-200:', JSON.stringify(slipData.data, null, 2));
-        return errorResponse(`${activeProvider.toUpperCase()} error (${slipData.data.status}): ${slipData.data?.message || 'Scan failed'}`, 400);
+      if (!slipData?.success || slipData?.data?.status !== 200) {
+        return errorResponse(`${activeProvider.toUpperCase()} error: ${slipData?.data?.message || 'Scan failed'}`, 400);
       }
 
       const slip = slipData.data.data;

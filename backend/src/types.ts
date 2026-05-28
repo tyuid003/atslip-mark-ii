@@ -137,7 +137,7 @@ export interface PendingTransaction {
   matched_user_id: string | null;
   matched_username: string | null;
   status: 'pending' | 'matched' | 'credited' | 'duplicate' | 'failed';
-  source: 'webhook' | 'manual' | 'upload' | 'telegram';
+  source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line';
   error_message: string | null;
   created_at: number;
   updated_at: number;
@@ -180,6 +180,7 @@ export interface TeamTelegramConnection {
   status: 'active' | 'inactive';
   created_at: number;
   updated_at: number;
+  selected_api_key_id: string | null; // key ที่เลือกไว้ด้วย /changeapikey (null = ใช้ primary)
 }
 
 export interface CreateTelegramConnectionRequest {
@@ -225,7 +226,7 @@ export interface ScanJob {
   id: string;
   team_id: string;
   tenant_id: string | null;
-  source: 'webhook' | 'manual' | 'upload' | 'telegram';
+  source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line';
   idempotency_key: string;
   trace_id: string;
   payload_json: string;

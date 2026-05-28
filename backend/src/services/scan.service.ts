@@ -328,6 +328,170 @@ export class ScanService {
   }
 
   /**
+   * สแกนสลิปโดยใช้ SlipOK API (https://slipok.com)
+   * ต้องใช้ API Key + Branch ID คู่กัน
+   * คืนค่าเป็นรูปแบบเดียวกับ EasySlip เพื่อให้ downstream matcher ใช้ได้โดยไม่ต้องแก้
+   */
+  static async scanSlipWithSlipOK(
+    imageFile: File,
+    apiKey: string,
+    branchId: string,
+  ): Promise<EasySlipResponse> {
+    if (!apiKey || !apiKey.trim()) throw new Error('SlipOK API key is empty');
+    if (!branchId || !/^\d+$/.test(branchId.trim())) throw new Error('SlipOK Branch ID must be numeric');
+
+    const formData = new FormData();
+    formData.append('files', imageFile);
+    formData.append('log', 'true');
+
+    console.log('[ScanService] Calling SlipOK API...', {
+      apiKeyLen: apiKey.length,
+      branchId,
+      fileSize: imageFile.size,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let response: Response;
+    try {
+      response = await fetch(`https://api.slipok.com/api/line/apikey/${branchId.trim()}`, {
+        method: 'POST',
+        headers: { 'x-authorization': apiKey },
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') throw new Error('SlipOK timeout: ใช้เวลานานเกิน 30 วินาที');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const raw = await response.text();
+    let result: any;
+    try { result = raw ? JSON.parse(raw) : {}; }
+    catch {
+      throw new Error(`SlipOK invalid JSON (HTTP ${response.status}): ${String(raw).slice(0, 200)}`);
+    }
+
+    console.log('[ScanService] 📥 SlipOK Response:', {
+      httpStatus: response.status,
+      success: result?.success,
+      code: result?.code,
+      hasData: !!result?.data,
+    });
+
+    // Error code 1012 = duplicate (ยังถือว่าสแกนได้ — ใช้ข้อมูลสลิปจาก data)
+    if (result?.code === 1012 && result?.data) {
+      const dup = result.data;
+      console.log('[ScanService] SlipOK duplicate (1012) — using data from existing slip');
+      // map เหมือนกับ success แต่ใช้ข้อมูลจาก result.data โดยตรง
+      return this._mapSlipOKToEasySlip(dup);
+    }
+
+    if (!result?.success || !result?.data) {
+      const code = result?.code ?? response.status;
+      const msg = result?.message || response.statusText || 'Scan failed';
+      throw new Error(`SlipOK error (${code}): ${msg}`);
+    }
+
+    return this._mapSlipOKToEasySlip(result.data);
+  }
+
+  /**
+   * แปลง SlipOK response → EasySlip shape เพื่อให้ downstream ใช้ได้
+   */
+  private static _mapSlipOKToEasySlip(s: any): EasySlipResponse {
+    const sendingBankId = s.sendingBank ? String(s.sendingBank) : '';
+    const receivingBankId = s.receivingBank ? String(s.receivingBank) : '';
+
+    // SlipOK account มีรูปแบบ "xxx-x-x1234-x" → ตัด x ออก ได้เลขที่เห็นได้
+    const senderAccountRaw = s.sender?.account?.value || '';
+    const receiverAccountRaw = s.receiver?.account?.value || '';
+
+    // parse transDate (yyyyMMdd) + transTime (HH:mm:ss) → ISO string
+    let isoDate = '';
+    try {
+      const d = String(s.transDate || '');
+      const t = String(s.transTime || '00:00:00');
+      if (d.length === 8) {
+        isoDate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t}+07:00`;
+      }
+    } catch { /* ignore */ }
+
+    const mapped = {
+      payload: String(s.rqUID || ''),
+      transRef: String(s.transRef || ''),
+      date: isoDate || String(s.transTimestamp || ''),
+      countryCode: String(s.countryCode || 'TH'),
+      amount: {
+        amount: Number(s.amount || 0),
+        local: {
+          amount: Number(s.paidLocalAmount || s.amount || 0),
+          currency: String(s.paidLocalCurrency || '764'),
+        },
+      },
+      fee: Number(s.transFeeAmount || 0),
+      ref1: s.ref1 || '',
+      ref2: s.ref2 || '',
+      ref3: s.ref3 || '',
+      sender: {
+        bank: this.bankFromCode(sendingBankId),
+        account: {
+          name: {
+            th: String(s.sender?.displayName || ''),
+            en: String(s.sender?.name || ''),
+          },
+          bank: senderAccountRaw
+            ? { type: 'BANKAC' as const, account: senderAccountRaw }
+            : undefined,
+          proxy: s.sender?.proxy?.value
+            ? { type: (s.sender.proxy.type || 'MSISDN') as any, account: String(s.sender.proxy.value) }
+            : undefined,
+        },
+      },
+      receiver: {
+        bank: this.bankFromCode(receivingBankId),
+        account: {
+          name: {
+            th: String(s.receiver?.displayName || ''),
+            en: String(s.receiver?.name || ''),
+          },
+          bank: receiverAccountRaw
+            ? { type: 'BANKAC' as const, account: receiverAccountRaw }
+            : undefined,
+          proxy: s.receiver?.proxy?.value
+            ? { type: (s.receiver.proxy.type || 'MSISDN') as any, account: String(s.receiver.proxy.value) }
+            : undefined,
+        },
+      },
+    };
+
+    return {
+      success: true,
+      data: { status: 200, data: mapped as any },
+    };
+  }
+
+  /**
+   * สแกนสลิปโดยใช้ key เดียว (เรียกจาก scan.ts หลังจากเลือก key ด้วย round-robin แล้ว)
+   * ใช้แทน _callProvider แบบ private เดิม
+   */
+  static async callProvider(
+    imageFile: File,
+    key: { service: 'easyslip' | 'slip2go' | 'slipok'; api_key: string; branch_id?: string | null },
+  ): Promise<EasySlipResponse> {
+    if (key.service === 'slip2go') {
+      return this.scanSlipWithSlip2Go(imageFile, key.api_key);
+    }
+    if (key.service === 'slipok') {
+      return this.scanSlipWithSlipOK(imageFile, key.api_key, key.branch_id || '');
+    }
+    return this.scanSlip(imageFile, key.api_key);
+  }
+
+  /**
    * จัดรูปแบบชื่อธนาคาร (normalize bank names)
    * เนื่องจากชื่อธนาคารอาจมีหลายรูปแบบ เช่น "กสิกร", "กสิกรไทย", "ธนาคารกสิกรไทย", "KBANK"
    */

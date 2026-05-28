@@ -515,6 +515,12 @@
     } catch (e) {
       list.innerHTML = `<div style="padding:16px;color:#c00;">โหลดไม่สำเร็จ: ${_esc(e.message || e)}</div>`;
     }
+
+    // อัพเดท upload zone visibility ตาม keys ที่มีอยู่
+    const _slug = window.currentTeamSlug || window.getTeamFromURL();
+    if (_slug && typeof window.updateProviderZoneVisibility === 'function') {
+      window.updateProviderZoneVisibility(_slug);
+    }
   }
 
   window.openApiKeysModal = async function () {

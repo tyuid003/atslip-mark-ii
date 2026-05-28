@@ -13,7 +13,7 @@ export async function createTenant(
     admin_api_url: string;
     admin_username: string;
     admin_password: string;
-    easyslip_token: string;
+    easyslip_token?: string;
   }
 ) {
   // หา team_id จาก slug
@@ -44,7 +44,7 @@ export async function createTenant(
       data.admin_api_url,
       data.admin_username,
       data.admin_password,
-      data.easyslip_token,
+      data.easyslip_token || null,
       'active',
       now,
       now

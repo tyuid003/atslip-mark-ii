@@ -1752,16 +1752,13 @@ function handleSelectedSlip(file, service = 'easyslip', zoneId = null) {
       if (!uploadingZones.has(effectiveZoneId)) return; // upload เสร็จแล้ว ไม่ต้อง render
       dropzone.innerHTML = `
         <div class="upload-preview">
-          <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
-          <div class="upload-preview-info" style="font-size:0.8rem;color:var(--color-gray-600);">
-            <p class="upload-file-name">${file.name}</p>
-            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); resetSlipUpload('${effectiveZoneId}');">
-              <i data-lucide="x"></i> ลบ
-            </button>
+          <div class="upload-preview-wrap">
+            <img src="${e.target.result}" alt="Preview" class="upload-preview-image">
+            <div class="upload-zone-spinner"></div>
           </div>
+          <p class="upload-file-name">${file.name}</p>
         </div>
       `;
-      lucide.createIcons();
     };
     reader.readAsDataURL(file);
   }
@@ -1771,18 +1768,11 @@ function handleSelectedSlip(file, service = 'easyslip', zoneId = null) {
 }
 
 async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
-  const loadingIcon = document.getElementById('uploadLoadingIcon');
   const effectiveZoneId = zoneId || `slipDropzone-${service}`;
 
   try {
     uploadingZones.add(effectiveZoneId);
     isUploading = uploadingZones.size > 0; // keep legacy flag in sync
-
-    if (loadingIcon) {
-      loadingIcon.style.display = 'block';
-      loadingIcon.classList.add('spin-icon');
-      lucide.createIcons();
-    }
 
     const result = await api.uploadSlip(file, null, service);
 
@@ -1823,13 +1813,6 @@ async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
   } finally {
     uploadingZones.delete(effectiveZoneId);
     isUploading = uploadingZones.size > 0;
-
-    if (uploadingZones.size === 0 && loadingIcon) {
-      loadingIcon.style.display = 'none';
-      loadingIcon.classList.remove('spin-icon');
-      lucide.createIcons();
-    }
-
     resetSlipUpload(effectiveZoneId);
   }
 }
@@ -1857,11 +1840,6 @@ function resetSlipUpload(zoneId = null) {
   } else {
     // รีเซ็ตทุก zone (กรณีไม่ระบุ)
     document.querySelectorAll('.provider-paste-zone[data-key-id]').forEach(z => resetZone(z.id));
-    const loadingIcon = document.getElementById('uploadLoadingIcon');
-    if (loadingIcon) {
-      loadingIcon.style.display = 'none';
-      loadingIcon.classList.remove('spin-icon');
-    }
   }
   if (window.lucide) lucide.createIcons();
 }

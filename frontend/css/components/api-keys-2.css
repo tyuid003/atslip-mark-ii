@@ -78,12 +78,43 @@
   overflow: hidden;
 }
 
+/* wrapper สำหรับภาพ + spinner overlay */
+.provider-paste-zone .upload-preview-wrap {
+  position: relative;
+  width: 100%;
+}
+
 .provider-paste-zone .upload-preview-image {
   width: 100%;
   max-height: 130px;
   object-fit: contain;
   display: block;
   border-radius: var(--radius-sm, 4px);
+}
+
+/* spinner overlay ทับภาพขณะกำลังอัพโหลด */
+.upload-zone-spinner {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.upload-zone-spinner::after {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--color-primary, #2563eb);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: zone-spin 0.7s linear infinite;
+}
+
+@keyframes zone-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* === Provider badge === */

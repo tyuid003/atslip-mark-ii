@@ -30,7 +30,7 @@ const PER_TEAM_CONCURRENCY = 2; // จำกัด 2 job processing พร้อ
 export interface EnqueueParams {
   team_id: string;
   tenant_id?: string | null;
-  source: 'webhook' | 'manual' | 'upload' | 'telegram';
+  source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line';
   idempotency_key: string;
   trace_id?: string;
   payload: Record<string, any>;
@@ -317,6 +317,10 @@ async function processTelegramScanJob(env: Env, job: ScanJob): Promise<{ resultT
   const blob = new Blob([file.bytes], { type: mimeType });
   fd.append('file', blob, `tg-${payload.file_id}.jpg`);
   fd.append('source', 'telegram');
+  // ถ้า user เลือก key ด้วย /changeapikey ให้ส่ง api_key_id ไปด้วย
+  if (conn.selected_api_key_id) {
+    fd.append('api_key_id', conn.selected_api_key_id);
+  }
 
   // หา team slug เพื่อจำกัด receiver matching
   const team = await env.DB.prepare(`SELECT slug FROM teams WHERE id = ? LIMIT 1`)
@@ -385,6 +389,70 @@ async function processTelegramScanJob(env: Env, job: ScanJob): Promise<{ resultT
   return { resultText, pendingTxId };
 }
 
+import { getOrCreateLineMessageSettings } from './line-message-settings.service';
+import {
+  fetchLineImage,
+  callLinePushAPI,
+  isDuplicateScanResult,
+  buildFlexMessage,
+} from '../utils/line-utils';
+
+/**
+ * processLineScanJob — payload ของ line source
+ *  payload = { line_oa_id, line_user_id, line_message_id }
+ */
+async function processLineScanJob(env: Env, job: ScanJob): Promise<{ pendingTxId?: string | null }> {
+  const payload = JSON.parse(job.payload_json || '{}');
+
+  // 1. โหลด LINE OA
+  const lineOA = await env.DB.prepare(
+    `SELECT id, tenant_id, channel_access_token FROM line_oas WHERE id = ? AND status = 'active' LIMIT 1`,
+  ).bind(payload.line_oa_id).first<any>();
+  if (!lineOA) throw new Error(`LINE OA not found or inactive: ${payload.line_oa_id}`);
+
+  // 2. ดาวน์โหลดรูปจาก LINE Content API
+  const imageFile = await fetchLineImage(lineOA.channel_access_token, payload.line_message_id);
+  if (!imageFile) throw new Error(`Failed to download LINE image: ${payload.line_message_id}`);
+
+  // 3. สร้าง synthetic Request → ScanAPI.handleUploadSlip
+  const fd = new FormData();
+  fd.append('file', imageFile);
+  fd.append('tenant_id', lineOA.tenant_id);
+  fd.append('source', 'line');
+  fd.append('line_oa_id', lineOA.id);
+
+  const team = await env.DB.prepare(`SELECT slug FROM teams WHERE id = ? LIMIT 1`)
+    .bind(job.team_id)
+    .first<{ slug: string }>();
+  const headers = new Headers();
+  if (team?.slug) headers.set('X-Team-Slug', team.slug);
+
+  const syntheticReq = new Request('https://internal/api/scan/upload', { method: 'POST', body: fd, headers });
+  const resp = await ScanAPI.handleUploadSlip(syntheticReq, env);
+  let json: any;
+  try { json = await resp.json(); } catch { json = { success: false, error: `non-JSON (status ${resp.status})` }; }
+
+  // 4. โหลด settings และส่ง push reply
+  const settings = await getOrCreateLineMessageSettings(env, lineOA.id, lineOA.tenant_id);
+  const data = json?.data || {};
+  const status = data.status;
+  const userId = payload.line_user_id;
+
+  if (!resp.ok && isDuplicateScanResult(resp, json)) {
+    if (settings.enable_duplicate_flex === 1) {
+      await callLinePushAPI(lineOA.channel_access_token, userId, [buildFlexMessage(settings, 'duplicate', data)]);
+    }
+  } else if (status === 'credited' && settings.enable_success_flex === 1) {
+    await callLinePushAPI(lineOA.channel_access_token, userId, [buildFlexMessage(settings, 'credited', data)]);
+  } else if (status === 'duplicate' && settings.enable_duplicate_flex === 1) {
+    await callLinePushAPI(lineOA.channel_access_token, userId, [buildFlexMessage(settings, 'duplicate', data)]);
+  } else if ((!resp.ok || !json?.success) && settings.enable_failed_reply === 1) {
+    await callLinePushAPI(lineOA.channel_access_token, userId, [{ type: 'text', text: settings.failed_reply_text }]);
+  }
+
+  return { pendingTxId: json?.data?.transaction_id || null };
+}
+
 // ============================================================
 // Public process API
 // ============================================================
@@ -414,8 +482,11 @@ export async function processScanJob(env: Env, jobId: string): Promise<void> {
     if (job.source === 'telegram') {
       const r = await processTelegramScanJob(env, job);
       await markSuccess(env, job.id, { text: r.resultText }, r.pendingTxId);
+    } else if (job.source === 'line') {
+      const r = await processLineScanJob(env, job);
+      await markSuccess(env, job.id, {}, r.pendingTxId);
     } else {
-      // Phase B: ยังรองรับเฉพาะ telegram ผ่าน queue
+      // Phase B: ยังรองรับเฉพาะ telegram และ line ผ่าน queue
       throw new Error(`Source ${job.source} not handled by queue`);
     }
   } catch (err: any) {
@@ -435,6 +506,16 @@ export async function processQueueOnce(
 ): Promise<{ processed: number }> {
   const now = currentTimestamp();
   const limit = opts.limit ?? 5;
+
+  // Recovery: reset jobs stuck in 'processing' for > 5 minutes back to 'queued'
+  const stuckCutoff = now - 5 * 60;
+  await env.DB.prepare(
+    `UPDATE scan_jobs
+     SET status = 'queued', next_attempt_at = ?, updated_at = ?
+     WHERE status = 'processing' AND updated_at < ?`,
+  )
+    .bind(now, now, stuckCutoff)
+    .run();
 
   const rows = await env.DB.prepare(
     `SELECT id FROM scan_jobs

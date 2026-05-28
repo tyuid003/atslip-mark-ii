@@ -60,7 +60,6 @@ export async function handleCreateTenant(
       'admin_api_url',
       'admin_username',
       'admin_password',
-      'easyslip_token',
     ]);
 
     // ดึง team slug จาง header
@@ -71,7 +70,6 @@ export async function handleCreateTenant(
       admin_api_url: body.admin_api_url,
       admin_username: body.admin_username,
       admin_password: body.admin_password,
-      easyslip_token: body.easyslip_token,
     });
 
     return successResponse(tenant, 'Tenant created successfully');
