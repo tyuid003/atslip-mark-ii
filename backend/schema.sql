@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   matched_user_id TEXT,
   matched_username TEXT,
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'matched', 'credited', 'duplicate', 'failed')),
-  source TEXT DEFAULT 'webhook' CHECK(source IN ('webhook', 'manual', 'upload', 'telegram')),
+  source TEXT DEFAULT 'webhook' CHECK(source IN ('webhook', 'manual', 'upload', 'telegram', 'line')),
   error_message TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
