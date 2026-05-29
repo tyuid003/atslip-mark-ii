@@ -21,7 +21,7 @@ import type { Env, ScanJob } from '../types';
 import { generateId, currentTimestamp } from '../utils/helpers';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
-const PER_TEAM_CONCURRENCY = 2; // จำกัด 2 job processing พร้อมกันต่อทีม
+const PER_TEAM_CONCURRENCY = 10; // จำกัด 10 job processing พร้อมกันต่อทีม
 
 // ============================================================
 // Enqueue
@@ -450,7 +450,7 @@ async function processLineScanJob(env: Env, job: ScanJob): Promise<{ pendingTxId
     await callLinePushAPI(lineOA.channel_access_token, userId, [{ type: 'text', text: settings.failed_reply_text }]);
   }
 
-  return { pendingTxId: json?.data?.transaction_id || null };
+  return { pendingTxId: json?.data?.transaction_id || null, debugResult: json };
 }
 
 // ============================================================
@@ -484,7 +484,7 @@ export async function processScanJob(env: Env, jobId: string): Promise<void> {
       await markSuccess(env, job.id, { text: r.resultText }, r.pendingTxId);
     } else if (job.source === 'line') {
       const r = await processLineScanJob(env, job);
-      await markSuccess(env, job.id, {}, r.pendingTxId);
+      await markSuccess(env, job.id, r.debugResult || {}, r.pendingTxId);
     } else {
       // Phase B: ยังรองรับเฉพาะ telegram และ line ผ่าน queue
       throw new Error(`Source ${job.source} not handled by queue`);
@@ -526,10 +526,7 @@ export async function processQueueOnce(
     .bind(now, limit)
     .all<{ id: string }>();
 
-  let processed = 0;
-  for (const row of rows.results || []) {
-    await processScanJob(env, row.id);
-    processed++;
-  }
-  return { processed };
+  const jobIds = (rows.results || []).map((r) => r.id);
+  await Promise.all(jobIds.map((id) => processScanJob(env, id)));
+  return { processed: jobIds.length };
 }

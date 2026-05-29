@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { jsonResponse } from '../utils/helpers';
 import { ScanAPI } from './scan';
 import { getOrCreateLineMessageSettings } from '../services/line-message-settings.service';
-import { enqueueScanJob, processScanJob } from '../services/scan-queue.service';
+import { enqueueScanJob, processQueueOnce } from '../services/scan-queue.service';
 import {
   callLineReplyAPI,
   callLinePushAPI,
@@ -182,7 +182,7 @@ export async function handleLineWebhook(
     if (tenantRow?.team_id) {
       // Enqueue ด้วย retry mechanism แทน fire-and-forget (แก้ปัญหาสลิปหาย)
       const jobKey = `line-${lineOA.id}-${event.message.id}`;
-      const { id: jobId } = await enqueueScanJob(env, {
+      await enqueueScanJob(env, {
         team_id: tenantRow.team_id,
         tenant_id: lineOA.tenant_id,
         source: 'line',
@@ -193,7 +193,7 @@ export async function handleLineWebhook(
           line_message_id: event.message.id,
         },
       });
-      ctx.waitUntil(processScanJob(env, jobId));
+      ctx.waitUntil(processQueueOnce(env, { limit: 20 }));
     } else {
       // fallback: ถ้าหา team_id ไม่ได้ ใช้ direct process เดิม
       ctx.waitUntil(processImageEvent(env, lineOA, settings, event));
