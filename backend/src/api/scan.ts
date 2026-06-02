@@ -493,45 +493,71 @@ export const ScanAPI = {
 
           if (antidupEnabled && sessionForAntidup) {
             log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup);
-            const txListResp = await fetch(
-              `${matchedTenant.admin_api_url}/api/user-transactions/list?page=1&limit=20&sortCol=transfer_at&sortAsc=desc&userId=${matchedUser.id}`,
-              { headers: { Authorization: `Bearer ${sessionForAntidup}`, Accept: 'application/json' } },
-            );
-            if (txListResp.ok) {
+
+            // ขยาย window เป็น 10 นาที กันระบบ admin บันทึกล่าช้า/นาฬิกาคลาด
+            const ANTIDUP_WINDOW_MS = 10 * 60 * 1000;
+            const slipTime = normalizeTimeMs(slip.date);
+            const slipAmount = slip.amount?.amount;
+
+            // ฟังก์ชันช่วย: ดึง deposits ของ user แล้วเช็คว่ามีรายการซ้ำหรือไม่
+            const findDuplicate = async (): Promise<any | null> => {
+              const txListResp = await fetch(
+                `${matchedTenant.admin_api_url}/api/user-transactions/list?page=1&limit=20&sortCol=transfer_at&sortAsc=desc&userId=${matchedUser.id}`,
+                { headers: { Authorization: `Bearer ${sessionForAntidup}`, Accept: 'application/json' } },
+              );
+              if (!txListResp.ok) return null;
               const txListData = await txListResp.json() as { list?: any[] };
               const deposits = (txListData.list || []).filter((t: any) => t.typeName === 'ฝาก');
-              const slipTime = normalizeTimeMs(slip.date);
-              const slipAmount = slip.amount?.amount;
-              // ขยาย window เป็น 5 นาที กันระบบ admin บันทึกล่าช้า/นาฬิกาคลาด
-              const ANTIDUP_WINDOW_MS = 5 * 60 * 1000;
               for (const dep of deposits) {
-                if (dep.creditAmount === slipAmount && dep.transferAt && slipTime) {
+                // ใช้ tolerance 0.01 กัน floating-point เปรียบเทียบยอด
+                const sameAmount =
+                  typeof dep.creditAmount === 'number' && typeof slipAmount === 'number'
+                    ? Math.abs(dep.creditAmount - slipAmount) < 0.01
+                    : dep.creditAmount === slipAmount;
+                if (sameAmount && dep.transferAt && slipTime) {
                   const depTime = normalizeTimeMs(dep.transferAt);
                   if (depTime !== null && Math.abs(depTime - slipTime) <= ANTIDUP_WINDOW_MS) {
-                    log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', {
-                      amount: slipAmount,
-                      slipDate: slip.date,
-                      transferAt: dep.transferAt,
-                      diffMs: Math.abs(depTime - slipTime),
-                    });
-                    return jsonResponse({
-                      success: false,
-                      error: 'พบรายการฝากซ้ำในระบบ (Anti-Dup)',
-                      data: {
-                        status: 'duplicate',
-                        tenant: { id: matchedTenant.id, name: matchedTenant.name },
-                        slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
-                        sender: {
-                          id: matchedUser.id,
-                          name: matchedUser.fullname || senderNameTh || senderNameEn || 'Unknown',
-                          username: matchedUser.memberCode || matchedUser.username || null,
-                          matched: true,
-                        },
-                      },
-                    }, 400);
+                    return dep;
                   }
                 }
               }
+              return null;
+            };
+
+            // รอบแรก
+            let dupDeposit = await findDuplicate();
+
+            // รอบสอง: ถ้ารอบแรกไม่เจอ ให้รอ ~1.2 วิ แล้วเช็คอีกครั้ง
+            // เผื่อกรณี SMS-bot ของ admin กำลังจะ insert (race condition)
+            if (!dupDeposit) {
+              await new Promise((r) => setTimeout(r, 1200));
+              dupDeposit = await findDuplicate();
+              if (dupDeposit) {
+                log('[ScanAPI] ⚠️ Anti-dup: caught duplicate on 2nd pass (admin SMS-bot lag)');
+              }
+            }
+
+            if (dupDeposit) {
+              log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', {
+                amount: slipAmount,
+                slipDate: slip.date,
+                transferAt: dupDeposit.transferAt,
+              });
+              return jsonResponse({
+                success: false,
+                error: 'พบรายการฝากซ้ำในระบบ (Anti-Dup)',
+                data: {
+                  status: 'duplicate',
+                  tenant: { id: matchedTenant.id, name: matchedTenant.name },
+                  slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
+                  sender: {
+                    id: matchedUser.id,
+                    name: matchedUser.fullname || senderNameTh || senderNameEn || 'Unknown',
+                    username: matchedUser.memberCode || matchedUser.username || null,
+                    matched: true,
+                  },
+                },
+              }, 400);
             }
           }
         } catch (antidupErr: any) {
