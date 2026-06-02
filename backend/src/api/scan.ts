@@ -7,6 +7,27 @@ import { CreditService } from '../services/credit.service';
 import { AntidupSettingsAPI } from './antidup-settings';
 import type { Env } from '../types';
 
+/**
+ * Normalize เวลาจาก slip / admin API ให้เป็น UTC unix ms
+ * - ถ้ามี timezone offset (Z, +07:00, -05:00) → parse ปกติ
+ * - ถ้าไม่มี timezone → ถือว่าเป็นเวลาไทย (UTC+7) เพื่อให้เทียบกับ slip.date ได้ถูกต้อง
+ *   (admin API บางตัวส่งเป็น "YYYY-MM-DD HH:mm:ss" หรือ ISO ไม่มี Z)
+ */
+function normalizeTimeMs(timeStr: string | null | undefined): number | null {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim();
+  if (!trimmed) return null;
+  // มี timezone อยู่แล้ว
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    const ms = new Date(trimmed).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  // ไม่มี timezone → ถือว่าเป็นเวลาไทย (Asia/Bangkok = UTC+7)
+  const isoLike = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+  const ms = new Date(`${isoLike}+07:00`).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 interface BankAccountListItem {
   id: number;
   accountNumber?: string;
@@ -479,13 +500,20 @@ export const ScanAPI = {
             if (txListResp.ok) {
               const txListData = await txListResp.json() as { list?: any[] };
               const deposits = (txListData.list || []).filter((t: any) => t.typeName === 'ฝาก');
-              const slipTime = slip.date ? new Date(slip.date).getTime() : null;
+              const slipTime = normalizeTimeMs(slip.date);
               const slipAmount = slip.amount?.amount;
+              // ขยาย window เป็น 5 นาที กันระบบ admin บันทึกล่าช้า/นาฬิกาคลาด
+              const ANTIDUP_WINDOW_MS = 5 * 60 * 1000;
               for (const dep of deposits) {
                 if (dep.creditAmount === slipAmount && dep.transferAt && slipTime) {
-                  const depTime = new Date(dep.transferAt).getTime();
-                  if (Math.abs(depTime - slipTime) <= 60000) {
-                    log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', { amount: slipAmount, transferAt: dep.transferAt });
+                  const depTime = normalizeTimeMs(dep.transferAt);
+                  if (depTime !== null && Math.abs(depTime - slipTime) <= ANTIDUP_WINDOW_MS) {
+                    log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', {
+                      amount: slipAmount,
+                      slipDate: slip.date,
+                      transferAt: dep.transferAt,
+                      diffMs: Math.abs(depTime - slipTime),
+                    });
                     return jsonResponse({
                       success: false,
                       error: 'พบรายการฝากซ้ำในระบบ (Anti-Dup)',

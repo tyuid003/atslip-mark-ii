@@ -1336,6 +1336,11 @@ async function openUserSearch(transactionId, tenantId) {
 window.openUserSearch = openUserSearch;
 
 function closeUserSearch() {
+  // Clear any pending debounce timer to prevent orphaned API calls after modal closes
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
   const modal = document.querySelector('.user-search-modal');
   if (modal) {
     modal.remove();

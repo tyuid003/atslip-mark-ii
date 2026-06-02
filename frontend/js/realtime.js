@@ -31,6 +31,20 @@ class RealtimeClient {
       return;
     }
 
+    // Cleanup old WebSocket before creating new one (prevents listener accumulation)
+    if (this.ws) {
+      try {
+        this.ws.onopen = null;
+        this.ws.onmessage = null;
+        this.ws.onerror = null;
+        this.ws.onclose = null;
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close();
+        }
+      } catch (_) { /* ignore */ }
+      this.ws = null;
+    }
+
     // Construct WebSocket URL
     this.url = window.REALTIME_WS_URL || this.constructWebSocketUrl();
 
@@ -41,53 +55,40 @@ class RealtimeClient {
       this.armConnectionTimeout();
 
       // Handle connection open
-      this.ws.addEventListener('open', () => {
+      this.ws.onopen = () => {
         console.log('[Realtime] ✅ Connected');
         this.clearConnectionTimeout();
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         this.onConnected();
-      });
+      };
 
-      // Handle incoming messages
-      this.ws.addEventListener('message', (event) => {
-        console.log('[Realtime] Raw event received:', { dataType: typeof event.data, dataLength: event.data?.length });
+      // Handle incoming messages (no spam logs in hot path)
+      this.ws.onmessage = (event) => {
         try {
-          // Skip ping/pong or non-JSON messages
-          if (!event.data || typeof event.data !== 'string') {
-            console.log('[Realtime] Skipped: data is not string', typeof event.data);
-            return;
-          }
-
-          // Try to parse as JSON, skip if not JSON
-          if (!event.data.startsWith('{') && !event.data.startsWith('[')) {
-            console.log('[Realtime] Received non-JSON message (ping/connection keepalive):', event.data);
-            return;
-          }
-
-          console.log('[Realtime] Parsing JSON:', event.data.substring(0, 100));
+          if (!event.data || typeof event.data !== 'string') return;
+          if (!event.data.startsWith('{') && !event.data.startsWith('[')) return;
           const message = JSON.parse(event.data);
-          console.log('[Realtime] 📨 Message received:', message);
           this.handleMessage(message);
         } catch (error) {
-          console.error('[Realtime] Failed to parse message:', error, 'Data:', event.data?.substring(0, 200));
+          console.error('[Realtime] Failed to parse message:', error);
         }
-      });
+      };
 
       // Handle errors
-      this.ws.addEventListener('error', (event) => {
-        console.error('[Realtime] ❌ WebSocket error:', event);
+      this.ws.onerror = (event) => {
+        console.error('[Realtime] ❌ WebSocket error');
         this.clearConnectionTimeout();
         this.onError(event);
-      });
+      };
 
       // Handle disconnect
-      this.ws.addEventListener('close', () => {
+      this.ws.onclose = () => {
         console.log('[Realtime] 🔌 Disconnected');
         this.clearConnectionTimeout();
         this.ws = null;
         this.attemptReconnect();
-      });
+      };
     } catch (error) {
       console.error('[Realtime] Failed to create WebSocket:', error);
       this.clearConnectionTimeout();
@@ -161,17 +162,10 @@ class RealtimeClient {
    * @param {object} message 
    */
   handleMessage(message) {
-    console.log('[Realtime] handleMessage called with:', message);
     if (message.type === 'new_pending') {
-      console.log('[Realtime] Detected new_pending message, calling onNewPending');
-      // New pending transaction received
       this.onNewPending(message.data);
     } else if (message.type === 'transaction_updated') {
-      console.log('[Realtime] Detected transaction_updated message, calling onTransactionUpdated');
-      // Transaction status changed (credit applied, etc)
       this.onTransactionUpdated(message.data);
-    } else {
-      console.log('[Realtime] Unknown message type:', message.type);
     }
   }
 
@@ -180,19 +174,21 @@ class RealtimeClient {
    * @param {object} data 
    */
   onNewPending(data) {
-    console.log('[Realtime] New pending transaction:', data);
+    console.log('[Realtime] New pending transaction:', data?.id);
 
     // Add to allPendingTransactions array without reloading
     if (typeof allPendingTransactions !== 'undefined') {
       // Check if this transaction already exists (prevent duplicates on refresh)
       const isDuplicate = allPendingTransactions.some(item => item.id === data.id);
       if (isDuplicate) {
-        console.log('[Realtime] ⚠️ Transaction already exists, skipping duplicate:', data.id);
         return;
       }
 
       allPendingTransactions.unshift(data);
-      console.log('[Realtime] ✅ Transaction added. Total:', allPendingTransactions.length);
+      // Cap array at 500 items to prevent unbounded memory growth
+      if (allPendingTransactions.length > 500) {
+        allPendingTransactions.length = 500;
+      }
 
       // Show toast notification
       if (typeof showToast === 'function') {
@@ -214,8 +210,6 @@ class RealtimeClient {
    * @param {object} data 
    */
   onTransactionUpdated(data) {
-    console.log('[Realtime] Transaction updated:', data);
-
     if (typeof allPendingTransactions !== 'undefined') {
       // Find and update the transaction
       const index = allPendingTransactions.findIndex(item => item.id === data.id);
@@ -225,7 +219,6 @@ class RealtimeClient {
           ...allPendingTransactions[index],
           ...data,
         };
-        console.log('[Realtime] ✅ Transaction updated:', data.id, 'new status:', data.status);
 
         // Show appropriate toast message
         if (typeof showToast === 'function') {
@@ -251,8 +244,6 @@ class RealtimeClient {
 
         // Play notification sound
         this.playNotificationSound();
-      } else {
-        console.log('[Realtime] ⚠️ Transaction not found in list:', data.id);
       }
     }
   }
@@ -348,3 +339,8 @@ class RealtimeClient {
 
 // Auto-initialize on script load
 const realtimeClient = new RealtimeClient();
+
+// Cleanup WebSocket and polling when page unloads (prevents leaked connections)
+window.addEventListener('pagehide', () => {
+  try { realtimeClient.disconnect(); } catch (_) { /* ignore */ }
+});

@@ -76,9 +76,10 @@ export class PendingNotificationsDO {
       console.log(`[PendingNotificationsDO] Client disconnected. Total: ${this.clients.length}`);
     });
 
-    // Handle errors
+    // Handle errors — also remove from clients to avoid broadcasting to dead sockets
     server.addEventListener('error', (error: any) => {
       console.error(`[PendingNotificationsDO] Error:`, error);
+      this.clients = this.clients.filter((c) => c !== server);
     });
 
     return new Response(null, {
@@ -98,13 +99,19 @@ export class PendingNotificationsDO {
 
       // Send incoming data directly as message (already formatted by backend)
       let successCount = 0;
+      const dead: WebSocket[] = [];
       for (const client of this.clients) {
         try {
           client.send(JSON.stringify(incomingData));
           successCount++;
         } catch (error) {
           console.error(`[PendingNotificationsDO] Failed to send to client:`, error);
+          dead.push(client);
         }
+      }
+      // Cleanup dead sockets so the next broadcast doesn't attempt them again
+      if (dead.length > 0) {
+        this.clients = this.clients.filter((c) => !dead.includes(c));
       }
 
       console.log(`[PendingNotificationsDO] Broadcast complete. Sent to ${successCount}/${this.clients.length} clients`);

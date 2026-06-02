@@ -19,6 +19,48 @@ const API_CONFIG = {
 };
 
 // ============================================================
+// LUCIDE ICONS PATCH — coalesce many createIcons() calls into one
+// ============================================================
+// โค้ดเดิมเรียก lucide.createIcons() 20+ ครั้งต่อ user action ทำให้ DOM
+// ถูก scan ซ้ำๆ (300-3000ms ต่อ action) จึง patch ให้ rAF-coalesce
+// (เรียกได้บ่อย แต่จริงๆ จะรันแค่ครั้งเดียวต่อ frame)
+(function patchLucideCreateIcons() {
+  function tryPatch() {
+    if (!window.lucide || typeof window.lucide.createIcons !== 'function') return false;
+    if (window.lucide.__atslipPatched) return true;
+    const original = window.lucide.createIcons.bind(window.lucide);
+    let pending = false;
+    let lastArgs = null;
+    window.lucide.createIcons = function patchedCreateIcons(...args) {
+      lastArgs = args;
+      if (pending) return;
+      pending = true;
+      const run = () => {
+        pending = false;
+        try { original(...(lastArgs || [])); } catch (_) { /* ignore */ }
+        lastArgs = null;
+      };
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(run);
+      } else {
+        setTimeout(run, 16);
+      }
+    };
+    window.lucide.__atslipPatched = true;
+    return true;
+  }
+  if (!tryPatch()) {
+    // lucide may load after this script — retry on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!tryPatch()) {
+        // fall back to one more retry after small delay
+        setTimeout(tryPatch, 300);
+      }
+    });
+  }
+})();
+
+// ============================================================
 // TEAM ROUTING
 // ============================================================
 
