@@ -3,8 +3,13 @@
  * Manages WebSocket connections and broadcasts new pending items to all connected clients
  */
 
+interface ClientEntry {
+  ws: WebSocket;
+  teamId: string | null;
+}
+
 export class PendingNotificationsDO {
-  private clients: WebSocket[] = [];
+  private clients: ClientEntry[] = [];
   private env: any;
   private state: DurableObjectState;
 
@@ -50,9 +55,14 @@ export class PendingNotificationsDO {
     const { 0: client, 1: server } = new WebSocketPair();
 
     server.accept();
-    this.clients.push(server);
 
-    console.log(`[PendingNotificationsDO] Client connected. Total: ${this.clients.length}`);
+    // Extract team_id from query string so we can route per-team broadcasts
+    const reqUrl = new URL(request.url);
+    const teamId = reqUrl.searchParams.get('team_id') || null;
+    const entry: ClientEntry = { ws: server, teamId };
+    this.clients.push(entry);
+
+    console.log(`[PendingNotificationsDO] Client connected (team=${teamId || 'all'}). Total: ${this.clients.length}`);
 
     // Send connection confirmation as JSON
     try {
@@ -72,14 +82,14 @@ export class PendingNotificationsDO {
 
     // Handle disconnect
     server.addEventListener('close', () => {
-      this.clients = this.clients.filter((c) => c !== server);
+      this.clients = this.clients.filter((c) => c.ws !== server);
       console.log(`[PendingNotificationsDO] Client disconnected. Total: ${this.clients.length}`);
     });
 
     // Handle errors — also remove from clients to avoid broadcasting to dead sockets
     server.addEventListener('error', (error: any) => {
       console.error(`[PendingNotificationsDO] Error:`, error);
-      this.clients = this.clients.filter((c) => c !== server);
+      this.clients = this.clients.filter((c) => c.ws !== server);
     });
 
     return new Response(null, {
@@ -95,32 +105,43 @@ export class PendingNotificationsDO {
     try {
       const incomingData = await request.json() as any;
 
-      console.log(`[PendingNotificationsDO] Broadcasting to ${this.clients.length} clients. Incoming:`, JSON.stringify(incomingData).substring(0, 200));
+      // Determine target team_id from payload (data.team_id). Clients connected without team_id
+      // (legacy frontend) still receive everything for backward compatibility.
+      const targetTeamId: string | null =
+        (incomingData && incomingData.data && incomingData.data.team_id != null)
+          ? String(incomingData.data.team_id)
+          : null;
+
+      const recipients = targetTeamId
+        ? this.clients.filter((c) => !c.teamId || c.teamId === targetTeamId)
+        : this.clients;
+
+      console.log(`[PendingNotificationsDO] Broadcasting to ${recipients.length}/${this.clients.length} clients (team=${targetTeamId || 'all'}).`);
 
       // Send incoming data directly as message (already formatted by backend)
       let successCount = 0;
       const dead: WebSocket[] = [];
-      for (const client of this.clients) {
+      for (const c of recipients) {
         try {
-          client.send(JSON.stringify(incomingData));
+          c.ws.send(JSON.stringify(incomingData));
           successCount++;
         } catch (error) {
           console.error(`[PendingNotificationsDO] Failed to send to client:`, error);
-          dead.push(client);
+          dead.push(c.ws);
         }
       }
       // Cleanup dead sockets so the next broadcast doesn't attempt them again
       if (dead.length > 0) {
-        this.clients = this.clients.filter((c) => !dead.includes(c));
+        this.clients = this.clients.filter((c) => !dead.includes(c.ws));
       }
 
-      console.log(`[PendingNotificationsDO] Broadcast complete. Sent to ${successCount}/${this.clients.length} clients`);
+      console.log(`[PendingNotificationsDO] Broadcast complete. Sent to ${successCount}/${recipients.length} clients`);
 
       return new Response(
         JSON.stringify({
           success: true,
           sent: successCount,
-          total: this.clients.length,
+          total: recipients.length,
         }),
         {
           status: 200,

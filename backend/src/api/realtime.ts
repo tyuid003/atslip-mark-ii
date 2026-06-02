@@ -23,8 +23,15 @@ export const RealtimeAPI = {
       const doId = doNamespace.idFromName('global');
       const doInstance = doNamespace.get(doId);
 
+      // Forward team_id query param to DO so it can route per-team broadcasts
+      const incomingUrl = new URL(request.url);
+      const teamId = incomingUrl.searchParams.get('team_id') || '';
+      const doUrl = teamId
+        ? `https://durable-object/ws?team_id=${encodeURIComponent(teamId)}`
+        : 'https://durable-object/ws';
+
       // Proxy WebSocket to Durable Object
-      return await doInstance.fetch(new Request('https://durable-object/ws', {
+      return await doInstance.fetch(new Request(doUrl, {
         method: request.method,
         headers: request.headers,
         body: request.body,

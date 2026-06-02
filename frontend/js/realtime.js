@@ -45,8 +45,13 @@ class RealtimeClient {
       this.ws = null;
     }
 
-    // Construct WebSocket URL
-    this.url = window.REALTIME_WS_URL || this.constructWebSocketUrl();
+    // Construct WebSocket URL with team_id (so backend DO can route only this team's events)
+    let baseUrl = window.REALTIME_WS_URL || this.constructWebSocketUrl();
+    const teamId = window.currentTeamId;
+    if (teamId) {
+      baseUrl += (baseUrl.includes('?') ? '&' : '?') + 'team_id=' + encodeURIComponent(teamId);
+    }
+    this.url = baseUrl;
 
     console.log('[Realtime] Connecting to:', this.url);
 
