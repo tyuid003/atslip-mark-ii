@@ -2063,6 +2063,16 @@ function showToastNotification(message) {
     return;
   }
 
+  // ถ้าแท็บถูกซ่อนอยู่ ไม่ต้องคิว toast เก็บไว้ (ผู้ใช้ไม่เห็นอยู่แล้ว)
+  if (typeof document !== 'undefined' && document.hidden) {
+    return;
+  }
+
+  // จำกัดคิวสูงสุด 20 รายการ — กันบวมตอนสลิปเข้าถี่ๆ ตอนผู้ใช้ทิ้งแท็บไว้
+  if (toastQueue.length >= 20) {
+    toastQueue.shift();
+  }
+
   // เพิ่มข้อความลงคิว
   toastQueue.push(message);
   

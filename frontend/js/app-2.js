@@ -1336,6 +1336,11 @@ async function openUserSearch(transactionId, tenantId) {
 window.openUserSearch = openUserSearch;
 
 function closeUserSearch() {
+  // Clear any pending debounce timer to prevent orphaned API calls after modal closes
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
   const modal = document.querySelector('.user-search-modal');
   if (modal) {
     modal.remove();
@@ -2034,6 +2039,16 @@ function showToastNotification(message) {
   // ถ้า toast ถูกปิดใช้งาน ไม่แสดง
   if (!toastEnabled) {
     return;
+  }
+
+  // ถ้าแท็บถูกซ่อนอยู่ ไม่ต้องคิว toast เก็บไว้ (ผู้ใช้ไม่เห็นอยู่แล้ว)
+  if (typeof document !== 'undefined' && document.hidden) {
+    return;
+  }
+
+  // จำกัดคิวสูงสุด 20 รายการ — กันบวมตอนสลิปเข้าถี่ๆ ตอนผู้ใช้ทิ้งแท็บไว้
+  if (toastQueue.length >= 20) {
+    toastQueue.shift();
   }
 
   // เพิ่มข้อความลงคิว

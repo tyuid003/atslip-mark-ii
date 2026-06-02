@@ -19,6 +19,69 @@ const API_CONFIG = {
 };
 
 // ============================================================
+// CONSOLE LOG SUPPRESSION (memory)
+// ============================================================
+// เปิด DevTools ทิ้งไว้นานๆ + console.log จำนวนมาก = แท็บกินแรม 800MB+
+// (เบราว์เซอร์เก็บประวัติ console ไว้ทั้งหมดจนกว่าจะ clear)
+//
+// กลยุทธ์:
+//   - debug/info/log → ปิดทั้งหมดเป็น default (เปิดได้ด้วย ?debug=1
+//     หรือ localStorage.setItem('atslip_debug','1'))
+//   - warn/error → ยังคงไว้ แต่ rate-limit (เก็บได้สูงสุด 200 ข้อความ
+//     ภายใน rolling 10 นาที, เกินกว่านั้นจะถูก drop เงียบๆ)
+(function installConsoleGuard() {
+  if (typeof console === 'undefined') return;
+  if (console.__atslipGuarded) return;
+
+  const params = new URLSearchParams(window.location.search || '');
+  const debugEnabled =
+    params.get('debug') === '1' ||
+    (typeof localStorage !== 'undefined' && localStorage.getItem('atslip_debug') === '1');
+
+  const noop = function () { /* swallowed */ };
+  if (!debugEnabled) {
+    // เก็บ original ไว้เผื่ออยากเปิดดูตอน runtime
+    console.__atslipOriginal = {
+      log: console.log,
+      info: console.info,
+      debug: console.debug,
+    };
+    console.log = noop;
+    console.info = noop;
+    console.debug = noop;
+  }
+
+  // Rate-limit warn/error เพื่อกัน spam loop กินแรม
+  const WINDOW_MS = 10 * 60 * 1000; // 10 นาที
+  const MAX_PER_WINDOW = 200;
+  const stamps = []; // timestamps ของ message ที่ผ่านไปได้
+  function rateLimited(orig) {
+    return function (...args) {
+      const now = Date.now();
+      // drop entries เก่ากว่า WINDOW
+      while (stamps.length && now - stamps[0] > WINDOW_MS) stamps.shift();
+      if (stamps.length >= MAX_PER_WINDOW) return; // เงียบ
+      stamps.push(now);
+      try { orig.apply(console, args); } catch (_) { /* ignore */ }
+    };
+  }
+  console.warn = rateLimited(console.warn);
+  console.error = rateLimited(console.error);
+
+  console.__atslipGuarded = true;
+
+  // helper สำหรับเปิด/ปิด debug จาก console ตอน runtime
+  window.atslipEnableDebug = function () {
+    try { localStorage.setItem('atslip_debug', '1'); } catch (_) {}
+    location.reload();
+  };
+  window.atslipDisableDebug = function () {
+    try { localStorage.removeItem('atslip_debug'); } catch (_) {}
+    location.reload();
+  };
+})();
+
+// ============================================================
 // LUCIDE ICONS PATCH — coalesce many createIcons() calls into one
 // ============================================================
 // โค้ดเดิมเรียก lucide.createIcons() 20+ ครั้งต่อ user action ทำให้ DOM
