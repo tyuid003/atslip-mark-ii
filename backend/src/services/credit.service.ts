@@ -313,6 +313,17 @@ export class CreditService {
 
       log('[CreditService] 👤 Using memberCode for credit:', memberCode);
 
+      // ── fromAccountNumber: ตัดเหลือ 6 หลักท้าย ──────────────────────────
+      // เหตุผล: ระบบ admin มี SMS bot-auto ที่บันทึก fromAccountNumber แค่
+      // 6 หลักท้าย (เพราะ SMS แสดงแบบ masked) เช่น "874595"
+      // ถ้าเราส่งเลขเต็ม 10 หลัก "2188874595" admin's dedup จะไม่จับว่าซ้ำ
+      // กับ record ของ bot-auto -> ลูกค้าได้เครดิตซ้ำ
+      // ดังนั้นเราตัดเหลือ 6 หลักท้ายให้ตรงรูปแบบที่ระบบ admin ใช้
+      const digitsOnly = String(actualBankAccount || '').replace(/\D/g, '');
+      const fromAccountNumberForApi = digitsOnly.length > 6
+        ? digitsOnly.slice(-6)
+        : digitsOnly;
+
       const apiEndpoint = `${tenant.admin_api_url}/api/banking/transactions/deposit-record`;
       const payload = {
         memberCode,
@@ -321,7 +332,7 @@ export class CreditService {
         toAccountId: toAccountIdNumber,
         transferAt: transferDate,
         auto: true,
-        fromAccountNumber: actualBankAccount,
+        fromAccountNumber: fromAccountNumberForApi,
       };
 
       log('[CreditService] 🎯 API Endpoint:', apiEndpoint);
