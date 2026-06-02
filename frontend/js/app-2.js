@@ -113,7 +113,6 @@ async function init() {
     addNotification(`ℹ️ พบ URL ทีมสะกดผิด ระบบแก้เป็น ${currentTeamSlug} ให้อัตโนมัติ`);
   }
 
-  console.log('Current Team Slug:', currentTeamSlug);
 
   if (typeof window.setLayoutForPage === 'function') {
     window.setLayoutForPage(currentPage);
@@ -182,7 +181,6 @@ window.addEventListener('hashchange', () => {
     currentPage = newPage;
     window.currentTeamSlug = currentTeamSlug;
     window.currentPage = currentPage;
-    console.log('Route changed to:', currentTeamSlug, currentPage);
     window.location.reload(); // reload หน้าใหม่เมื่อเปลี่ยน team
   }
 });
@@ -210,7 +208,6 @@ async function loadTenants() {
           currentTenants = parsed;
           tenantCache = parsed;
           UI.renderTenants(currentTenants);
-          console.log('[Tenants] Loaded from sessionStorage cache');
           return;
         }
       } catch (e) {
@@ -219,7 +216,6 @@ async function loadTenants() {
     }
     
     // ถ้าไม่มี cache หรือ parse ไม่ได้ หรือหมดอายุ ให้โหลดจาก API
-    console.log('[Tenants] Loading from API...');
     const response = await api.getTenants();
     currentTenants = response.data || [];
     tenantCache = currentTenants;
@@ -227,7 +223,6 @@ async function loadTenants() {
     // บันทึกลง sessionStorage พร้อม timestamp
     sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
     sessionStorage.setItem('tenants_cache_time', now.toString());
-    console.log('[Tenants] Loaded from API and cached:', currentTenants.length, 'tenants');
     
     UI.renderTenants(currentTenants);
   } catch (error) {
@@ -544,7 +539,6 @@ async function viewBankAccounts(tenantId) {
       const metadataResponse = await api.getBankAccountsMetadata(tenantId);
       metadata = (metadataResponse.data || {}).accounts || [];
     } catch (err) {
-      console.log('No metadata found');
     }
 
     renderBankAccountsList(accounts, metadata);
@@ -564,12 +558,6 @@ function renderBankAccountsList(accounts, metadata = []) {
     accounts.forEach((account) => {
       // ใช้ accountNumber เป็น unique identifier (เพราะ id คือ bank id ไม่ใช่ account id)
       const accountId = String(account.accountNumber || account.id || '');
-      console.log('[renderBankAccountsList] Account:', {
-        id: account.id,
-        accountId: account.accountId,
-        accountNumber: account.accountNumber,
-        using: accountId,
-      });
       const meta = metadata.find(m => m.account_id === accountId);
       const englishName = meta?.account_name_en || '';
       const metaId = meta?.id || '';
@@ -652,7 +640,6 @@ async function refreshBankAccountsNow() {
       const metadataResponse = await api.getBankAccountsMetadata(currentTenantId);
       metadata = (metadataResponse.data || {}).accounts || [];
     } catch (err) {
-      console.log('No metadata');
     }
     
     renderBankAccountsList(accounts, metadata);
@@ -693,7 +680,6 @@ async function addEnglishName(accountId) {
   if (!currentTenantId) return;
 
   try {
-    console.log('[addEnglishName] Creating metadata for account:', accountId);
     addNotification('📄 กำลังเพิ่มข้อมูลบัญชี...');
 
     const response = await api.createBankAccountMetadata(currentTenantId, accountId);
@@ -1286,7 +1272,6 @@ async function openUserSearch(transactionId, tenantId) {
   const tenantSelect = document.getElementById('tenantSelect');
   tenantSelect.addEventListener('change', (e) => {
     currentSearchTenantId = e.target.value;
-    console.log('[User Search] Tenant changed to:', currentSearchTenantId);
   });
   
   // Focus input
@@ -1381,7 +1366,6 @@ async function performUserSearch(query) {
   
   try {
     // Search both member and non-member in parallel
-    console.log('[User Search] Searching in parallel:', query, 'tenant:', currentSearchTenantId);
     
     const [memberResponse, nonMemberResponse] = await Promise.all([
       api.searchUsers(query, 'member', currentSearchTenantId).catch(err => ({ data: { users: [] } })),
@@ -1394,7 +1378,6 @@ async function performUserSearch(query) {
     // Combine results: members first, then non-members
     const allUsers = [...memberUsers, ...nonMemberUsers];
     
-    console.log(`[User Search] Found ${memberUsers.length} members + ${nonMemberUsers.length} non-members = ${allUsers.length} total`);
     
     if (allUsers.length === 0) {
       resultsDiv.innerHTML = `
@@ -1479,13 +1462,11 @@ async function selectUser(indexOrId, fallbackName) {
   const adminUserId = user?.id ? String(user.id) : '';
   const category = user?.category || 'member';
 
-  console.log('[Manual Match] User selected:', { adminUserId, memberCode, username, fullname, category });
 
   // ===== ถ้า non-member และยังไม่มี memberCode: ลอง username ก่อน แล้วค่อย gen-membercode =====
   if ((category === 'non-member' || !memberCode) && username) {
     // username มักเป็น identifier ที่ใช้เป็น memberCode ได้ในหลายระบบ
     memberCode = username;
-    console.log('[Manual Match] Using username as memberCode fallback:', username);
   }
 
   // ถ้ายังไม่มี memberCode → ลอง gen-membercode API
@@ -1496,7 +1477,6 @@ async function selectUser(indexOrId, fallbackName) {
       const generatedCode = genResult?.data?.memberCode || '';
       if (generatedCode) {
         memberCode = generatedCode;
-        console.log('[Manual Match] ✅ Got memberCode from gen-membercode:', memberCode);
       } else {
         console.warn('[Manual Match] gen-membercode returned no code. Raw:', genResult);
         // ไม่ return → ใช้ adminUserId เป็น fallback สุดท้าย
@@ -1515,14 +1495,6 @@ async function selectUser(indexOrId, fallbackName) {
   }
 
   try {
-    console.log('[Manual Match] Sending match:', {
-      transactionId: currentSearchTransactionId,
-      matchedUserId,
-      memberCode,
-      fullname,
-      category,
-      tenantId: currentSearchTenantId,
-    });
 
     const result = await api.matchPendingTransaction(currentSearchTransactionId, {
       matched_user_id: matchedUserId,
@@ -1537,7 +1509,6 @@ async function selectUser(indexOrId, fallbackName) {
       },
     });
 
-    console.log('[Manual Match] Success:', result);
     const finalUsername = result?.data?.transaction?.matched_username || fullname;
     addNotification(`✅ จับคู่กับ ${finalUsername} (${matchedUserId}) สำเร็จ`);
     closeUserSearch();
@@ -1781,12 +1752,6 @@ async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
 
     const result = await api.uploadSlip(file, null, service);
 
-    if (result.data?.debug) {
-      console.log('🔍 ===== BACKEND MATCHING PROCESS =====');
-      result.data.debug.forEach(log => console.log(log));
-      console.log('🔍 ===== END OF BACKEND PROCESS =====');
-    }
-
     if (result.success) {
       const data = result.data;
       if (data.status === 'credited') {
@@ -1805,12 +1770,7 @@ async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
   } catch (error) {
     if (error.response) {
       try {
-        const errorData = await error.response.json();
-        if (errorData.debug) {
-          console.log('🔍 ===== BACKEND MATCHING PROCESS (ERROR) =====');
-          errorData.debug.forEach(log => console.log(log));
-          console.log('🔍 ===== END OF BACKEND PROCESS =====');
-        }
+        await error.response.json();
       } catch (_) { /* ignore */ }
     }
     addNotification(`❌ ${translateErrorMessage(error.message)}`);
@@ -1872,7 +1832,6 @@ function connectWebSocket() {
 
     realtimeWS.addEventListener('open', () => {
       wsConnected = true;
-      console.log('[WS] Connected to realtime server');
     });
 
     realtimeWS.addEventListener('message', (event) => {
@@ -1886,7 +1845,6 @@ function connectWebSocket() {
 
     realtimeWS.addEventListener('close', () => {
       wsConnected = false;
-      console.log('[WS] Disconnected, reconnecting in 5s...');
       wsReconnectTimer = setTimeout(connectWebSocket, 5000);
     });
 

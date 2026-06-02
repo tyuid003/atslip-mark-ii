@@ -27,7 +27,6 @@ class RealtimeClient {
    */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('[Realtime] Already connected, skipping duplicate connection');
       return;
     }
 
@@ -53,7 +52,6 @@ class RealtimeClient {
     }
     this.url = baseUrl;
 
-    console.log('[Realtime] Connecting to:', this.url);
 
     try {
       this.ws = new WebSocket(this.url);
@@ -61,7 +59,6 @@ class RealtimeClient {
 
       // Handle connection open
       this.ws.onopen = () => {
-        console.log('[Realtime] ✅ Connected');
         this.clearConnectionTimeout();
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -89,7 +86,6 @@ class RealtimeClient {
 
       // Handle disconnect
       this.ws.onclose = () => {
-        console.log('[Realtime] 🔌 Disconnected');
         this.clearConnectionTimeout();
         this.ws = null;
         this.attemptReconnect();
@@ -132,12 +128,10 @@ class RealtimeClient {
       // BASE_URL ว่าง = ใช้ host ปัจจุบัน (proxy ผ่าน Cloudflare Pages Function)
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wssUrl = `${protocol}//${window.location.host}/api/realtime/ws`;
-      console.log('[Realtime] Constructed WebSocket URL (proxy):', wssUrl);
       return wssUrl;
     }
     // Fallback: direct connection
     const wssUrl = baseUrl.replace(/^https?:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/api/realtime/ws';
-    console.log('[Realtime] Constructed WebSocket URL:', wssUrl);
     return wssUrl;
   }
 
@@ -152,7 +146,6 @@ class RealtimeClient {
     }
 
     this.reconnectAttempts++;
-    console.log(`[Realtime] Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
     setTimeout(() => {
       this.connect();
@@ -179,7 +172,6 @@ class RealtimeClient {
    * @param {object} data 
    */
   onNewPending(data) {
-    console.log('[Realtime] New pending transaction:', data?.id);
 
     // Add to allPendingTransactions array without reloading
     if (typeof allPendingTransactions !== 'undefined') {
@@ -257,7 +249,6 @@ class RealtimeClient {
    * Called when WebSocket connects successfully
    */
   onConnected() {
-    console.log('[Realtime] 🟢 Real-time updates enabled');
     
     // Optionally show toast
     if (typeof showToast === 'function') {
@@ -281,7 +272,6 @@ class RealtimeClient {
       return;
     }
 
-    console.log('[Realtime] Enabling polling fallback (check every 5 seconds)');
 
     if (typeof showToast === 'function') {
       showToast('⚠️ โหมดสำรอง: ตรวจสอบอัปเดตทุก 5 วินาที', 'warning');
@@ -290,7 +280,6 @@ class RealtimeClient {
     // Poll every 5 seconds if WebSocket is unavailable
     this.pollingIntervalId = setInterval(() => {
       if (typeof refreshPendingTransactions === 'function') {
-        console.log('[Realtime] Polling refresh...');
         refreshPendingTransactions();
       }
     }, 5000);
@@ -320,7 +309,6 @@ class RealtimeClient {
       oscillator.stop(audioContext.currentTime + 0.5);
     } catch (error) {
       // Silently fail if audio is not available
-      console.log('[Realtime] Audio notification unavailable');
     }
   }
 

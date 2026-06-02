@@ -28,9 +28,7 @@ class API {
     }
 
     try {
-      console.log('[API] Fetching:', url);
       const response = await fetch(url, config);
-      console.log('[API] Response:', response.status, response.headers.get('content-type'), 'CF-Cache:', response.headers.get('cf-cache-status'));
       const text = await response.text();
       if (text.startsWith('<')) {
         console.error('[API] Got HTML instead of JSON! First 300 chars:', text.substring(0, 300));
