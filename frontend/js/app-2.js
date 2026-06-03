@@ -1912,9 +1912,9 @@ function initializeNotifications() {
   if (saved) {
     try {
       notifications = JSON.parse(saved);
-      // จำกัดสูงสุด 99 รายการ
-      if (notifications.length > 99) {
-        notifications = notifications.slice(0, 99);
+      // จำกัดสูงสุด 50 รายการ (ลดจาก 99 เพื่อลด DOM/RAM)
+      if (notifications.length > 50) {
+        notifications = notifications.slice(0, 50);
       }
     } catch (e) {
       notifications = [];
@@ -1943,9 +1943,9 @@ function addNotification(title) {
   const time = new Date().toLocaleString('th-TH');
   notifications.unshift({ title, time });
   
-  // จำกัดสูงสุด 99 รายการ
-  if (notifications.length > 99) {
-    notifications = notifications.slice(0, 99);
+  // จำกัดสูงสุด 50 รายการ (ลดจาก 99 เพื่อลด DOM/RAM)
+  if (notifications.length > 50) {
+    notifications = notifications.slice(0, 50);
   }
 
   // บันทึกลง localStorage
@@ -2596,9 +2596,11 @@ window.openScanLogPage = async function(e) {
   window.__scanLogState.page = 1;
   await scanLogReload(1);
 
-  // Start polling every 10s (only when on page 1 and no date filter)
+  // Start polling every 10s (only when on page 1, no date filter, and tab visible)
   if (window.__scanLogState.pollTimer) clearInterval(window.__scanLogState.pollTimer);
   window.__scanLogState.pollTimer = setInterval(() => {
+    // ข้ามตอนแท็บไม่ active — ลด CPU/RAM ตอนผู้ใช้สลับไปทำอย่างอื่น
+    if (typeof document !== 'undefined' && document.hidden) return;
     const dateFrom = document.getElementById('scanLogDateFrom')?.value;
     const dateTo = document.getElementById('scanLogDateTo')?.value;
     if (window.__scanLogState.page === 1 && !dateFrom && !dateTo) {

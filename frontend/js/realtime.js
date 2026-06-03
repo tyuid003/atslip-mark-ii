@@ -187,6 +187,14 @@ class RealtimeClient {
         allPendingTransactions.length = 500;
       }
 
+      // ── Throttle when tab hidden ──
+      // เมื่อผู้ใช้ไม่ได้มองหน้านี้ ไม่ต้อง re-render DOM (lucide.createIcons)
+      // หรือเล่นเสียง — แค่อัพเดทข้อมูลพอ. ตอนกลับมาดูจะ flush ครั้งเดียว
+      if (typeof document !== 'undefined' && document.hidden) {
+        this._pendingFlush = true;
+        return;
+      }
+
       // Show toast notification
       if (typeof showToast === 'function') {
         showToast(`📨 ใบสลิปใหม่: ${data.sender_name} - ${data.amount.toLocaleString()} บาท`, 'info');
@@ -216,6 +224,12 @@ class RealtimeClient {
           ...allPendingTransactions[index],
           ...data,
         };
+
+        // Throttle when tab hidden — update data only, defer render
+        if (typeof document !== 'undefined' && document.hidden) {
+          this._pendingFlush = true;
+          return;
+        }
 
         // Show appropriate toast message
         if (typeof showToast === 'function') {
@@ -287,26 +301,40 @@ class RealtimeClient {
 
   /**
    * Play notification sound (optional)
+   * Uses a single shared AudioContext (don't create new one per notification —
+   * each AudioContext is heavyweight, browsers GC slowly → leaks 100+ MB/hour
+   * if user keeps tab open with frequent slip notifications).
    */
   playNotificationSound() {
+    // ปิดเสียงเมื่อแท็บไม่ได้ active (ไม่ได้ยินอยู่ดี + ลดงาน)
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      // Create a simple beep using Web Audio API
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      // singleton — สร้างครั้งเดียวต่อหน้า
+      if (!RealtimeClient._audioCtx) {
+        RealtimeClient._audioCtx = new AC();
+      }
+      const ctx = RealtimeClient._audioCtx;
+      // บางเบราว์เซอร์ suspend AudioContext ตอนแท็บ idle → resume ก่อน
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+        ctx.resume().catch(() => {});
+      }
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
+      gainNode.connect(ctx.destination);
       oscillator.frequency.value = 800;
       oscillator.type = 'sine';
-
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
+      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.5);
+      // disconnect หลังจบเพื่อให้ node ถูก GC
+      oscillator.onended = () => {
+        try { oscillator.disconnect(); } catch (_) {}
+        try { gainNode.disconnect(); } catch (_) {}
+      };
     } catch (error) {
       // Silently fail if audio is not available
     }
@@ -337,3 +365,40 @@ const realtimeClient = new RealtimeClient();
 window.addEventListener('pagehide', () => {
   try { realtimeClient.disconnect(); } catch (_) { /* ignore */ }
 });
+
+// ──────────────────────────────────────────────────────────────
+// MEMORY HOUSEKEEPING
+// ──────────────────────────────────────────────────────────────
+// 1) ตอนแท็บกลับมา visible: ถ้ามี pending updates ที่สะสมไว้ → render ครั้งเดียว
+// 2) ทุก 10 นาที: ตัด array ใหญ่ๆ ลง + ปล่อยให้ browser GC
+//    (ปกติ Chrome จะ GC แท็บที่ idle อยู่เอง แต่ถ้าผู้ใช้เปิดแท็บไว้ตลอด
+//     ไม่เคย idle เลย จะไม่ trigger GC → RAM โตเรื่อยๆ)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && realtimeClient._pendingFlush) {
+    realtimeClient._pendingFlush = false;
+    if (typeof applyPendingFiltersAndSort === 'function') {
+      try { applyPendingFiltersAndSort(); } catch (_) {}
+    }
+  }
+});
+
+// ตัด array ทุก 10 นาที + ลบ toast cache
+setInterval(() => {
+  try {
+    if (typeof allPendingTransactions !== 'undefined' && Array.isArray(allPendingTransactions)) {
+      // ลดเพดานเป็น 200 ถ้าทิ้งแท็บไว้นาน (ลดจาก 500 ที่เก็บไว้ตอน active)
+      if (allPendingTransactions.length > 200) {
+        allPendingTransactions.length = 200;
+      }
+    }
+    // เคลียร์ toast queue ถ้ายาวเกิน
+    if (typeof toastQueue !== 'undefined' && Array.isArray(toastQueue) && toastQueue.length > 5) {
+      toastQueue.length = 5;
+    }
+    // ตัด notifications ลงเหลือ 50 (จากเดิม 99) เพื่อลดขนาด localStorage + DOM
+    if (typeof notifications !== 'undefined' && Array.isArray(notifications) && notifications.length > 50) {
+      notifications.length = 50;
+      try { localStorage.setItem('atslip_notifications', JSON.stringify(notifications)); } catch (_) {}
+    }
+  } catch (_) { /* ignore */ }
+}, 10 * 60 * 1000); // 10 minutes
