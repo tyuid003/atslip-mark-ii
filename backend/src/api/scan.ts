@@ -124,8 +124,9 @@ async function resolveToAccountId(
     // fallback to KV below
   }
 
-  // 2) Fallback เป็น KV cache ของ endpoint เดียวกัน
-  const accountListKey = `tenant:${tenantId}:bank-accounts-list`;
+  // 2) Fallback เป็น KV cache ของ bank-refresh.service.ts
+  // NOTE: key ที่ใช้จริงคือ "tenant:{id}:banks" (ตาม BankRefreshService) ไม่ใช่ "bank-accounts-list"
+  const accountListKey = `tenant:${tenantId}:banks`;
   const bankAccountsData = await env.BANK_KV.get(accountListKey);
   if (!bankAccountsData) {
     return null;
