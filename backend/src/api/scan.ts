@@ -495,8 +495,8 @@ export const ScanAPI = {
           if (antidupEnabled && sessionForAntidup) {
             log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup);
 
-            // ขยาย window เป็น 10 นาที กันระบบ admin บันทึกล่าช้า/นาฬิกาคลาด
-            const ANTIDUP_WINDOW_MS = 10 * 60 * 1000;
+            // window 1 นาที: สลิปยอดเท่ากัน เวลาต่างกันไม่เกิน 60 วินาที = ซ้ำ
+            const ANTIDUP_WINDOW_MS = 1 * 60 * 1000;
             const slipTime = normalizeTimeMs(slip.date);
             const slipAmount = slip.amount?.amount;
 
