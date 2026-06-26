@@ -25,6 +25,8 @@ let pendingSortOrder = 'DESC'; // Sort order (ASC/DESC)
 let pendingSearchQuery = ''; // Search query
 let allPendingTransactions = []; // Store all pending data before filtering/sorting
 let _pendingFirstLoad = true; // ใช้ skeleton เฉพาะโหลดครั้งแรก (ป้องกัน flicker ตอนอัพเดท)
+let _dupPopupTxId = null; // transaction_id สำหรับ popup สลิปซ้ำ
+let _dupPopupTenantId = null; // tenant_id สำหรับ popup สลิปซ้ำ
 
 function levenshteinDistance(a, b) {
   const s = String(a || '');
@@ -1309,6 +1311,109 @@ function applyPendingFiltersAndSort() {
   UI.renderPendingTransactions(filtered.slice(0, 50));
 }
 
+// ============================================================
+// DUPLICATE SLIP POPUP
+// ============================================================
+
+function showDuplicatePopup(dupData, imgDataUrl) {
+  closeDuplicatePopup(); // ลบ popup เก่าออกก่อน (ถ้ามี)
+
+  _dupPopupTxId = dupData.transaction_id || null;
+  _dupPopupTenantId = dupData.tenant?.id || null;
+
+  // หา matched user จาก allPendingTransactions (ถ้ามี transaction_id)
+  let matchedUserDisplay = '—';
+  if (dupData.matched_username || dupData.matched_user_id) {
+    matchedUserDisplay = dupData.matched_username || dupData.matched_user_id;
+  } else if (_dupPopupTxId) {
+    const existing = allPendingTransactions.find(t => t.id === _dupPopupTxId);
+    if (existing && (existing.matched_username || existing.matched_user_id)) {
+      matchedUserDisplay = existing.matched_username || existing.matched_user_id;
+    }
+  }
+
+  const amount = typeof dupData.slip?.amount === 'number'
+    ? dupData.slip.amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : (dupData.slip?.amount ?? '—');
+
+  const imageHtml = imgDataUrl
+    ? `<div class="dup-slip-img-wrap"><img src="${imgDataUrl}" alt="สลิป" class="dup-slip-img"></div>`
+    : '';
+
+  const deleteBtn = _dupPopupTxId
+    ? `<button class="dup-slip-delete-btn" onclick="window._dupDeleteAndClose()" title="ลบรายการ">
+         <i data-lucide="trash-2"></i> ลบรายการ
+       </button>`
+    : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'dupSlipModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal dup-slip-modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div class="modal-title dup-slip-title">
+          <i data-lucide="alert-triangle"></i>
+          <span>สลิปซ้ำในระบบ</span>
+        </div>
+        <button class="modal-close" onclick="closeDuplicatePopup()" title="ปิด">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body dup-slip-body">
+        ${imageHtml}
+        <div class="dup-slip-details">
+          <div class="dup-slip-row">
+            <span class="dup-slip-label">ยอดเงิน</span>
+            <span class="dup-slip-val dup-slip-amount">${amount} บาท</span>
+          </div>
+          <div class="dup-slip-row">
+            <span class="dup-slip-label">ชื่อผู้โอน</span>
+            <span class="dup-slip-val">${dupData.sender?.name || '—'}</span>
+          </div>
+          <div class="dup-slip-row">
+            <span class="dup-slip-label">เว็บ</span>
+            <span class="dup-slip-val">${dupData.tenant?.name || dupData.tenant?.id || '—'}</span>
+          </div>
+          <div class="dup-slip-row">
+            <span class="dup-slip-label">ยูสเซอร์</span>
+            <span class="dup-slip-val dup-slip-user-val">
+              <span id="dupSlipUserText">${matchedUserDisplay}</span>
+              <button class="dup-slip-icon-btn" onclick="window._dupOpenSearch()" title="ค้นหา/เปลี่ยนยูสเซอร์">
+                <i data-lucide="search"></i>
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer dup-slip-footer">
+        ${deleteBtn}
+        <button class="dup-slip-close-btn" onclick="closeDuplicatePopup()">ปิด</button>
+      </div>
+    </div>
+  `;
+
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeDuplicatePopup(); });
+  document.body.appendChild(modal);
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeDuplicatePopup() {
+  const el = document.getElementById('dupSlipModal');
+  if (el) el.remove();
+  _dupPopupTxId = null;
+  _dupPopupTenantId = null;
+}
+
+window.closeDuplicatePopup = closeDuplicatePopup;
+window._dupOpenSearch = function () {
+  openUserSearch(_dupPopupTxId, _dupPopupTenantId);
+};
+window._dupDeleteAndClose = function () {
+  if (!_dupPopupTxId) return;
+  deletePendingItem(_dupPopupTxId).then(deleted => { if (deleted) closeDuplicatePopup(); });
+};
+
 async function deletePendingItem(transactionId) {
   // สร้าง custom confirmation modal
   const modal = document.createElement('div');
@@ -2040,7 +2145,17 @@ async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
       if (data.status === 'credited') {
         addNotification(`✅ เติมเครดิตสำเร็จ! ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
       } else if (data.status === 'duplicate') {
-        addNotification(`⚠️ ยอดซ้ำ! ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท - เคยเติมแล้ว`);
+        // แสดง popup แทน notification ธรรมดา
+        let imgDataUrl = null;
+        try {
+          imgDataUrl = await new Promise((resolve) => {
+            const r = new FileReader();
+            r.onload = e => resolve(e.target.result);
+            r.onerror = () => resolve(null);
+            r.readAsDataURL(file);
+          });
+        } catch (_) { /* ignore */ }
+        showDuplicatePopup(data, imgDataUrl);
       } else if (data.status === 'matched') {
         addNotification(`✅ สแกนสำเร็จ! จับคู่กับ ${data.sender.name} (${data.tenant.name}) ยอด ${data.slip.amount} บาท`);
       } else {
@@ -2051,6 +2166,20 @@ async function uploadAndScanSlip(file, service = 'easyslip', zoneId = null) {
       addNotification(`❌ สแกนสลิปไม่สำเร็จ: ${result.message || 'Unknown error'}`);
     }
   } catch (error) {
+    // สลิปซ้ำ — แสดง popup พร้อมรูปสลิป
+    if (error.responseData?.data?.status === 'duplicate') {
+      let imgDataUrl = null;
+      try {
+        imgDataUrl = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = e => resolve(e.target.result);
+          r.onerror = () => resolve(null);
+          r.readAsDataURL(file);
+        });
+      } catch (_) { /* ignore */ }
+      showDuplicatePopup(error.responseData.data, imgDataUrl);
+      return; // ไม่แสดง notification ทั่วไป (finally จะยัง run)
+    }
     if (error.response) {
       try {
         await error.response.json();

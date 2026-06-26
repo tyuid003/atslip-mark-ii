@@ -1075,3 +1075,141 @@ body {
   gap: var(--space-sm);
 }
 
+/* ============================================================
+   DUPLICATE SLIP POPUP
+   ============================================================ */
+
+.dup-slip-modal {
+  max-width: 440px;
+}
+
+.dup-slip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-warning);
+}
+
+.dup-slip-body {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.dup-slip-img-wrap {
+  display: flex;
+  justify-content: center;
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-height: 220px;
+}
+
+.dup-slip-img {
+  max-height: 220px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+}
+
+.dup-slip-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+}
+
+.dup-slip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.dup-slip-label {
+  min-width: 90px;
+  font-size: 0.82rem;
+  color: var(--color-gray-500);
+  flex-shrink: 0;
+}
+
+.dup-slip-val {
+  font-size: 0.92rem;
+  color: var(--color-gray-800);
+  word-break: break-all;
+}
+
+.dup-slip-amount {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--color-success);
+}
+
+.dup-slip-user-val {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dup-slip-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dup-slip-icon-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-white);
+}
+
+.dup-slip-footer {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+}
+
+.dup-slip-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 1rem;
+  background: transparent;
+  color: var(--color-danger);
+  border: 1.5px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-right: auto;
+}
+
+.dup-slip-delete-btn:hover {
+  background: var(--color-danger);
+  color: var(--color-white);
+}
+
+.dup-slip-close-btn {
+  padding: 0.45rem 1.25rem;
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: 1.5px solid var(--color-gray-300);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.dup-slip-close-btn:hover {
+  background: var(--color-gray-200);
+}

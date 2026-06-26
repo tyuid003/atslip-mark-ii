@@ -341,7 +341,9 @@ class API {
       }
 
       if (!response.ok) {
-        throw new Error((data && (data.error || data.message)) || `Upload failed (${response.status})`);
+        const err = new Error((data && (data.error || data.message)) || `Upload failed (${response.status})`);
+        if (data) err.responseData = data;  // attach full body so UI can show duplicate popup etc.
+        throw err;
       }
 
       return data;
