@@ -2,6 +2,7 @@
 // ฟังก์ชันสำหรับเติมเครดิตให้ผู้ใช้
 
 import type { Env } from '../types';
+import { getAdminAuthHeaders } from '../utils/helpers';
 
 interface SubmitCreditRequest {
   tenantId: string;
@@ -11,6 +12,15 @@ interface SubmitCreditRequest {
     };
     date?: string;
     transRef?: string;
+    // ข้อมูลผู้ส่ง (ใช้สำหรับ v2 deposit payload)
+    sender?: {
+      bank?: { id?: string; name?: string; short?: string };
+      account?: {
+        name?: { th?: string; en?: string };
+        bank?: { account?: string };
+        proxy?: { account?: string };
+      };
+    };
   };
   user: {
     id?: string;
@@ -32,6 +42,18 @@ interface SubmitCreditResponse {
 }
 
 export class CreditService {
+  // ──────────────────────────────────────────────────────────────────────────
+  // Bank short-name (from EasySlip) → v2 API bank code mapping
+  // ──────────────────────────────────────────────────────────────────────────
+  private static readonly BANK_SHORT_TO_V2_CODE: Record<string, string> = {
+    'KBANK': 'kbank', 'KTB': 'ktb', 'SCB': 'scb', 'BBL': 'bbl',
+    'BAY': 'bay', 'TTB': 'ttb', 'TMB': 'ttb', 'GSB': 'gsb', 'BAAC': 'baac',
+    'GHB': 'ghb', 'KKP': 'kkp', 'TISCO': 'tisco', 'UOBT': 'uob', 'UOB': 'uob',
+    'CIMBT': 'cimb', 'CIMB': 'cimb', 'LHFG': 'lh', 'LH': 'lh',
+    'ISBT': 'ibank', 'TMN': 'tmn', 'TRUE': 'tmn',
+    'ICBCT': 'icbc', 'TCD': 'tcd', 'SME': 'sme',
+  };
+
   private static extractGeneratedMemberCode(raw: any): string | null {
     if (!raw) {
       return null;
@@ -205,13 +227,295 @@ export class CreditService {
     };
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // SESSION MANAGEMENT — AUTO RE-LOGIN
+  // ══════════════════════════════════════════════════════════════
+
   /**
-   * เติมเครดิตให้ผู้ใช้ผ่าน Admin Backend API
-   * 
-   * @param env - Cloudflare environment
-   * @param request - ข้อมูลสำหรับเติมเครดิต
-   * @param logger - ฟังก์ชัน log (optional)
-   * @returns ผลลัพธ์การเติมเครดิต
+   * Re-login ไปยัง admin backend และบันทึก session ใหม่ลง DB
+   * v1: POST /api/login  →  response.token
+   * v2: POST /api/auth/login  →  response.data.token
+   */
+  static async autoRelogin(
+    env: Env,
+    tenant: { id: string; admin_api_url: string; api_version?: string; admin_username: string; admin_password: string },
+    log: (...args: any[]) => void
+  ): Promise<string | null> {
+    const apiVersion = String(tenant.api_version || 'v1');
+    const loginUrl = apiVersion === 'v2'
+      ? `${tenant.admin_api_url}/api/auth/login`
+      : `${tenant.admin_api_url}/api/login`;
+
+    log(`[CreditService] 🔑 Auto re-login (${apiVersion}):`, loginUrl);
+
+    try {
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ username: tenant.admin_username, password: tenant.admin_password }),
+      });
+
+      if (!response.ok) {
+        log(`[CreditService] ❌ Auto re-login failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json() as any;
+      // v1: data.token  |  v2: data.data.token
+      const token: string | null = data?.data?.token || data?.token || null;
+      if (!token) {
+        log('[CreditService] ❌ Auto re-login: no token in response');
+        return null;
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const sessionId = crypto.randomUUID();
+      const expiresAt = now + 24 * 60 * 60; // 24h
+
+      await env.DB.prepare('DELETE FROM admin_sessions WHERE tenant_id = ?').bind(tenant.id).run();
+      await env.DB.prepare(
+        `INSERT INTO admin_sessions (id, tenant_id, session_token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(sessionId, tenant.id, token, expiresAt, now).run();
+
+      log('[CreditService] ✅ Auto re-login successful, session renewed 24h');
+      return token;
+    } catch (error: any) {
+      log('[CreditService] ❌ Auto re-login exception:', error.message);
+      return null;
+    }
+  }
+
+  private static async ensureSession(
+    env: Env,
+    tenant: { id: string; admin_api_url: string; api_version?: string; admin_username: string; admin_password: string },
+    log: (...args: any[]) => void
+  ): Promise<string | null> {
+    const now = Math.floor(Date.now() / 1000);
+    const session = await env.DB.prepare(
+      `SELECT session_token FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
+    ).bind(tenant.id, now).first();
+
+    if (session) return session.session_token as string;
+
+    if (String(tenant.api_version || 'v1') !== 'v2') {
+      log('[CreditService] ❌ No active session (v1 requires manual login)');
+      return null;
+    }
+
+    log('[CreditService] ⚠️ No active session — auto re-login (v2)...');
+    return this.autoRelogin(env, tenant, log);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // v2 HELPERS
+  // ══════════════════════════════════════════════════════════════
+
+  private static async searchUserV2(
+    adminApiUrl: string,
+    sessionToken: string,
+    keyword: string,
+    log: (...args: any[]) => void
+  ): Promise<any | null> {
+    const url = `${adminApiUrl}/api/proxy/v1/admin/members?page=1&limit=50&search=${encodeURIComponent(keyword)}`;
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: getAdminAuthHeaders(sessionToken, 'v2'),
+      });
+      if (!response.ok) {
+        log(`[CreditService][v2] ⚠️ Member search failed:`, response.status);
+        return null;
+      }
+      const body = await response.json() as any;
+      const users: any[] = body?.data?.list || [];
+      if (users.length === 0) return null;
+      const key = String(keyword).trim();
+      const exact = users.find((u: any) =>
+        String(u.memberCode || '').trim() === key ||
+        String(u.username || '').trim() === key ||
+        String(u.id || '') === key
+      );
+      return exact || users[0];
+    } catch (error: any) {
+      log('[CreditService][v2] ⚠️ Member search exception:', error.message);
+      return null;
+    }
+  }
+
+  private static async checkDuplicateV2(
+    adminApiUrl: string,
+    sessionToken: string,
+    userId: number,
+    amount: number,
+    senderAccountLast6: string,
+    slipDate: string,
+    log: (...args: any[]) => void
+  ): Promise<boolean> {
+    try {
+      const dateStr = new Date(slipDate).toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' });
+      const url = `${adminApiUrl}/api/proxy/v1/admin/transactions/completed?page=1&limit=100&userId=${userId}&dateFrom=${dateStr}&dateTo=${dateStr}`;
+      log('[CreditService][v2] 🔍 Duplicate check:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: getAdminAuthHeaders(sessionToken, 'v2'),
+      });
+      if (!response.ok) {
+        log('[CreditService][v2] ⚠️ Duplicate check failed:', response.status, '— skipping check');
+        return false;
+      }
+
+      const body = await response.json() as any;
+      const list: any[] = body?.data?.list || [];
+      const slipTs = new Date(slipDate).getTime();
+      const WINDOW_MS = 5 * 60 * 1000; // ±5 นาที
+
+      for (const tx of list) {
+        if (tx.transactionType !== 'deposit') continue;
+        if (Number(tx.amount) !== Number(amount)) continue;
+
+        // เช็คเลขบัญชีผู้ส่ง (6 หลักท้าย)
+        if (senderAccountLast6) {
+          const txAcc = String(tx.accountNumber || '').replace(/\D/g, '');
+          const txLast6 = txAcc.length > 6 ? txAcc.slice(-6) : txAcc;
+          if (txLast6 !== senderAccountLast6) continue;
+        }
+
+        // เช็คเวลา ±5 นาที
+        const txTs = new Date(tx.createdAt).getTime();
+        if (Math.abs(txTs - slipTs) <= WINDOW_MS) {
+          log(`[CreditService][v2] ⚠️ DUPLICATE: tx#${tx.id}, amount=${tx.amount}, time=${tx.createdAt}`);
+          return true;
+        }
+      }
+      log('[CreditService][v2] ✅ No duplicate found');
+      return false;
+    } catch (error: any) {
+      log('[CreditService][v2] ⚠️ Duplicate check exception:', error.message, '— skipping');
+      return false;
+    }
+  }
+
+  private static async submitCreditV2(
+    tenant: { admin_api_url: string },
+    sessionToken: string,
+    request: SubmitCreditRequest,
+    log: (...args: any[]) => void,
+    creditAmount: number,
+    transferDate: string
+  ): Promise<SubmitCreditResponse> {
+    // ค้นหา user ใน v2 system
+    const keyword = String(request.user.memberCode || request.user.id || '').trim();
+    if (!keyword) return { success: false, message: '[v2] No memberCode or userId to search' };
+
+    log('[CreditService][v2] 🔍 Searching user:', keyword);
+    const v2User = await this.searchUserV2(tenant.admin_api_url, sessionToken, keyword, log);
+    if (!v2User) return { success: false, message: `[v2] User not found: ${keyword}` };
+
+    const userId = Number(v2User.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return { success: false, message: `[v2] Invalid userId: ${v2User.id}` };
+    }
+
+    const memberCode = String(v2User.memberCode || '');
+    const resolvedName = String(v2User.fullName || v2User.fullname || request.user.fullname || '');
+    log('[CreditService][v2] ✅ User found:', { userId, memberCode, name: resolvedName });
+
+    // Sender info จาก slip
+    const slipRaw = request.slipData as any;
+    const senderShort = String(slipRaw.sender?.bank?.short || '').toUpperCase();
+    const fromBankCode = this.BANK_SHORT_TO_V2_CODE[senderShort] || senderShort.toLowerCase() || '';
+    const fromAccountNumberFull = String(
+      slipRaw.sender?.account?.bank?.account ||
+      slipRaw.sender?.account?.proxy?.account ||
+      request.user.bankAccount ||
+      request.user.bank_account || ''
+    ).replace(/[^0-9]/g, '');
+    const fromAccountName = String(
+      slipRaw.sender?.account?.name?.th ||
+      slipRaw.sender?.account?.name?.en ||
+      request.user.fullname || ''
+    );
+
+    const bankAccountId = Number(request.toAccountId);
+    if (!Number.isFinite(bankAccountId)) {
+      return { success: false, message: `[v2] Invalid bankAccountId: ${request.toAccountId}` };
+    }
+
+    // ตรวจสอบซ้ำก่อน submit
+    log('[CreditService][v2] 🔍 Pre-submit duplicate check...');
+    const senderLast6 = fromAccountNumberFull.length > 6 ? fromAccountNumberFull.slice(-6) : fromAccountNumberFull;
+    const isDup = await this.checkDuplicateV2(tenant.admin_api_url, sessionToken, userId, creditAmount, senderLast6, transferDate, log);
+    if (isDup) {
+      log('[CreditService][v2] ⚠️ DUPLICATE — skipping submit');
+      return {
+        success: true,
+        isDuplicate: true,
+        message: '⚠️ รายการฝากซ้ำ - พบรายการนี้ในระบบแล้ว (v2 pre-check)',
+        resolvedMemberCode: memberCode,
+        resolvedUsername: resolvedName,
+      };
+    }
+
+    const v2Endpoint = `${tenant.admin_api_url}/api/proxy/v1/admin/deposits`;
+    const v2Payload = {
+      userId,
+      amount: creditAmount,
+      autoApprove: true,
+      remark: `Auto deposit - ${String(request.slipData.transRef || '').substring(0, 50)}`,
+      fromBankCode,
+      fromAccountNumber: fromAccountNumberFull,
+      fromAccountName,
+      bankAccountId,
+      isBonus: false,
+    };
+
+    log('[CreditService][v2] 🎯 Endpoint:', v2Endpoint);
+    log('[CreditService][v2] 📤 Payload:', { userId: v2Payload.userId, amount: v2Payload.amount, fromBankCode, bankAccountId });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let response: Response;
+    try {
+      response = await fetch(v2Endpoint, {
+        method: 'POST',
+        headers: { ...getAdminAuthHeaders(sessionToken, 'v2'), 'Content-Type': 'application/json' },
+        body: JSON.stringify(v2Payload),
+        signal: controller.signal,
+      });
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        message: fetchError.name === 'AbortError' ? 'Request timeout (5s)' : fetchError.message || 'Network error',
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    log('[CreditService][v2] 📥 Status:', response.status, response.ok ? '✅' : '❌');
+    let result: any;
+    try { result = await response.json(); } catch { result = {}; }
+    log('[CreditService][v2] 📄 Response:', { success: result?.success, message: result?.message });
+
+    if (!response.ok || result?.success === false) {
+      return {
+        success: false,
+        message: `[v2] Credit failed: ${response.status} - ${result?.message || JSON.stringify(result)}`,
+      };
+    }
+
+    log('[CreditService][v2] ✅ Credit submitted successfully!');
+    return {
+      success: true,
+      data: result?.data,
+      resolvedMemberCode: memberCode,
+      resolvedUsername: resolvedName,
+    };
+  }
+
+  /**
+   * เติมเครดิตให้ผู้ใช้ผ่าน Admin Backend API (รองรับ v1 และ v2)
    */
   static async submitCredit(
     env: Env,
@@ -222,112 +526,76 @@ export class CreditService {
 
     try {
       log('[CreditService] 💰 ===== CREDIT SUBMISSION START =====');
-      
-      // ดึงข้อมูล tenant
+
+      // ดึงข้อมูล tenant รวม api_version, admin_username, admin_password
       const tenant = await env.DB.prepare(
-        `SELECT id, name, admin_api_url FROM tenants WHERE id = ? AND status = ?`
-      )
-        .bind(request.tenantId, 'active')
-        .first();
+        `SELECT id, name, admin_api_url, api_version, admin_username, admin_password
+         FROM tenants WHERE id = ? AND status = ?`
+      ).bind(request.tenantId, 'active').first() as any;
 
       if (!tenant) {
         log('[CreditService] ❌ Tenant not found:', request.tenantId);
         return { success: false, message: 'Tenant not found' };
       }
 
-      log('[CreditService] 📦 Tenant found:', {
-        id: tenant.id,
-        name: tenant.name,
-        admin_api_url: tenant.admin_api_url,
-      });
+      const apiVersion = String(tenant.api_version || 'v1');
+      log('[CreditService] 📦 Tenant:', { id: tenant.id, name: tenant.name, api_version: apiVersion });
 
-      // ดึง session token
-      const now = Math.floor(Date.now() / 1000);
-      const session = await env.DB.prepare(
-        `SELECT session_token FROM admin_sessions 
-         WHERE tenant_id = ? AND expires_at > ? 
-         LIMIT 1`
-      )
-        .bind(request.tenantId, now)
-        .first();
+      // ดึง session (auto re-login สำหรับ v2)
+      const sessionToken = await this.ensureSession(env, tenant, log);
+      if (!sessionToken) {
+        return {
+          success: false,
+          message: apiVersion === 'v2'
+            ? 'Auto re-login failed. Please check admin credentials.'
+            : 'Session not active. Please login first.',
+        };
+      }
+      log('[CreditService] ✅ Session ready');
 
-      if (!session) {
-        log('[CreditService] ❌ No active session found for tenant:', request.tenantId);
-        return { success: false, message: 'Session not active. Please login first.' };
+      const creditAmount = request.slipData.amount?.amount || 0;
+      const transferDate = request.slipData.date || new Date().toISOString();
+
+      // ══════ V2 FLOW ══════
+      if (apiVersion === 'v2') {
+        return await this.submitCreditV2(tenant, sessionToken, request, log, creditAmount, transferDate);
       }
 
-      const sessionToken = session.session_token as string;
-      log('[CreditService] ✅ Active session found');
-
-      // ตรวจสอบ/สร้าง memberCode ก่อนเติมเครดิต
+      // ══════ V1 FLOW ══════
       const resolveResult = await this.resolveMemberCodeForUser(
-        tenant.admin_api_url as string,
-        sessionToken,
-        request.user,
-        log
+        tenant.admin_api_url as string, sessionToken, request.user, log
       );
 
       if (!resolveResult.success || !resolveResult.memberCode) {
         log('[CreditService] ❌ Cannot resolve memberCode:', resolveResult.message);
-        return {
-          success: false,
-          message: resolveResult.message || 'Cannot resolve memberCode',
-        };
+        return { success: false, message: resolveResult.message || 'Cannot resolve memberCode' };
       }
 
       const memberCode = resolveResult.memberCode;
       const resolvedUser = resolveResult.user || request.user;
-      const creditAmount = request.slipData.amount?.amount || 0;
-      
-      // ค้นหา user detail เพื่อได้ bankAccount ที่ถูกต้อง
       let actualBankAccount = request.user.bankAccount || request.user.bank_account || '';
       if (!actualBankAccount && memberCode) {
-        log('[CreditService] 📋 Searching for user detail to get actual bank account...');
-        const userDetail = await this.searchUserByKeyword(
-          tenant.admin_api_url as string,
-          sessionToken,
-          memberCode,
-          log
-        );
-        
+        const userDetail = await this.searchUserByKeyword(tenant.admin_api_url as string, sessionToken, memberCode, log);
         if (userDetail) {
           actualBankAccount = userDetail.bankAccount || userDetail.bank_account || actualBankAccount;
-          log('[CreditService] ✅ Found user detail, using bank account:', actualBankAccount);
         }
       }
-      
-      const transferDate = request.slipData.date || new Date().toISOString();
+
       const toAccountIdNumber = Number(request.toAccountId);
-
       if (!Number.isFinite(toAccountIdNumber)) {
-        log('[CreditService] ❌ Invalid toAccountId:', request.toAccountId);
-        return {
-          success: false,
-          message: `Invalid toAccountId: ${request.toAccountId}`,
-        };
+        return { success: false, message: `Invalid toAccountId: ${request.toAccountId}` };
       }
 
-      if (!actualBankAccount) {
-        log('[CreditService] ⚠️ Warning: actualBankAccount is empty');
-      }
+      log('[CreditService] 👤 memberCode:', memberCode);
 
-      log('[CreditService] 👤 Using memberCode for credit:', memberCode);
-
-      // ── fromAccountNumber: ตัดเหลือ 6 หลักท้าย ──────────────────────────
-      // เหตุผล: ระบบ admin มี SMS bot-auto ที่บันทึก fromAccountNumber แค่
-      // 6 หลักท้าย (เพราะ SMS แสดงแบบ masked) เช่น "874595"
-      // ถ้าเราส่งเลขเต็ม 10 หลัก "2188874595" admin's dedup จะไม่จับว่าซ้ำ
-      // กับ record ของ bot-auto -> ลูกค้าได้เครดิตซ้ำ
-      // ดังนั้นเราตัดเหลือ 6 หลักท้ายให้ตรงรูปแบบที่ระบบ admin ใช้
+      // fromAccountNumber: ตัดเหลือ 6 หลักท้าย (v1 SMS bot matching)
       const digitsOnly = String(actualBankAccount || '').replace(/\D/g, '');
-      const fromAccountNumberForApi = digitsOnly.length > 6
-        ? digitsOnly.slice(-6)
-        : digitsOnly;
+      const fromAccountNumberForApi = digitsOnly.length > 6 ? digitsOnly.slice(-6) : digitsOnly;
 
       const apiEndpoint = `${tenant.admin_api_url}/api/banking/transactions/deposit-record`;
       const payload = {
         memberCode,
-        creditAmount: creditAmount,
+        creditAmount,
         depositChannel: 'Mobile Banking (มือถือ)',
         toAccountId: toAccountIdNumber,
         transferAt: transferDate,
@@ -335,108 +603,64 @@ export class CreditService {
         fromAccountNumber: fromAccountNumberForApi,
       };
 
-      log('[CreditService] 🎯 API Endpoint:', apiEndpoint);
-      log('[CreditService] 📤 Payload:', {
-        ...payload,
-        creditAmount: payload.creditAmount,
-        toAccountId: payload.toAccountId,
-      });
+      log('[CreditService] 🎯 Endpoint:', apiEndpoint);
+      log('[CreditService] 📤 Payload:', { memberCode, creditAmount, toAccountId: toAccountIdNumber });
 
-      // เรียก API
-      log('[CreditService] 🔄 Calling Admin Backend API...');
-      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       let response: Response;
       try {
         response = await fetch(apiEndpoint, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { ...getAdminAuthHeaders(sessionToken, 'v1'), 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: controller.signal,
         });
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
-        log('[CreditService] ❌ Fetch failed or timeout:', fetchError.message);
         return {
           success: false,
-          message: fetchError.name === 'AbortError' 
-            ? 'Request timeout (5 seconds exceeded)' 
-            : fetchError.message || 'Network error',
+          message: fetchError.name === 'AbortError' ? 'Request timeout (5 seconds exceeded)' : fetchError.message || 'Network error',
         };
       } finally {
         clearTimeout(timeoutId);
       }
 
       log('[CreditService] 📥 Response Status:', response.status, response.ok ? '✅' : '❌');
-
-      // Parse response
       let result: any;
-      try {
-        result = await response.json();
-      } catch (parseError) {
-        log('[CreditService] ❌ Failed to parse response:', parseError);
-        return {
-          success: false,
-          message: `Credit failed: ${response.status} - Unable to parse response`,
-        };
+      try { result = await response.json(); } catch (e) {
+        return { success: false, message: `Credit failed: ${response.status} - Unable to parse response` };
       }
 
-      log('[CreditService] 📄 Response Body:', {
-        status: response.status,
-        message: result.message,
-        hasData: !!result.data,
-      });
+      log('[CreditService] 📄 Response:', { status: response.status, message: result.message });
 
-      // ตรวจสอบ duplicate
-      const duplicateMessage = String(result?.message || '').toUpperCase();
-      const duplicateStatus = String(result?.status || '').toUpperCase();
-      const isDuplicateMessage = duplicateMessage === 'DUPLICATE_WITH_ADMIN_RECORD' || duplicateMessage === 'DUPLICATED';
-      const isDuplicateStatus = duplicateStatus === 'DUPLICATED';
-      if (isDuplicateMessage || isDuplicateStatus) {
+      const dupMsg = String(result?.message || '').toUpperCase();
+      const dupSts = String(result?.status || '').toUpperCase();
+      if (dupMsg === 'DUPLICATE_WITH_ADMIN_RECORD' || dupMsg === 'DUPLICATED' || dupSts === 'DUPLICATED') {
         log('[CreditService] ⚠️ DUPLICATE detected!');
-        log('[CreditService] 💰 ===== CREDIT SUBMISSION END (DUPLICATE) =====');
-        const dupResolvedUsername = resolvedUser?.fullname || resolvedUser?.username || request.user.fullname;
         return {
           success: true,
           isDuplicate: true,
           message: '⚠️ รายการฝากซ้ำ - พบรายการนี้ในระบบแล้ว',
           resolvedMemberCode: memberCode,
-          resolvedUsername: dupResolvedUsername,
+          resolvedUsername: resolvedUser?.fullname || resolvedUser?.username || request.user.fullname,
         };
       }
 
-      // ตรวจสอบ error
       if (!response.ok) {
-        log('[CreditService] ❌ Credit failed:', result.message);
-        log('[CreditService] 💰 ===== CREDIT SUBMISSION END (FAILED) =====');
-        return {
-          success: false,
-          message: `Credit failed: ${response.status} - ${result.message || JSON.stringify(result)}`,
-        };
+        return { success: false, message: `Credit failed: ${response.status} - ${result.message || JSON.stringify(result)}` };
       }
 
       log('[CreditService] ✅ Credit submitted successfully!');
-      log('[CreditService] 💰 ===== CREDIT SUBMISSION END (SUCCESS) =====');
-
-      const successResolvedUsername = resolvedUser?.fullname || resolvedUser?.username || request.user.fullname;
-      return { 
+      return {
         success: true,
         data: result.data,
         resolvedMemberCode: memberCode,
-        resolvedUsername: successResolvedUsername,
+        resolvedUsername: resolvedUser?.fullname || resolvedUser?.username || request.user.fullname,
       };
     } catch (error: any) {
       log('[CreditService] ❌ Unexpected error:', error.message || error);
-      log('[CreditService] 💰 ===== CREDIT SUBMISSION END (ERROR) =====');
-      return {
-        success: false,
-        message: error.message || 'Unknown error',
-      };
+      return { success: false, message: error.message || 'Unknown error' };
     }
   }
 
@@ -454,7 +678,7 @@ export class CreditService {
   }
 
   /**
-   * ดึงเครดิตกลับผ่าน Admin Backend API
+   * ดึงเครดิตกลับผ่าน Admin Backend API (รองรับ v1 และ v2)
    */
   static async withdrawCreditBack(
     env: Env,
@@ -470,64 +694,70 @@ export class CreditService {
 
     try {
       const tenant = await env.DB.prepare(
-        `SELECT id, admin_api_url FROM tenants WHERE id = ? AND status = ?`
-      )
-        .bind(params.tenantId, 'active')
-        .first();
+        `SELECT id, admin_api_url, api_version, admin_username, admin_password
+         FROM tenants WHERE id = ? AND status = ?`
+      ).bind(params.tenantId, 'active').first() as any;
 
-      if (!tenant) {
-        return { success: false, message: 'Tenant not found' };
-      }
+      if (!tenant) return { success: false, message: 'Tenant not found' };
 
-      const session = await env.DB.prepare(
-        `SELECT session_token FROM admin_sessions 
-         WHERE tenant_id = ? AND expires_at > ? 
-         LIMIT 1`
-      )
-        .bind(params.tenantId, Math.floor(Date.now() / 1000))
-        .first();
+      const apiVersion = String(tenant.api_version || 'v1');
 
-      if (!session) {
-        return { success: false, message: 'Session not active. Please login first.' };
-      }
-
-      const endpoint = `${tenant.admin_api_url}/api/banking/transactions/withdraw-credit-back`;
-      const payload = {
-        amount: params.amount,
-        memberCode: params.memberCode,
-        remark: params.remark,
-      };
-
-      log('[CreditService] ↩️ Withdraw credit endpoint:', endpoint);
-      log('[CreditService] ↩️ Withdraw payload:', payload);
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.session_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result: any = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      const sessionToken = await this.ensureSession(env, tenant, log);
+      if (!sessionToken) {
         return {
           success: false,
-          message: `Withdraw failed: ${response.status} - ${result?.message || JSON.stringify(result)}`,
+          message: apiVersion === 'v2'
+            ? 'Auto re-login failed. Please check admin credentials.'
+            : 'Session not active. Please login first.',
         };
       }
 
-      return {
-        success: true,
-        message: result?.message || 'Withdraw credit success',
-        data: result?.data,
-      };
+      // ══════ V2 FLOW ══════
+      if (apiVersion === 'v2') {
+        // v2 ใช้ userId (int) → ค้นหาจาก memberCode
+        log('[CreditService][v2] 🔍 Looking up userId for withdraw:', params.memberCode);
+        const v2User = await this.searchUserV2(tenant.admin_api_url, sessionToken, params.memberCode, log);
+        if (!v2User) {
+          return { success: false, message: `[v2] User not found for withdraw: ${params.memberCode}` };
+        }
+        const userId = Number(v2User.id);
+        if (!Number.isFinite(userId) || userId <= 0) {
+          return { success: false, message: `[v2] Invalid userId: ${v2User.id}` };
+        }
+
+        const v2Endpoint = `${tenant.admin_api_url}/api/proxy/v1/admin/withdraws`;
+        const v2Payload = { userId, amount: params.amount, autoApprove: true, remark: params.remark, withdrawType: 'cancel_credit' };
+        log('[CreditService][v2] ↩️ Withdraw endpoint:', v2Endpoint);
+
+        const response = await fetch(v2Endpoint, {
+          method: 'POST',
+          headers: { ...getAdminAuthHeaders(sessionToken, 'v2'), 'Content-Type': 'application/json' },
+          body: JSON.stringify(v2Payload),
+        });
+        const result: any = await response.json().catch(() => ({}));
+        if (!response.ok || result?.success === false) {
+          return { success: false, message: `[v2] Withdraw failed: ${response.status} - ${result?.message || JSON.stringify(result)}` };
+        }
+        return { success: true, message: result?.message || 'Withdraw credit success (v2)', data: result?.data };
+      }
+
+      // ══════ V1 FLOW ══════
+      const endpoint = `${tenant.admin_api_url}/api/banking/transactions/withdraw-credit-back`;
+      const payload = { amount: params.amount, memberCode: params.memberCode, remark: params.remark };
+      log('[CreditService] ↩️ Withdraw endpoint:', endpoint);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { ...getAdminAuthHeaders(sessionToken, 'v1'), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, message: `Withdraw failed: ${response.status} - ${result?.message || JSON.stringify(result)}` };
+      }
+      return { success: true, message: result?.message || 'Withdraw credit success', data: result?.data };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || 'Unknown error',
-      };
+      return { success: false, message: error.message || 'Unknown error' };
     }
   }
 }

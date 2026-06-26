@@ -6,6 +6,9 @@ export interface Env {
   DB: D1Database;
   BANK_KV: KVNamespace;
   PENDING_NOTIFICATIONS: DurableObjectNamespace;
+  TELEGRAM_AUTH_DO: DurableObjectNamespace;
+  TELEGRAM_API_ID: string;
+  TELEGRAM_API_HASH: string;
   // Optional Telegram secret key สำหรับ encrypt bot_token ก่อนเก็บ DB
   // ตั้งค่าด้วย `npx wrangler secret put TELEGRAM_TOKEN_KEY`
   TELEGRAM_TOKEN_KEY?: string;
@@ -226,7 +229,7 @@ export interface ScanJob {
   id: string;
   team_id: string;
   tenant_id: string | null;
-  source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line';
+  source: 'webhook' | 'manual' | 'upload' | 'telegram' | 'line' | 'ushop';
   idempotency_key: string;
   trace_id: string;
   payload_json: string;
@@ -262,7 +265,7 @@ export interface Team {
 // TEAM API KEYS (multi-provider, multi-key per team)
 // ============================================================
 
-export type SlipServiceProvider = 'easyslip' | 'slip2go';
+export type SlipServiceProvider = 'easyslip' | 'slip2go' | 'slipok' | 'slipverify';
 
 export interface TeamApiKey {
   id: string;

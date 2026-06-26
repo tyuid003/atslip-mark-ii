@@ -1,3 +1,4 @@
+// UI HELPERS — v2026-06-05
 // ============================================================
 // UI HELPERS
 // ============================================================
@@ -34,13 +35,59 @@ const UI = {
   },
 
   showLoading() {
-    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('loadingState').style.display = 'none';
     document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('tenantGrid').style.display = 'none';
+    document.getElementById('tenantGrid').style.display = 'flex';
+    this.showSkeletonTenants(4);
   },
 
   hideLoading() {
     document.getElementById('loadingState').style.display = 'none';
+  },
+
+  showSkeletonTenants(count = 4) {
+    const grid = document.getElementById('tenantGrid');
+    const cards = Array.from({ length: count }, () => `
+      <div class="tenant-card-skeleton">
+        <div class="skeleton-card-header">
+          <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+            <div class="skeleton skeleton-line skeleton-line-title"></div>
+            <div class="skeleton skeleton-line skeleton-line-url"></div>
+            <div class="skeleton skeleton-line skeleton-line-badge"></div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <div class="skeleton skeleton-toggle"></div>
+            <div class="skeleton-card-actions">
+              <div class="skeleton skeleton-btn"></div>
+            </div>
+          </div>
+        </div>
+        <div class="skeleton-divider"></div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="skeleton skeleton-line skeleton-line-sm"></div>
+          <div class="skeleton skeleton-line" style="width:35%;height:10px;"></div>
+        </div>
+      </div>
+    `).join('');
+    grid.innerHTML = cards;
+  },
+
+  showSkeletonPending(count = 5) {
+    const list = document.getElementById('pendingList');
+    if (!list) return;
+    const items = Array.from({ length: count }, () => `
+      <div class="pending-item-skeleton">
+        <div class="skeleton-pending-top">
+          <div class="skeleton skeleton-line" style="width:30%;height:14px;"></div>
+          <div class="skeleton skeleton-line" style="width:25%;height:14px;"></div>
+        </div>
+        <div class="skeleton-pending-bottom">
+          <div class="skeleton skeleton-line" style="width:50%;height:11px;"></div>
+          <div class="skeleton skeleton-line" style="width:20%;height:24px;border-radius:6px;"></div>
+        </div>
+      </div>
+    `).join('');
+    list.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${items}</div>`;
   },
 
   showEmptyState(title = null, message = null) {
@@ -72,6 +119,8 @@ const UI = {
     const statusBadge = isConnected
       ? '<span class="badge badge-success"><i data-lucide="check-circle" size="12"></i> เชื่อมต่อแล้ว</span>'
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
+    const apiVersion = tenant.api_version || 'v1';
+    const versionBadge = `<span class="badge-version badge-version-${apiVersion}">${apiVersion.toUpperCase()}</span>`;
 
     return `
       <div class="tenant-card" data-tenant-id="${tenant.id}" draggable="true">
@@ -80,6 +129,7 @@ const UI = {
             <h3 class="tenant-card-name">
               <i data-lucide="building-2" size="16"></i>
               ${tenant.name}
+              ${versionBadge}
             </h3>
             <div class="tenant-card-url">${tenant.admin_api_url}</div>
             <div class="tenant-card-status">
@@ -141,7 +191,10 @@ const UI = {
     const grid = document.getElementById('tenantGrid');
 
     if (tenants.length === 0) {
-      this.showEmptyState();
+      // แสดง add card แทน empty state เพื่อให้ user เพิ่มเว็บได้เลย
+      this.showTenantGrid();
+      grid.innerHTML = this.createAddTenantCard();
+      lucide.createIcons();
       return;
     }
 
@@ -308,6 +361,33 @@ const UI = {
           matchedUserText = `(${item.matched_user_id})`;
         }
 
+        const TELEGRAM_AVATAR = `<svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="border-radius:50%;flex-shrink:0"><circle cx="32" cy="32" r="32" fill="#229ED9"/><path d="M46.7 17.3L10.6 31.4c-.8.3-.8 1.5 0 1.8l9.2 3.1 3.5 10.8c.3.9 1.4 1.1 2 .5l5.3-5 9.8 7.2c.8.6 2 .1 2.2-.9l6-29.5c.3-1.2-.9-2.2-2-1.6z" fill="#fff"/></svg>`;
+
+        // สร้าง scanned-by badge
+        let scannedByHtml = '';
+        const src = item.source || 'manual';
+        const buildUserBadge = (name, photo) => {
+          const avatarHtml = photo
+            ? `<img src="${photo}" class="scanned-by-avatar">`
+            : `<span class="scanned-by-avatar scanned-by-avatar-initial">${name.charAt(0).toUpperCase()}</span>`;
+          return `<span class="scanned-by-badge">${avatarHtml}<span class="scanned-by-name">${name}</span></span>`;
+        };
+        if (src === 'telegram') {
+          if (item.scanned_by_name) {
+            scannedByHtml = buildUserBadge(item.scanned_by_name, item.scanned_by_photo);
+          } else {
+            scannedByHtml = `<span class="scanned-by-badge">${TELEGRAM_AVATAR}<span class="scanned-by-name">telegram</span></span>`;
+          }
+        } else if (src === 'line' || src === 'auto' || src === 'upload' || src === 'webhook') {
+          if (item.scanned_by_name) {
+            scannedByHtml = buildUserBadge(item.scanned_by_name, item.scanned_by_photo);
+          } else {
+            scannedByHtml = `<span class="scanned-by-badge"><img src="/assets/images/bot.png" class="scanned-by-avatar" onerror="this.style.display='none'"><span class="scanned-by-name">auto</span></span>`;
+          }
+        } else if (item.scanned_by_name) {
+          scannedByHtml = buildUserBadge(item.scanned_by_name, item.scanned_by_photo);
+        }
+
         // กำหนดสีตาม status
         const statusConfig = {
           pending: { color: 'yellow', label: 'รอจับคู่' },
@@ -347,7 +427,7 @@ const UI = {
                   ${item.receiver_name ? `<i data-lucide="arrow-right" style="width: 13px; height: 13px; color: var(--color-gray-400); flex-shrink: 0;"></i><span class="receiver-name">${item.receiver_name}</span>` : ''}
                 </div>
                 <div>
-                  <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
+                  <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}${scannedByHtml}
                 </div>
               </div>
               <div class="pending-amount-actions">

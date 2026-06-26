@@ -1,7 +1,7 @@
 ﻿// Scan API
 // POST /api/scan/upload - อัพโหลดสลิปและสแกน
 
-import { jsonResponse, errorResponse, successResponse } from '../utils/helpers';
+import { jsonResponse, errorResponse, successResponse, getAdminAuthHeaders } from '../utils/helpers';
 import { ScanService } from '../services/scan.service';
 import { CreditService } from '../services/credit.service';
 import { AntidupSettingsAPI } from './antidup-settings';
@@ -91,62 +91,56 @@ async function resolveToAccountId(
   receiverAccount: string,
   env: Env
 ): Promise<number | null> {
-  // 1) ใช้ API จริงตาม contract: GET /api/accounting/bankaccounts/list?limit=100
-  try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (sessionToken) {
-      headers.Authorization = `Bearer ${sessionToken}`;
-    }
-
-    const response = await fetch(`${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`, {
-      method: 'GET',
-      headers,
-    });
-
-    if (response.ok) {
-      const data = await response.json() as { list?: BankAccountListItem[] };
-      const list = data.list || [];
-      const candidates = list
-        .map((acc) => ({
+  // 1) KV cache (bank-refresh saves at tenant:{id}:banks)
+  const bankKey = `tenant:${tenantId}:banks`;
+  const bankData = await env.BANK_KV.get(bankKey);
+  if (bankData) {
+    const cache = JSON.parse(bankData) as { accounts?: any[]; api_version?: string };
+    const kvAccounts = cache.accounts || [];
+    if (kvAccounts.length > 0) {
+      const candidates = kvAccounts
+        .map((acc: any) => ({
           id: Number(acc.id),
           accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
         }))
-        .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
+        .filter((acc: any) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
+      const fromKv = pickAccountIdFromCandidates(receiverAccount, candidates);
+      if (fromKv) return fromKv;
+    }
+  }
 
-      const resolvedFromApi = pickAccountIdFromCandidates(receiverAccount, candidates);
-      if (resolvedFromApi) {
-        return resolvedFromApi;
-      }
+  // 2) API fallback (v1/v2 aware)
+  if (!sessionToken) return null;
+  try {
+    const tenantRow = await env.DB.prepare(
+      `SELECT COALESCE(api_version, 'v1') as api_version FROM tenants WHERE id = ? LIMIT 1`
+    ).bind(tenantId).first<{ api_version: string }>();
+    const apiVersion = tenantRow?.api_version || 'v1';
+
+    const accountsUrl = apiVersion === 'v2'
+      ? `${adminApiUrl}/api/proxy/v1/admin/bank-accounts?page=1&limit=200`
+      : `${adminApiUrl}/api/accounting/bankaccounts/list?limit=100`;
+
+    const authHeaders = getAdminAuthHeaders(sessionToken, apiVersion);
+
+    const response = await fetch(accountsUrl, { method: 'GET', headers: authHeaders });
+    if (response.ok) {
+      const data = await response.json() as any;
+      const list: any[] = apiVersion === 'v2' ? (data?.data?.list || []) : (data?.list || []);
+      const candidates = list
+        .map((acc: any) => ({
+          id: Number(acc.id),
+          accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
+        }))
+        .filter((acc: any) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
+      const fromApi = pickAccountIdFromCandidates(receiverAccount, candidates);
+      if (fromApi) return fromApi;
     }
   } catch {
-    // fallback to KV below
+    // ignore
   }
 
-  // 2) Fallback เป็น KV cache ของ bank-refresh.service.ts
-  // NOTE: key ที่ใช้จริงคือ "tenant:{id}:banks" (ตาม BankRefreshService) ไม่ใช่ "bank-accounts-list"
-  const accountListKey = `tenant:${tenantId}:banks`;
-  const bankAccountsData = await env.BANK_KV.get(accountListKey);
-  if (!bankAccountsData) {
-    return null;
-  }
-
-  const cache = JSON.parse(bankAccountsData) as { accounts?: BankAccountListItem[] };
-  const kvAccounts = cache.accounts || [];
-
-  if (kvAccounts.length === 0) {
-    return null;
-  }
-
-  const candidates = kvAccounts
-    .map((acc) => ({
-    id: Number(acc.id),
-    accountNumber: String(acc.accountNumber || acc.account_number || '').replace(/[^0-9]/g, ''),
-    }))
-    .filter((acc) => Number.isFinite(acc.id) && acc.id > 0 && acc.accountNumber.length > 0);
-
-  return pickAccountIdFromCandidates(receiverAccount, candidates);
+  return null;
 }
 
 export const ScanAPI = {
@@ -205,6 +199,14 @@ export const ScanAPI = {
       const lineOAId = lineOAIdRaw.length > 0 ? lineOAIdRaw : null;
       // api_key_id override: Telegram bot ส่งมาเมื่อผู้ใช้เลือก key ด้วย /changeapikey
       const apiKeyIdOverride = String(formData.get('api_key_id') || '').trim() || null;
+
+      // scanned_by_* — ส่งมาจาก frontend เมื่อผู้ใช้ scan ด้วย Telegram account (source='manual')
+      // สำหรับ auto/telegram/line จะเป็น null → frontend แสดงตาม source แทน
+      const scannedById   = String(formData.get('scanned_by_id')    || '').trim() || null;
+      const scannedByName = String(formData.get('scanned_by_name')   || '').trim() || null;
+      // photo อาจเป็น base64 ขนาดใหญ่ — เก็บแค่ 32KB เพื่อประหยัด DB
+      const scannedByPhotoRaw = (formData.get('scanned_by_photo') as string | null) || null;
+      const scannedByPhoto = scannedByPhotoRaw ? scannedByPhotoRaw.substring(0, 32768) : null;
 
       log('[ScanAPI] Scan source:', {
         source,
@@ -427,7 +429,8 @@ export const ScanAPI = {
           senderNameEn,
           senderAccount,
           senderBank,
-          log
+          log,
+          (matchedTenant as any).api_version
         );
 
         if (matchedUser) {
@@ -439,11 +442,13 @@ export const ScanAPI = {
             bankAccount: matchedUser.bankAccount || matchedUser.bank_account || 'N/A',
           });
 
-          // 🧾 ถ้าเป็น non-member หรือไม่มี memberCode → gen memberCode ทันที
-          // เพื่อให้ matched_user_id ถูกเก็บเป็น memberCode ที่ใช้เติมเครดิตได้จริง
+          // 🧾 ถ้าเป็น non-member หรือไม่มี memberCode → gen memberCode (v1 only)
+          // v2: ทุก user มี memberCode อยู่แล้ว ไม่ต้อง gen
+          const isV2User = String((matchedTenant as any).api_version || 'v1') === 'v2';
           const needGen =
-            !String(matchedUser.memberCode || '').trim() ||
-            String(matchedUser.category || '').toLowerCase() === 'non-member';
+            !isV2User &&
+            (!String(matchedUser.memberCode || '').trim() ||
+             String(matchedUser.category || '').toLowerCase() === 'non-member');
 
           if (needGen) {
             log('[ScanAPI] 🧾 Auto-resolving memberCode for non-member matched user...');
@@ -482,17 +487,19 @@ export const ScanAPI = {
 
       log('[ScanAPI] 🔍 ===== SENDER MATCHING END =====');
 
-      // ── Anti-Dup check (ตรวจสอบรายการซ้ำกับระบบ admin) ────────────────────
-      if (matchedUser && matchedUser.id) {
+      // ── Anti-Dup check (v1 only — v2 does duplicate check inside submitCreditV2) ────────────────────
+      const sessionTokenForAntidup = session?.session_token as string | null;
+      const isV2Tenant = String((matchedTenant as any).api_version || 'v1') === 'v2';
+      if (matchedUser && matchedUser.id && !isV2Tenant) {
         try {
-          const accIdForAntidup = receiverAccount && sessionForAntidup
-            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionForAntidup, receiverAccount, env)
+          const accIdForAntidup = receiverAccount && sessionTokenForAntidup
+            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionTokenForAntidup, receiverAccount, env)
             : null;
           const antidupEnabled = accIdForAntidup
             ? await AntidupSettingsAPI.isEnabled(env, matchedTenant.team_id, accIdForAntidup)
             : false;
 
-          if (antidupEnabled && sessionForAntidup) {
+          if (antidupEnabled && sessionTokenForAntidup) {
             log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup);
 
             // window 1 นาที: สลิปยอดเท่ากัน เวลาต่างกันไม่เกิน 60 วินาที = ซ้ำ
@@ -504,7 +511,7 @@ export const ScanAPI = {
             const findDuplicate = async (): Promise<any | null> => {
               const txListResp = await fetch(
                 `${matchedTenant.admin_api_url}/api/user-transactions/list?page=1&limit=20&sortCol=transfer_at&sortAsc=desc&userId=${matchedUser.id}`,
-                { headers: { Authorization: `Bearer ${sessionForAntidup}`, Accept: 'application/json' } },
+                { headers: { Authorization: `Bearer ${sessionTokenForAntidup}`, Accept: 'application/json' } },
               );
               if (!txListResp.ok) return null;
               const txListData = await txListResp.json() as { list?: any[] };
@@ -525,18 +532,8 @@ export const ScanAPI = {
               return null;
             };
 
-            // รอบแรก
+            // รอบแรกและรอบเดียว
             let dupDeposit = await findDuplicate();
-
-            // รอบสอง: ถ้ารอบแรกไม่เจอ ให้รอ ~1.2 วิ แล้วเช็คอีกครั้ง
-            // เผื่อกรณี SMS-bot ของ admin กำลังจะ insert (race condition)
-            if (!dupDeposit) {
-              await new Promise((r) => setTimeout(r, 1200));
-              dupDeposit = await findDuplicate();
-              if (dupDeposit) {
-                log('[ScanAPI] ⚠️ Anti-dup: caught duplicate on 2nd pass (admin SMS-bot lag)');
-              }
-            }
 
             if (dupDeposit) {
               log('[ScanAPI] ⚠️ Anti-dup: duplicate deposit detected', {
@@ -605,8 +602,8 @@ export const ScanAPI = {
           `INSERT INTO pending_transactions 
            (id, team_id, tenant_id, line_oa_id, slip_ref, amount, sender_name, sender_account, 
             receiver_name, receiver_account, slip_data, matched_user_id, matched_username, 
-            status, source, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            status, source, scanned_by_id, scanned_by_name, scanned_by_photo, created_at, updated_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             transactionId,
@@ -624,6 +621,9 @@ export const ScanAPI = {
             matchedUser?.fullname || null,
             (matchedUser && (matchedUser?.memberCode || matchedUser?.username)) ? 'matched' : 'pending',
             source,
+            scannedById,
+            scannedByName,
+            scannedByPhoto,
             now,
             now
           )
@@ -742,7 +742,7 @@ export const ScanAPI = {
             env,
             {
               tenantId: matchedTenant.id,
-              slipData: slip,
+              slipData: { ...slip, sender: (slip as any).sender },
               user: matchedUser,
               toAccountId,
             },

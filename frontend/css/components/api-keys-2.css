@@ -148,6 +148,12 @@
   border-color: #e9d5ff;
 }
 
+.provider-badge-slipverify {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
 /* === API Keys list (modal) === */
 .api-keys-list {
   display: flex;

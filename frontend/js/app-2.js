@@ -24,6 +24,7 @@ let pendingSortBy = 'created_at'; // Sort by field
 let pendingSortOrder = 'DESC'; // Sort order (ASC/DESC)
 let pendingSearchQuery = ''; // Search query
 let allPendingTransactions = []; // Store all pending data before filtering/sorting
+let _pendingFirstLoad = true; // ใช้ skeleton เฉพาะโหลดครั้งแรก (ป้องกัน flicker ตอนอัพเดท)
 
 function levenshteinDistance(a, b) {
   const s = String(a || '');
@@ -99,6 +100,12 @@ async function resolveValidTeamSlug(slug) {
 // ============================================================
 
 async function init() {
+  // ซ่อน UI ทันทีเพื่อป้องกัน flash ก่อน membership check ผ่าน
+  const _container = document.querySelector('.container');
+  const _header = document.querySelector('.header');
+  if (_container) _container.style.visibility = 'hidden';
+  if (_header) _header.style.visibility = 'hidden';
+
   const routeInfo = window.getRouteInfoFromURL();
   currentTeamSlug = await resolveValidTeamSlug(routeInfo.teamSlug);
   currentPage = routeInfo.page || 'dashboard';
@@ -126,8 +133,7 @@ async function init() {
       const teamData = response.data;
       currentTeamId = teamData.id || null;
       window.currentTeamId = currentTeamId;
-      
-      // อัพเดท page title ด้วยชื่อทีม
+      window.dispatchEvent(new CustomEvent('teamLoaded', { detail: { teamId: currentTeamId } }));
       document.title = `${teamData.name} - ATslip Auto Deposit`;
       
       // แสดง team badge ด้วยชื่อทีม
@@ -163,11 +169,90 @@ async function init() {
     return;
   }
 
+  // ตรวจสอบ membership ก่อนโหลด app จริง
+  const isMember = await checkTeamMembership(currentTeamSlug);
+  if (!isMember) return;
+
+  // membership ผ่านแล้ว — แสดง UI
+  if (_container) _container.style.visibility = '';
+  if (_header) _header.style.visibility = '';
+
   await renderProviderUploadZones(currentTeamSlug);
   await loadTenants();
   await loadPendingTransactions();
   initializeNotifications();
   connectWebSocket();
+}
+
+async function checkTeamMembership(slug) {
+  // รอให้ auth พร้อมก่อน — ป้องกัน race condition ระหว่าง auth.js กับ app-2.js
+  if (!window.atslipAuth?.ready) {
+    await new Promise(resolve => window.addEventListener('atslipAuthReady', resolve, { once: true }));
+  }
+  // ยังไม่ login → auth จะแสดง blur overlay, ไม่โหลด app
+  if (!window.atslipAuth?.user) return false;
+  try {
+    await api.getPendingJoinRequests(slug);
+    return true; // 200 = สมาชิก
+  } catch (err) {
+    const msg = String(err?.message || '').toLowerCase();
+    const is401 = msg.includes('unauthorized') || msg.includes('(401)') || msg.includes('401');
+    const is403 = msg.includes('forbidden') || msg.includes('(403)') || msg.includes('403');
+    if (is401) return false; // ยังไม่ได้ login จริง
+    if (is403) {
+      try {
+        const res = await api.createJoinRequest(slug);
+        if (res?.status === 'already_member') return true;
+      } catch (_) {}
+      showJoinPendingScreen(slug);
+      window.addEventListener('joinRequestResolved', (e) => {
+        if (e.detail?.action === 'approve') {
+          window.location.reload();
+        } else if (e.detail?.action === 'reject') {
+          showJoinRejectedScreen();
+        }
+      });
+      return false;
+    }
+    return true; // อื่นๆ ให้ผ่านไปก่อน
+  }
+}
+
+function showJoinPendingScreen(slug) {
+  const container = document.querySelector('.container');
+  const header = document.querySelector('.header');
+  if (container) container.style.visibility = 'hidden';
+  if (header) header.style.visibility = 'hidden';
+  let el = document.getElementById('joinPendingScreen');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'joinPendingScreen';
+    el.className = 'join-pending-screen';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="join-pending-box">
+      <div class="join-pending-icon">⏳</div>
+      <h2>รอการอนุมัติ</h2>
+      <p>คำขอเข้าทีม <strong>${slug}</strong> ถูกส่งไปแล้ว<br>กรุณารอสมาชิกในทีมอนุมัติ</p>
+      <p class="join-pending-sub">หน้าจะรีโหลดอัตโนมัติเมื่อได้รับการอนุมัติ</p>
+    </div>
+  `;
+  el.style.display = 'flex';
+}
+
+function showJoinRejectedScreen() {
+  const el = document.getElementById('joinPendingScreen');
+  if (el) {
+    el.innerHTML = `
+      <div class="join-pending-box">
+        <div class="join-pending-icon">❌</div>
+        <h2>คำขอถูกปฏิเสธ</h2>
+        <p>สมาชิกในทีมปฏิเสธคำขอของท่าน</p>
+        <p class="join-pending-sub">กรุณาติดต่อผู้ดูแลทีม</p>
+      </div>
+    `;
+  }
 }
 
 // รีเฟรชเมื่อ hash เปลี่ยน (สำหรับ team switching)
@@ -261,6 +346,8 @@ async function openEditTenantModal(tenantId) {
     document.getElementById('adminApiUrl').value = tenant.admin_api_url;
     document.getElementById('adminUsername').value = tenant.admin_username;
     document.getElementById('adminPassword').value = tenant.admin_password;
+    const versionEl = document.getElementById('tenantApiVersion');
+    if (versionEl) versionEl.value = tenant.api_version || 'v1';
 
     document.getElementById('tenantModal').style.display = 'flex';
     lucide.createIcons();
@@ -279,6 +366,7 @@ async function saveTenant() {
   const admin_api_url = document.getElementById('adminApiUrl').value;
   const admin_username = document.getElementById('adminUsername').value;
   const admin_password = document.getElementById('adminPassword').value;
+  const api_version = (document.getElementById('tenantApiVersion')?.value) || 'v1';
 
   if (!name || !admin_api_url || !admin_username || !admin_password) {
     addNotification('⚠️ กรุณากรอกข้อมูลให้ครบถ้วน');
@@ -290,6 +378,7 @@ async function saveTenant() {
     admin_api_url,
     admin_username,
     admin_password,
+    api_version,
   };
 
   try {
@@ -306,6 +395,8 @@ async function saveTenant() {
     }
 
     closeTenantModal();
+    sessionStorage.removeItem('tenants_cache');
+    tenantCache = null;
     await loadTenants();
   } catch (error) {
     addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
@@ -357,10 +448,17 @@ let currentLoginTenant = null;
 let currentCaptchaKey = null;
 
 async function connectAdmin(tenantId) {
-  const tenant = currentTenants.find((t) => t.id === tenantId);
+  let tenant;
+  try {
+    const freshResponse = await api.getTenant(tenantId);
+    tenant = freshResponse.data;
+  } catch (e) {
+    tenant = currentTenants.find((t) => t.id === tenantId);
+  }
   if (!tenant) return;
 
   currentLoginTenant = tenant;
+  const isV2 = (tenant.api_version || 'v1') === 'v2';
   
   // เปิด login modal
   const modal = document.getElementById('adminLoginModal');
@@ -368,25 +466,36 @@ async function connectAdmin(tenantId) {
   const usernameEl = document.getElementById('loginUsername');
   const passwordEl = document.getElementById('loginPassword');
   const captchaInputEl = document.getElementById('captchaInput');
+  const captchaSection = document.getElementById('captchaSection');
+  const v2Notice = document.getElementById('v2LoginNotice');
   
-  tenantNameEl.textContent = `เชื่อมต่อ: ${tenant.name}`;
+  const apiVer = tenant.api_version || 'v1';
+  tenantNameEl.innerHTML = `เชื่อมต่อ: ${tenant.name} <span class="badge-version badge-version-${apiVer}" style="margin-left:6px;">${apiVer.toUpperCase()}</span>`;
   usernameEl.value = tenant.admin_username || '';
   passwordEl.value = tenant.admin_password || '';
   captchaInputEl.value = '';
-  
-  // เพิ่ม Enter key handler สำหรับ captcha input
-  captchaInputEl.onkeydown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      submitAdminLogin();
-    }
-  };
+  currentCaptchaKey = null;
+
+  if (isV2) {
+    if (captchaSection) captchaSection.style.display = 'none';
+    if (v2Notice) v2Notice.style.display = 'flex';
+  } else {
+    if (captchaSection) captchaSection.style.display = '';
+    if (v2Notice) v2Notice.style.display = 'none';
+    captchaInputEl.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitAdminLogin();
+      }
+    };
+  }
   
   modal.style.display = 'flex';
   lucide.createIcons();
   
-  // โหลด captcha
-  await loadCaptcha(tenant);
+  if (!isV2) {
+    await loadCaptcha(tenant);
+  }
 }
 
 function closeAdminLoginModal() {
@@ -443,16 +552,23 @@ async function refreshCaptcha() {
 }
 
 async function submitAdminLogin() {
-  if (!currentLoginTenant || !currentCaptchaKey) {
+  if (!currentLoginTenant) {
     addNotification('❌ ข้อมูลไม่ครบถ้วน');
     return;
   }
-  
-  const captchaInput = document.getElementById('captchaInput').value.trim();
-  
-  if (!captchaInput) {
-    addNotification('❌ กรุณากรอกรหัส captcha');
-    return;
+
+  const isV2 = (currentLoginTenant.api_version || 'v1') === 'v2';
+
+  if (!isV2) {
+    if (!currentCaptchaKey) {
+      addNotification('❌ ข้อมูลไม่ครบถ้วน');
+      return;
+    }
+    const captchaInput = document.getElementById('captchaInput').value.trim();
+    if (!captchaInput) {
+      addNotification('❌ กรุณากรอกรหัส captcha');
+      return;
+    }
   }
   
   const submitBtn = document.getElementById('loginSubmitBtn');
@@ -461,9 +577,9 @@ async function submitAdminLogin() {
   lucide.createIcons();
   
   try {
-    const response = await api.loginAdmin(currentLoginTenant.id, {
+    const response = await api.loginAdmin(currentLoginTenant.id, isV2 ? {} : {
       captcha_key: currentCaptchaKey,
-      captcha_code: captchaInput,
+      captcha_code: document.getElementById('captchaInput').value.trim(),
     });
     
     if (response.success) {
@@ -487,8 +603,9 @@ async function submitAdminLogin() {
     }
   } catch (error) {
     addNotification('❌ เข้าสู่ระบบล้มเหลว: ' + error.message);
-    // โหลด captcha ใหม่
-    await refreshCaptcha();
+    if (!isV2) {
+      await refreshCaptcha();
+    }
   } finally {
     submitBtn.disabled = false;
     submitBtn.innerHTML = '<i data-lucide="log-in"></i> เข้าสู่ระบบ';
@@ -619,8 +736,10 @@ async function refreshBankAccountsNow() {
   const listContainer = document.getElementById('bankAccountsList');
 
   try {
-    // แสดง loading animation
-    refreshIcon.classList.add('spin-icon');
+    // แสดง loading animation (หมุน 1 รอบ)
+    refreshIcon.classList.remove('spin-once');
+    void refreshIcon.offsetWidth; // force reflow เพื่อ reset animation
+    refreshIcon.classList.add('spin-once');
     listContainer.innerHTML = '<div class="bank-accounts-loading"><i data-lucide="loader" size="32" class="spin-icon"></i><p style="margin-top: var(--space-md);">กำลังรีเฟรชข้อมูล...</p></div>';
     lucide.createIcons();
 
@@ -672,7 +791,7 @@ async function refreshBankAccountsNow() {
     }
     lucide.createIcons();
   } finally {
-    refreshIcon.classList.remove('spin-icon');
+    // ไม่ต้อง remove — animation จะหยุดเองหลังหมุน 1 รอบ
   }
 }
 
@@ -758,6 +877,7 @@ async function manageLineOAs(tenantId) {
 
     renderLineOAList();
     document.getElementById('lineOAModal').style.display = 'flex';
+    switchLineOATab('direct');
     lucide.createIcons();
   } catch (error) {
     addNotification('❌ ไม่สามารถโหลดข้อมูล: ' + error.message);
@@ -878,7 +998,7 @@ function cancelAddLineOA() {
   }
 }
 
-function submitLineOAForm(event) {
+async function submitLineOAForm(event) {
   event.preventDefault();
   
   const name = document.getElementById('lineOAName').value.trim();
@@ -891,14 +1011,26 @@ function submitLineOAForm(event) {
     return;
   }
 
-  const payload = { name, channel_id, channel_secret, channel_access_token };
+  const submitBtn = document.getElementById('submitLineOAFormBtn');
+  const submitLabel = document.getElementById('submitLineOAFormBtnText');
+  const originalLabel = submitLabel.textContent;
+  submitBtn.disabled = true;
+  submitLabel.textContent = 'กำลังบันทึก...';
 
-  if (currentEditingLineOAId) {
-    updateLineOA(currentEditingLineOAId, payload);
-    return;
+  try {
+    const payload = { name, channel_id, channel_secret, channel_access_token };
+
+    if (currentEditingLineOAId) {
+      await updateLineOA(currentEditingLineOAId, payload);
+    } else {
+      await createLineOA(payload);
+    }
+  } catch (error) {
+    // error already shown by createLineOA/updateLineOA
+  } finally {
+    submitBtn.disabled = false;
+    submitLabel.textContent = originalLabel;
   }
-
-  createLineOA(payload);
 }
 
 function copyWebhookUrl(lineOAId) {
@@ -922,15 +1054,129 @@ function openAddLineOAModal() {
   showAddLineOAForm();
 }
 
+// ============================================================
+// U-SHOP INTEGRATION (tab in LINE OA modal)
+// ============================================================
+
+function switchLineOATab(tab) {
+  const directPane = document.getElementById('lineOATabDirect');
+  const ushopPane = document.getElementById('lineOATabUshop');
+  const directBtn = document.getElementById('lineOATabBtnDirect');
+  const ushopBtn = document.getElementById('lineOATabBtnUshop');
+
+  const activate = (btn) => {
+    btn.style.borderBottom = '2px solid var(--color-primary)';
+    btn.style.color = 'var(--color-primary)';
+    btn.classList.add('active');
+  };
+  const deactivate = (btn) => {
+    btn.style.borderBottom = '2px solid transparent';
+    btn.style.color = 'var(--color-text-muted)';
+    btn.classList.remove('active');
+  };
+
+  if (tab === 'ushop') {
+    directPane.style.display = 'none';
+    ushopPane.style.display = 'block';
+    deactivate(directBtn);
+    activate(ushopBtn);
+    loadUshopConnection();
+  } else {
+    directPane.style.display = 'block';
+    ushopPane.style.display = 'none';
+    activate(directBtn);
+    deactivate(ushopBtn);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderUshopConnection(data) {
+  const enabledEl = document.getElementById('ushopEnabled');
+  const baseUrlEl = document.getElementById('ushopBaseUrl');
+  const credsEl = document.getElementById('ushopCredentials');
+
+  if (enabledEl) enabledEl.checked = Number(data.enabled) === 1;
+  if (baseUrlEl) baseUrlEl.value = data.ushop_base_url || '';
+
+  if (data.configured && data.api_key) {
+    document.getElementById('ushopInboundUrl').value = data.inbound_url || '';
+    document.getElementById('ushopApiKey').value = data.api_key || '';
+    document.getElementById('ushopTenantId').value = data.tenant_id || currentTenantId || '';
+    if (credsEl) credsEl.style.display = 'block';
+  } else if (credsEl) {
+    credsEl.style.display = 'none';
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function loadUshopConnection() {
+  try {
+    const res = await api.getUshopConnection(currentTenantId);
+    renderUshopConnection(res.data || {});
+  } catch (error) {
+    addNotification('❌ โหลดข้อมูล U-shop ไม่สำเร็จ: ' + error.message);
+  }
+}
+
+async function saveUshopConnection() {
+  const enabled = document.getElementById('ushopEnabled').checked ? 1 : 0;
+  const ushop_base_url = document.getElementById('ushopBaseUrl').value.trim();
+
+  if (enabled && !ushop_base_url) {
+    addNotification('❌ กรุณากรอก U-shop Base URL');
+    return;
+  }
+
+  try {
+    const res = await api.saveUshopConnection(currentTenantId, { enabled, ushop_base_url });
+    renderUshopConnection(res.data || {});
+    addNotification('✅ บันทึกการเชื่อมต่อ U-shop สำเร็จ');
+  } catch (error) {
+    addNotification('❌ บันทึกไม่สำเร็จ: ' + (error.message || 'กรุณาลองใหม่'));
+  }
+}
+
+async function regenerateUshopKey() {
+  if (!confirm('สร้าง API Key ใหม่? คีย์เดิมจะใช้ไม่ได้ และต้องนำคีย์ใหม่ไปตั้งค่าใน univers_shop')) {
+    return;
+  }
+  try {
+    const enabled = document.getElementById('ushopEnabled').checked ? 1 : 0;
+    const ushop_base_url = document.getElementById('ushopBaseUrl').value.trim();
+    const res = await api.saveUshopConnection(currentTenantId, { enabled, ushop_base_url, regenerate_key: true });
+    renderUshopConnection(res.data || {});
+    addNotification('✅ สร้าง API Key ใหม่แล้ว');
+  } catch (error) {
+    addNotification('❌ สร้างคีย์ใหม่ไม่สำเร็จ: ' + (error.message || 'กรุณาลองใหม่'));
+  }
+}
+
+function copyFieldValue(elementId) {
+  const input = document.getElementById(elementId);
+  if (!input) return;
+  input.select();
+  input.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(input.value).then(() => {
+    addNotification('✅ คัดลอกแล้ว');
+  }).catch(() => {
+    document.execCommand('copy');
+    addNotification('✅ คัดลอกแล้ว');
+  });
+}
+
 async function createLineOA(data) {
   try {
-    await api.createLineOA(currentTenantId, data);
+    const result = await api.createLineOA(currentTenantId, data);
+    if (result && result.success === false) {
+      throw new Error(result.error || result.message || 'เพิ่ม LINE OA ไม่สำเร็จ');
+    }
     addNotification('✅ เพิ่ม LINE OA สำเร็จ');
-    cancelAddLineOA(); // Hide and reset form
+    cancelAddLineOA();
     await manageLineOAs(currentTenantId);
     await loadTenants();
   } catch (error) {
-    addNotification('❌ เกิดข้อผิดพลาด: ' + error.message);
+    addNotification('❌ เพิ่ม LINE OA ไม่สำเร็จ: ' + (error.message || 'กรุณาลองใหม่อีกครั้ง'));
+    throw error; // re-throw ให้ submitLineOAForm รับด้วย
   }
 }
 
@@ -969,12 +1215,18 @@ async function deleteLineOA(lineOAId) {
 // ============================================================
 
 async function loadPendingTransactions() {
+  // แสดง skeleton เฉพาะครั้งแรก (list ว่าง) — หลังจากนั้น update แบบเงียบไม่กระพริบ
+  if (_pendingFirstLoad) {
+    UI.showSkeletonPending(5);
+  }
   try {
     const response = await api.getPendingTransactions(50);
     const list = response.data || [];
-    allPendingTransactions = list; // Store all data
+    allPendingTransactions = list;
+    _pendingFirstLoad = false;
     applyPendingFiltersAndSort();
   } catch (error) {
+    _pendingFirstLoad = false;
     UI.renderPendingTransactions([]);
   }
 }
@@ -1146,7 +1398,11 @@ async function creditPendingItem(transactionId, btnOrEvent) {
   }
 
   try {
-    const response = await api.creditPendingTransaction(transactionId);
+    const response = await api.creditPendingTransaction(transactionId, {
+      scanned_by_id:    window.atslipAuth?.user?.telegram_id   || null,
+      scanned_by_name:  window.atslipGetDisplayName?.(window.atslipAuth?.user) || null,
+      scanned_by_photo: localStorage.getItem('atslip_photo')  || null,
+    });
 
     const status = response?.data?.status;
     if (status === 'duplicate') {
@@ -1156,6 +1412,7 @@ async function creditPendingItem(transactionId, btnOrEvent) {
     }
 
     await loadPendingTransactions();
+    _refreshScanLogIfVisible();
   } catch (error) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
     if (btn) {
@@ -1171,10 +1428,14 @@ async function withdrawPendingCredit(transactionId) {
   try {
     await api.withdrawPendingCredit(transactionId, {
       remark: 'Manual withdraw from pending list',
+      scanned_by_id:    window.atslipAuth?.user?.telegram_id   || null,
+      scanned_by_name:  window.atslipGetDisplayName?.(window.atslipAuth?.user) || null,
+      scanned_by_photo: localStorage.getItem('atslip_photo')  || null,
     });
 
     addNotification('✅ ดึงเครดิตกลับสำเร็จ');
     await loadPendingTransactions();
+    _refreshScanLogIfVisible();
   } catch (error) {
     addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + error.message);
   }
@@ -1182,6 +1443,14 @@ async function withdrawPendingCredit(transactionId) {
 
 window.creditPendingItem = creditPendingItem;
 window.withdrawPendingCredit = withdrawPendingCredit;
+
+// Helper: refresh scan log page silently if it is currently visible
+function _refreshScanLogIfVisible() {
+  const page = document.getElementById('scanLogPage');
+  if (page && page.style.display !== 'none' && typeof scanLogReload === 'function') {
+    scanLogReload(window.__scanLogState?.page || 1, true);
+  }
+}
 
 // ============================================================
 // USER SEARCH & MANUAL MATCHING
@@ -1365,18 +1634,26 @@ async function performUserSearch(query) {
   `;
   
   try {
-    // Search both member and non-member in parallel
-    
-    const [memberResponse, nonMemberResponse] = await Promise.all([
-      api.searchUsers(query, 'member', currentSearchTenantId).catch(err => ({ data: { users: [] } })),
-      api.searchUsers(query, 'non-member', currentSearchTenantId).catch(err => ({ data: { users: [] } }))
-    ]);
-    
-    const memberUsers = (memberResponse.data?.users || []).map(u => ({ ...u, category: 'member' }));
-    const nonMemberUsers = (nonMemberResponse.data?.users || []).map(u => ({ ...u, category: 'non-member' }));
-    
-    // Combine results: members first, then non-members
-    const allUsers = [...memberUsers, ...nonMemberUsers];
+    // ตรวจสอบ api_version ของ tenant ปัจจุบัน
+    const searchTenant = currentTenants.find(t => t.id === currentSearchTenantId);
+    const isV2Search = (searchTenant?.api_version || 'v1') === 'v2';
+
+    let allUsers = [];
+
+    if (isV2Search) {
+      // v2: single endpoint ครั้งเดียว ไม่แยก category
+      const response = await api.searchUsers(query, 'member', currentSearchTenantId).catch(() => ({ data: { users: [] } }));
+      allUsers = (response.data?.users || []).map(u => ({ ...u, category: 'member' }));
+    } else {
+      // v1: ค้นหา member และ non-member พร้อมกัน
+      const [memberResponse, nonMemberResponse] = await Promise.all([
+        api.searchUsers(query, 'member', currentSearchTenantId).catch(() => ({ data: { users: [] } })),
+        api.searchUsers(query, 'non-member', currentSearchTenantId).catch(() => ({ data: { users: [] } }))
+      ]);
+      const memberUsers = (memberResponse.data?.users || []).map(u => ({ ...u, category: 'member' }));
+      const nonMemberUsers = (nonMemberResponse.data?.users || []).map(u => ({ ...u, category: 'non-member' }));
+      allUsers = [...memberUsers, ...nonMemberUsers];
+    }
     
     
     if (allUsers.length === 0) {
@@ -1392,13 +1669,15 @@ async function performUserSearch(query) {
     window.__userSearchResults = allUsers;
 
     // Display results with category headers
+    const memberUsers  = allUsers.filter(u => u.category === 'member');
+    const nonMemberUsers = allUsers.filter(u => u.category === 'non-member');
     let html = '';
 
     if (memberUsers.length > 0) {
       html += `<div class="user-search-category-header">สมาชิก (${memberUsers.length})</div>`;
       html += memberUsers.map((user) => {
         const idx = allUsers.indexOf(user);
-        const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
+        const displayName = user.fullname || user.fullName || user.username || 'ไม่ระบุชื่อ';
         const displayUserCode = user.memberCode || user.username || user.id;
         return `
           <div class="user-result-item" onclick="selectUser(${idx})">
@@ -1414,7 +1693,7 @@ async function performUserSearch(query) {
       html += `<div class="user-search-category-header">ไม่ใช่สมาชิก (${nonMemberUsers.length})</div>`;
       html += nonMemberUsers.map((user) => {
         const idx = allUsers.indexOf(user);
-        const displayName = user.fullname || user.username || 'ไม่ระบุชื่อ';
+        const displayName = user.fullname || user.fullName || user.username || 'ไม่ระบุชื่อ';
         const displayUserCode = user.memberCode || user.username || user.id;
         return `
           <div class="user-result-item" onclick="selectUser(${idx})">
@@ -1507,12 +1786,16 @@ async function selectUser(indexOrId, fallbackName) {
         fullname,
         category,
       },
+      scanned_by_id:    window.atslipAuth?.user?.telegram_id   || null,
+      scanned_by_name:  window.atslipGetDisplayName?.(window.atslipAuth?.user) || null,
+      scanned_by_photo: localStorage.getItem('atslip_photo')  || null,
     });
 
     const finalUsername = result?.data?.transaction?.matched_username || fullname;
     addNotification(`✅ จับคู่กับ ${finalUsername} (${matchedUserId}) สำเร็จ`);
     closeUserSearch();
     await loadPendingTransactions();
+    _refreshScanLogIfVisible();
 
   } catch (error) {
     console.error('[Manual Match] Error:', error);
@@ -1578,7 +1861,7 @@ function translateErrorMessage(errorMsg) {
 let _focusedProviderService = null; // kept for openSlipPicker() backward compat
 
 function _badgeLabel(service) {
-  return { easyslip: 'EasySlip', slip2go: 'Slip2Go', slipok: 'SlipOK' }[service] || service;
+  return { easyslip: 'EasySlip', slip2go: 'Slip2Go', slipok: 'SlipOK', slipverify: 'RDCW' }[service] || service;
 }
 
 // สร้าง upload zones แบบ dynamic ตาม API keys จริง (1 zone ต่อ 1 key)
@@ -1898,6 +2181,8 @@ function handleRealtimeMessage(message) {
     allPendingTransactions[idx] = item;
 
     applyPendingFiltersAndSort();
+    // อัพเดท scan log page ด้วยถ้ากำลังเปิดอยู่ (in-place silent reload)
+    _refreshScanLogIfVisible();
     return;
   }
 }
@@ -2718,6 +3003,29 @@ function renderScanLogItemHTML(item) {
   if (item.matched_username && item.matched_user_id) matchedUserText = `${item.matched_username} (${item.matched_user_id})`;
   else if (item.matched_username) matchedUserText = item.matched_username;
   else if (item.matched_user_id) matchedUserText = `(${item.matched_user_id})`;
+
+  // scanned-by badge
+  const SCAN_LOG_TELEGRAM_AVATAR = `<svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="border-radius:50%;flex-shrink:0"><circle cx="32" cy="32" r="32" fill="#229ED9"/><path d="M46.7 17.3L10.6 31.4c-.8.3-.8 1.5 0 1.8l9.2 3.1 3.5 10.8c.3.9 1.4 1.1 2 .5l5.3-5 9.8 7.2c.8.6 2 .1 2.2-.9l6-29.5c.3-1.2-.9-2.2-2-1.6z" fill="#fff"/></svg>`;
+  const buildScanLogUserBadge = (name, photo) => {
+    const av = photo
+      ? `<img src="${photo}" class="scanned-by-avatar">`
+      : `<span class="scanned-by-avatar scanned-by-avatar-initial">${name.charAt(0).toUpperCase()}</span>`;
+    return `<span class="scanned-by-badge">${av}<span class="scanned-by-name">${name}</span></span>`;
+  };
+  let scannedByHtml = '';
+  const scanSrc = item.source || 'manual';
+  if (scanSrc === 'telegram') {
+    scannedByHtml = item.scanned_by_name
+      ? buildScanLogUserBadge(item.scanned_by_name, item.scanned_by_photo)
+      : `<span class="scanned-by-badge">${SCAN_LOG_TELEGRAM_AVATAR}<span class="scanned-by-name">telegram</span></span>`;
+  } else if (scanSrc === 'line' || scanSrc === 'auto' || scanSrc === 'upload' || scanSrc === 'webhook') {
+    scannedByHtml = item.scanned_by_name
+      ? buildScanLogUserBadge(item.scanned_by_name, item.scanned_by_photo)
+      : `<span class="scanned-by-badge"><img src="/assets/images/bot.png" class="scanned-by-avatar" onerror="this.style.display='none'"><span class="scanned-by-name">auto</span></span>`;
+  } else if (item.scanned_by_name) {
+    scannedByHtml = buildScanLogUserBadge(item.scanned_by_name, item.scanned_by_photo);
+  }
+
   const statusConfig = {
     pending: { color: 'yellow', label: 'รอจับคู่' },
     matched: { color: 'blue', label: 'จับคู่แล้ว' },
@@ -2757,7 +3065,7 @@ function renderScanLogItemHTML(item) {
             ${item.receiver_name ? `<i data-lucide="arrow-right" style="width: 13px; height: 13px; color: var(--color-gray-400); flex-shrink: 0;"></i><span class="receiver-name">${item.receiver_name}</span>` : ''}
           </div>
           <div>
-            <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}
+            <span class="slip-date">${slipDate}</span>${item.tenant_name ? `<span class="tenant-name">${item.tenant_name}</span>` : ''}${scannedByHtml}
           </div>
         </div>
         <div class="pending-amount-actions">
@@ -2773,4 +3081,8 @@ function renderScanLogItemHTML(item) {
 // START APPLICATION
 // ============================================================
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  const route = window.getRouteInfoFromURL ? window.getRouteInfoFromURL() : {};
+  if (route.isTeamSelector || route.isInfo) return;
+  init();
+});

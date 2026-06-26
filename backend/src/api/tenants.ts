@@ -70,6 +70,7 @@ export async function handleCreateTenant(
       admin_api_url: body.admin_api_url,
       admin_username: body.admin_username,
       admin_password: body.admin_password,
+      api_version: body.api_version || 'v1',
     });
 
     return successResponse(tenant, 'Tenant created successfully');
@@ -96,6 +97,7 @@ export async function handleUpdateTenant(
       admin_username: body.admin_username,
       admin_password: body.admin_password,
       easyslip_token: body.easyslip_token,
+      api_version: body.api_version,
       status: body.status,
     });
 

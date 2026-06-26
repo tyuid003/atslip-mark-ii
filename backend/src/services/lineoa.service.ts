@@ -18,14 +18,26 @@ export async function createLineOA(
   const id = generateId();
   const now = currentTimestamp();
 
+  // ดึง team_id จาก tenant (required by schema)
+  const tenant = await env.DB.prepare(
+    `SELECT team_id FROM tenants WHERE id = ?`
+  ).bind(data.tenant_id).first() as any;
+
+  if (!tenant) {
+    throw new Error('Tenant not found');
+  }
+
+  const team_id = tenant.team_id || 'default-team';
+
   await env.DB.prepare(
     `INSERT INTO line_oas (
-      id, tenant_id, name, channel_id, channel_secret,
+      id, team_id, tenant_id, name, channel_id, channel_secret,
       channel_access_token, webhook_enabled, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
+      team_id,
       data.tenant_id,
       data.name,
       data.channel_id,

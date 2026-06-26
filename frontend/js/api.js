@@ -12,11 +12,13 @@ class API {
     
     // เพิ่ม X-Team-ID header สำหรับ team filtering
     const teamSlug = window.currentTeamSlug || window.getTeamFromURL();
+    const session = localStorage.getItem('atslip_session');
     
     const defaultOptions = {
       headers: {
         'Content-Type': 'application/json',
-        'X-Team-Slug': teamSlug, // ส่ง team slug ไปกับทุก request
+        'X-Team-Slug': teamSlug,
+        ...(session ? { 'Authorization': `Bearer ${session}` } : {}),
       },
     };
 
@@ -146,6 +148,53 @@ class API {
   }
 
   // ============================================================
+  // JOIN REQUESTS
+  // ============================================================
+  async createJoinRequest(slug) {
+    return this.request(`/api/teams/${slug}/join-request`, { method: 'POST' });
+  }
+  async getPendingJoinRequests(slug) {
+    return this.request(`/api/teams/${slug}/join-requests/pending`);
+  }
+  async approveJoinRequest(slug, requestId) {
+    return this.request(`/api/teams/${slug}/join-request/${requestId}/approve`, { method: 'POST' });
+  }
+  async rejectJoinRequest(slug, requestId) {
+    return this.request(`/api/teams/${slug}/join-request/${requestId}/reject`, { method: 'POST' });
+  }
+
+  // ============================================================
+  // MEMBER MANAGEMENT
+  // ============================================================
+  async listMembers(slug) {
+    return this.request(`/api/teams/${slug}/members`);
+  }
+  async kickMember(slug, telegramId) {
+    return this.request(`/api/teams/${slug}/members/${telegramId}/kick`, { method: 'POST' });
+  }
+  async banMember(slug, telegramId, reason = '') {
+    return this.request(`/api/teams/${slug}/members/${telegramId}/ban`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+  async unbanMember(slug, telegramId) {
+    return this.request(`/api/teams/${slug}/members/${telegramId}/ban`, { method: 'DELETE' });
+  }
+
+  // ============================================================
+  // MASTER ADMIN
+  // ============================================================
+  async masterListTeams() { return this.request('/api/master/teams'); }
+  async masterCreateTeam(data) { return this.request('/api/master/teams', { method: 'POST', body: JSON.stringify(data) }); }
+  async masterUpdateTeam(slug, data) { return this.request(`/api/master/teams/${slug}`, { method: 'PATCH', body: JSON.stringify(data) }); }
+  async masterDeleteTeam(slug) { return this.request(`/api/master/teams/${slug}`, { method: 'DELETE' }); }
+  async masterListUsers() { return this.request('/api/master/users'); }
+  async masterAddToTeam(telegramId, teamSlug) { return this.request(`/api/master/users/${telegramId}/add-to-team`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug }) }); }
+  async masterKick(telegramId, teamSlug) { return this.request(`/api/master/users/${telegramId}/kick`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug }) }); }
+  async masterBan(telegramId, teamSlug, reason = '') { return this.request(`/api/master/users/${telegramId}/ban`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug, reason }) }); }
+
+  // ============================================================
   // TEAM API KEYS (multi-provider EasySlip / Slip2Go)
   // ============================================================
   async listTeamApiKeys(slug) {
@@ -221,6 +270,21 @@ class API {
   }
 
   // ============================================================
+  // U-SHOP INTEGRATION APIs
+  // ============================================================
+
+  async getUshopConnection(tenantId) {
+    return this.request(`/api/tenants/${tenantId}/ushop-connection`);
+  }
+
+  async saveUshopConnection(tenantId, data) {
+    return this.request(`/api/tenants/${tenantId}/ushop-connection`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ============================================================
   // SCAN APIs
   // ============================================================
 
@@ -234,6 +298,19 @@ class API {
     if (service) {
       formData.append('service', service);
     }
+
+    // ส่งข้อมูลผู้สแกน (Telegram user ที่ login อยู่)
+    try {
+      const userRaw = localStorage.getItem('atslip_user');
+      const photo   = localStorage.getItem('atslip_photo');
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        if (u.telegram_id) formData.append('scanned_by_id',   String(u.telegram_id));
+        const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.display_name || u.telegram_username || '';
+        if (name)          formData.append('scanned_by_name', name);
+        if (photo)         formData.append('scanned_by_photo', photo);
+      }
+    } catch (_) {}
 
     const teamSlug = window.currentTeamSlug || window.getTeamFromURL();
     
@@ -338,6 +415,9 @@ class API {
         matched_username: userData.matched_username,
         tenant_id: userData.tenant_id,
         user: userData.user,
+        scanned_by_id: userData.scanned_by_id,
+        scanned_by_name: userData.scanned_by_name,
+        scanned_by_photo: userData.scanned_by_photo,
       }),
     });
   }

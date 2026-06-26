@@ -29,7 +29,7 @@ function genId(): string {
 }
 
 function isValidService(s: any): s is SlipServiceProvider {
-  return s === 'easyslip' || s === 'slip2go';
+  return s === 'easyslip' || s === 'slip2go' || s === 'slipok' || s === 'slipverify';
 }
 
 export const TeamApiKeysAPI = {
@@ -68,11 +68,13 @@ export const TeamApiKeysAPI = {
     const service = String(body?.service || '').toLowerCase();
     const apiKey = String(body?.api_key || '').trim();
     const label = body?.label ? String(body.label).trim() : null;
-    // branch_id: ไม่ใช้แล้ว (Slip2Go ใช้ API Secret เดียวต่อร้าน) — เก็บ column ไว้เพื่อ backward compat
-    const branchId: string | null = null;
+    // branch_id: ใช้สำหรับ slipok (numeric branch ID) เท่านั้น
+    const branchId: string | null = body?.branch_id ? String(body.branch_id).trim() : null;
 
-    if (!isValidService(service)) return errorResponse('service must be "easyslip" or "slip2go"', 400);
+    if (!isValidService(service)) return errorResponse('service must be "easyslip", "slip2go", "slipok", or "slipverify"', 400);
     if (!apiKey) return errorResponse('api_key is required', 400);
+    if (service === 'slipok' && !apiKey.includes('|')) return errorResponse('api_key for slipok must be "url|apiKey" e.g. "https://api.slipok.com/api/line/apikey/12345|SLIPOKXXXXX"', 400);
+    if (service === 'slipverify' && !apiKey.includes('|')) return errorResponse('api_key for slipverify must be "clientId|clientSecret"', 400);
 
     // หา priority ถัดไป (ต่อท้าย)
     const maxRow = await env.DB.prepare(
@@ -119,7 +121,11 @@ export const TeamApiKeysAPI = {
       updates.push('api_key = ?');
       binds.push(body.api_key.trim());
     }
-    // branch_id: legacy field — ไม่อนุญาตให้แก้ผ่าน API อีกแล้ว (Slip2Go ไม่ใช้)
+    // branch_id: slipok = numeric branch ID, slipverify = clientId
+    if (typeof body.branch_id === 'string') {
+      updates.push('branch_id = ?');
+      binds.push(body.branch_id.trim() || null);
+    }
     if (body.status === 'active' || body.status === 'disabled') {
       updates.push('status = ?');
       binds.push(body.status);

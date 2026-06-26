@@ -442,7 +442,7 @@ async function handleCallbackQuery(env: Env, conn: TeamTelegramConnection, cq: a
         `UPDATE team_telegram_connections SET selected_api_key_id = ?, updated_at = datetime('now') WHERE id = ?`
       ).bind(keyId, conn.id).run();
 
-      const svcLabel = key.service === 'slip2go' ? 'Slip2Go' : 'EasySlip';
+      const svcLabel = key.service === 'slip2go' ? 'Slip2Go' : key.service === 'slipok' ? 'SlipOK' : key.service === 'slipverify' ? 'RDCW' : 'EasySlip';
       const displayLabel = key.label ? `${key.label} (${svcLabel})` : svcLabel;
       await answerCallbackQuery(env, conn, cq.id, `✅ เปลี่ยนเป็น ${displayLabel} แล้ว`, false);
       if (groupId && msgId) {
@@ -1009,7 +1009,7 @@ async function handleChangeApiKeyCommand(env: Env, conn: TeamTelegramConnection,
 
   const currentKeyId = conn.selected_api_key_id;
   const keyboard = list.map((k, idx) => {
-    const svcLabel = k.service === 'slip2go' ? 'Slip2Go' : 'EasySlip';
+    const svcLabel = k.service === 'slip2go' ? 'Slip2Go' : k.service === 'slipok' ? 'SlipOK' : k.service === 'slipverify' ? 'RDCW' : 'EasySlip';
     const nameLabel = k.label ? `${k.label} (${svcLabel})` : svcLabel;
     const isCurrent = k.id === currentKeyId;
     const isPrimaryUnselected = idx === 0 && !currentKeyId;

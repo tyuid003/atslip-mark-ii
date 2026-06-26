@@ -483,14 +483,15 @@
 
       const rows = keys.map((k, idx) => {
         const isPrimary = idx === 0;
-        const badgeClass = k.service === 'slip2go' ? 'provider-badge-slip2go' : 'provider-badge-easyslip';
+        const badgeClass = k.service === 'slip2go' ? 'provider-badge-slip2go' : k.service === 'slipok' ? 'provider-badge-slipok' : k.service === 'slipverify' ? 'provider-badge-slipverify' : 'provider-badge-easyslip';
+        const svcDisplayName = { easyslip: 'EasySlip', slip2go: 'Slip2Go', slipok: 'SlipOK', slipverify: 'RDCW' }[k.service] || k.service;
         const labelPart = k.label
           ? `<span class="api-key-label">${_esc(k.label)}</span>` : '';
         return `
           <div class="api-key-row" data-id="${_esc(k.id)}">
             <div class="api-key-row-main">
               ${isPrimary ? '<span class="api-key-primary-badge" title="Key หลัก">PRIMARY</span>' : ''}
-              <span class="provider-badge ${badgeClass}">${k.service === 'slip2go' ? 'Slip2Go' : 'EasySlip'}</span>
+              <span class="provider-badge ${badgeClass}">${svcDisplayName}</span>
               ${labelPart}
               <span class="api-key-token" title="คลิกเพื่อแสดง/ซ่อน Token" onclick="toggleApiKeyTokenView('${_esc(k.id)}')">
                 <code data-full="${_esc(k.api_key)}" data-masked="${_esc(_maskKey(k.api_key))}" data-shown="0">${_esc(_maskKey(k.api_key))}</code>
@@ -549,7 +550,22 @@
   };
 
   window.onNewKeyServiceChange = function () {
-    // no-op — Slip2Go ไม่ต้องใช้ branch_id (เก็บไว้เผื่อ backward compat ประกอบ markup)
+    const svc = (document.getElementById('newKeyService') || {}).value || '';
+    const hint = document.getElementById('newKeyTokenHint');
+    const input = document.getElementById('newKeyToken');
+    if (!hint) return;
+    if (svc === 'slipverify') {
+      hint.style.display = '';
+      hint.innerHTML = 'RDCW: ใส่รูปแบบ <code>clientId|clientSecret</code> เช่น <code>abc123|xyz789</code>';
+      if (input) input.placeholder = 'clientId|clientSecret';
+    } else if (svc === 'slipok') {
+      hint.style.display = '';
+      hint.innerHTML = 'SlipOK: ใส่รูปแบบ <code>url|apiKey</code> เช่น <code>https://api.slipok.com/api/line/apikey/68281|SLIPOK12VCAG3</code>';
+      if (input) input.placeholder = 'https://api.slipok.com/api/line/apikey/XXXXX|SLIPOKXXXXX';
+    } else {
+      hint.style.display = 'none';
+      if (input) input.placeholder = 'วาง API Key ที่นี่';
+    }
   };
 
   window.toggleApiKeyTokenView = function (id) {

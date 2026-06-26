@@ -17,18 +17,66 @@ import {
   handleWithdrawPendingCredit,
 } from './api/pending-credit';
 import { PendingNotificationsDO } from './durable-objects/pending-notifications';
+import { TelegramAuthDO } from './durable-objects/telegram-auth-do';
 import { RealtimeAPI } from './api/realtime';
 import {
   handleGetLineMessageSettings,
   handleUpdateLineMessageSettings,
 } from './api/line-message-settings';
 import { handleLineWebhook } from './api/line-webhook';
+import {
+  handleGetUshopConnection,
+  handleSaveUshopConnection,
+  handleUshopListTenants,
+  handleUshopInbound,
+} from './api/ushop';
 import { handleTelegramWebhook } from './api/telegram-webhook';
 import * as TelegramConnectionsAPI from './api/telegram-connections';
 import { processQueueOnce } from './services/scan-queue.service';
 import * as ReportAPI from './api/report';
 import * as ReportLogsAPI from './api/report-logs';
 import { AntidupSettingsAPI } from './api/antidup-settings';
+import { handlePresenceHeartbeat, handleGetPresence } from './api/presence';
+import {
+  handleRegister as handleAuthRegister,
+  handleGetMe,
+  handleUpdateDisplayName,
+  handleLogout as handleAuthLogout,
+  handleGetPhoto,
+} from './api/telegram-auth';
+import {
+  handleTgSendCode,
+  handleTgVerifyCode,
+  handleTgVerify2FA,
+  handleTgQRStart,
+  handleTgQRStatus,
+  handleTgLogout,
+  handleTgHealth,
+} from './api/telegram-auth-flow';
+
+import {
+  handleCreateJoinRequest,
+  handleGetPendingRequests,
+  handleResolveJoinRequest,
+} from './api/join-requests';
+
+import {
+  handleListMembers,
+  handleKickMember,
+  handleBanMember,
+  handleUnbanMember,
+} from './api/members';
+
+import {
+  handleMasterListTeams,
+  handleMasterCreateTeam,
+  handleMasterUpdateTeam,
+  handleMasterDeleteTeam,
+  handleMasterListUsers,
+  handleMasterAddToTeam,
+  handleMasterKick,
+  handleMasterBan,
+} from './api/master';
 
 // ============================================================
 // MAIN ROUTER
@@ -36,6 +84,7 @@ import { AntidupSettingsAPI } from './api/antidup-settings';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
     const url = new URL(request.url);
     const pathname = url.pathname;
     const method = request.method;
@@ -43,6 +92,59 @@ export default {
     // Handle CORS preflight
     if (method === 'OPTIONS') {
       return handleOptions();
+    }
+
+    // ============================================================
+    // TELEGRAM AUTH ROUTES
+    // ============================================================
+
+    // POST /api/auth/register — ลงทะเบียน / login หลังยืนยัน Telegram
+    if (method === 'POST' && pathname === '/api/auth/register') {
+      return await handleAuthRegister(request, env);
+    }
+    // GET /api/auth/me — ดูข้อมูลผู้ใช้ปัจจุบัน
+    if (method === 'GET' && pathname === '/api/auth/me') {
+      return await handleGetMe(request, env);
+    }
+    // PATCH /api/auth/me/display-name — เปลี่ยนชื่อที่แสดง
+    if (method === 'PATCH' && pathname === '/api/auth/me/display-name') {
+      return await handleUpdateDisplayName(request, env);
+    }
+    // POST /api/auth/logout — ออกจากระบบ
+    if (method === 'POST' && pathname === '/api/auth/logout') {
+      return await handleAuthLogout(request, env);
+    }
+    // GET /api/auth/photo/:telegram_id — ดึงรูปโปรไฟล์
+    const photoMatch = pathname.match(/^\/api\/auth\/photo\/(\d+)$/);
+    if (method === 'GET' && photoMatch) {
+      return await handleGetPhoto(env, photoMatch[1]);
+    }
+
+    // ============================================================
+    // TELEGRAM AUTH FLOW ROUTES (GramJS via Durable Objects)
+    // ============================================================
+
+    if (method === 'GET' && pathname === '/api/tg-auth/health') {
+      return handleTgHealth();
+    }
+    if (method === 'POST' && pathname === '/api/tg-auth/send-code') {
+      return await handleTgSendCode(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/tg-auth/verify-code') {
+      return await handleTgVerifyCode(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/tg-auth/verify-2fa') {
+      return await handleTgVerify2FA(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/tg-auth/qr-start') {
+      return await handleTgQRStart(request, env);
+    }
+    const qrStatusMatch = pathname.match(/^\/api\/tg-auth\/qr-status\/(.+)$/);
+    if (method === 'GET' && qrStatusMatch) {
+      return await handleTgQRStatus(request, env, qrStatusMatch[1]);
+    }
+    if (method === 'POST' && pathname === '/api/tg-auth/logout') {
+      return await handleTgLogout(request, env);
     }
 
     // ============================================================
@@ -60,6 +162,66 @@ export default {
     if (getTeamMatch) {
       const slug = decodeURIComponent(getTeamMatch[1]);
       if (method === 'GET') return await TeamsAPI.handleGetTeamBySlug(env, slug);
+    }
+
+    // JOIN REQUESTS
+    const joinRequestMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/join-request$/);
+    if (joinRequestMatch) {
+      const slug = decodeURIComponent(joinRequestMatch[1]);
+      if (method === 'POST') return await handleCreateJoinRequest(request, env, slug);
+    }
+    const joinRequestsPendingMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/join-requests\/pending$/);
+    if (method === 'GET' && joinRequestsPendingMatch) {
+      const slug = decodeURIComponent(joinRequestsPendingMatch[1]);
+      return await handleGetPendingRequests(request, env, slug);
+    }
+    const joinRequestResolveMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/join-request\/([^\/]+)\/(approve|reject)$/);
+    if (method === 'POST' && joinRequestResolveMatch) {
+      const slug    = decodeURIComponent(joinRequestResolveMatch[1]);
+      const reqId   = decodeURIComponent(joinRequestResolveMatch[2]);
+      const action  = joinRequestResolveMatch[3] as 'approve' | 'reject';
+      return await handleResolveJoinRequest(request, env, slug, reqId, action);
+    }
+
+    // MEMBER MANAGEMENT
+    const membersMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members$/);
+    if (method === 'GET' && membersMatch) {
+      return await handleListMembers(request, env, decodeURIComponent(membersMatch[1]));
+    }
+    const memberActionMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/(kick|ban|unban)$/);
+    if (method === 'POST' && memberActionMatch) {
+      const slug = decodeURIComponent(memberActionMatch[1]);
+      const tid  = decodeURIComponent(memberActionMatch[2]);
+      const act  = memberActionMatch[3];
+      if (act === 'kick')  return await handleKickMember(request, env, slug, tid);
+      if (act === 'ban')   return await handleBanMember(request, env, slug, tid);
+    }
+    if (method === 'DELETE' && pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)) {
+      const m = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)!;
+      return await handleUnbanMember(request, env, decodeURIComponent(m[1]), decodeURIComponent(m[2]));
+    }
+
+    // MASTER ADMIN ROUTES
+    if (pathname === '/api/master/teams') {
+      if (method === 'GET')  return await handleMasterListTeams(request, env);
+      if (method === 'POST') return await handleMasterCreateTeam(request, env);
+    }
+    const masterTeamSlugMatch = pathname.match(/^\/api\/master\/teams\/([^\/]+)$/);
+    if (masterTeamSlugMatch) {
+      const slug = decodeURIComponent(masterTeamSlugMatch[1]);
+      if (method === 'PATCH')  return await handleMasterUpdateTeam(request, env, slug);
+      if (method === 'DELETE') return await handleMasterDeleteTeam(request, env, slug);
+    }
+    if (method === 'GET' && pathname === '/api/master/users') {
+      return await handleMasterListUsers(request, env);
+    }
+    const masterUserMatch = pathname.match(/^\/api\/master\/users\/([^\/]+)\/(add-to-team|kick|ban)$/);
+    if (method === 'POST' && masterUserMatch) {
+      const tid = decodeURIComponent(masterUserMatch[1]);
+      const act = masterUserMatch[2];
+      if (act === 'add-to-team') return await handleMasterAddToTeam(request, env, tid);
+      if (act === 'kick')        return await handleMasterKick(request, env, tid);
+      if (act === 'ban')         return await handleMasterBan(request, env, tid);
     }
 
     const patchTeamMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/settings$/);
@@ -295,6 +457,35 @@ export default {
     }
 
     // ============================================================
+    // U-SHOP INTEGRATION ROUTES (univers_shop)
+    // ============================================================
+    const ushopBaseUrl = `${url.protocol}//${url.host}`;
+
+    // GET /api/ushop/tenants - univers_shop ขอรายชื่อ tenant (auth: X-Ushop-Key)
+    if (method === 'GET' && pathname === '/api/ushop/tenants') {
+      return await handleUshopListTenants(request, env);
+    }
+
+    // POST /api/ushop/inbound - univers_shop ส่งสลิปเข้ามา (auth: X-Ushop-Key)
+    if (method === 'POST' && pathname === '/api/ushop/inbound') {
+      return await handleUshopInbound(request, env, ctx);
+    }
+
+    // GET /api/tenants/:tenantId/ushop-connection - ดูค่าการเชื่อมต่อ U-shop
+    const getUshopConnMatch = pathname.match(/^\/api\/tenants\/([^\/]+)\/ushop-connection$/);
+    if (method === 'GET' && getUshopConnMatch) {
+      const tenantId = decodeURIComponent(getUshopConnMatch[1]);
+      return await handleGetUshopConnection(env, tenantId, ushopBaseUrl);
+    }
+
+    // PUT /api/tenants/:tenantId/ushop-connection - บันทึกค่าการเชื่อมต่อ U-shop
+    const saveUshopConnMatch = pathname.match(/^\/api\/tenants\/([^\/]+)\/ushop-connection$/);
+    if (method === 'PUT' && saveUshopConnMatch) {
+      const tenantId = decodeURIComponent(saveUshopConnMatch[1]);
+      return await handleSaveUshopConnection(request, env, tenantId, ushopBaseUrl);
+    }
+
+    // ============================================================
     // TELEGRAM ROUTES (Phase A — connection mgmt + webhook skeleton)
     // ============================================================
 
@@ -435,10 +626,55 @@ export default {
     }
 
     // ============================================================
-    // 404 NOT FOUND
+    // PRESENCE ROUTES
+    // ============================================================
+    if (pathname === '/api/presence') {
+      if (method === 'POST') return await handlePresenceHeartbeat(request, env);
+      if (method === 'GET')  return await handleGetPresence(request, env);
+    }
+
+    // ============================================================
+    // 404 NOT FOUND  (API paths only)
+    // For non-API paths accessed via workers.dev → proxy to frontend
     // ============================================================
 
-    return errorResponse('Not found', 404);
+    // ถ้า path ขึ้นต้นด้วย /api → 404 จริง
+    if (pathname.startsWith('/api/') || pathname.startsWith('/webhook/')) {
+      return errorResponse('Not found', 404);
+    }
+
+    // Non-API path → proxy frontend จาก Cloudflare Pages
+    // ใช้ทำ fallback URL สำหรับ user ที่ ISP บล็อก app.atslip.biz
+    // (Worker รันบน Cloudflare network → เข้าถึง Pages ได้ปกติ)
+    try {
+      const frontendOrigin = 'https://app.atslip.biz';
+      const proxyUrl = `${frontendOrigin}${pathname}${url.search}`;
+      const proxyResp = await fetch(proxyUrl, {
+        method: request.method,
+        headers: {
+          'Accept': request.headers.get('Accept') || '*/*',
+          'Accept-Encoding': request.headers.get('Accept-Encoding') || '',
+          'User-Agent': request.headers.get('User-Agent') || '',
+        },
+        redirect: 'follow',
+      });
+      // Clone response และเพิ่ม header บอก fallback
+      const headers = new Headers(proxyResp.headers);
+      headers.set('X-Served-Via', 'workers-fallback');
+      return new Response(proxyResp.body, {
+        status: proxyResp.status,
+        headers,
+      });
+    } catch {
+      return errorResponse('Not found', 404);
+    }
+    } catch (err: any) {
+      console.error('[Worker] Unhandled exception:', err?.message, err?.stack);
+      return new Response(JSON.stringify({ error: 'Internal server error', message: err?.message || String(err) }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   },
 
   // ============================================================
@@ -466,5 +702,5 @@ export default {
 // ============================================================
 // DURABLE OBJECTS EXPORTS
 // ============================================================
-export { PendingNotificationsDO };
+export { PendingNotificationsDO, TelegramAuthDO };
 

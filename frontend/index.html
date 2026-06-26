@@ -17,15 +17,76 @@
   <link rel="stylesheet" href="css/components/api-keys-2.css">
   <link rel="stylesheet" href="css/components/reply-message.css">
   <link rel="stylesheet" href="css/telegram.css?v=1.1">
+  <link rel="stylesheet" href="css/components/auth.css">
+  <link rel="stylesheet" href="css/components/team-selector.css">
   
   <!-- Lucide Icons (Open Source) -->
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
   <!-- ============================================================
+       INFO PAGE (shown when no team slug in URL)
+       ============================================================ -->
+  <div id="infoPage">
+    <div class="info-hero">
+      <div class="info-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <h1>ATslip Mark-II</h1>
+      <p class="info-tagline">ระบบจัดการสลิปอัตโนมัติสำหรับองค์กร</p>
+    </div>
+
+    <div class="info-cards">
+      <div class="info-feature-card">
+        <div class="info-feature-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h3>สแกนสลิปอัตโนมัติ</h3>
+        <p>รองรับ EasySlip, Slip2Go, SlipOK และ RDCW พร้อมตรวจสอบยอดซ้ำอัตโนมัติ</p>
+      </div>
+      <div class="info-feature-card">
+        <div class="info-feature-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>รับสลิปจากไลน์ลูกค้าอัตโนมัติ</h3>
+        <p>รับสลิปจากไลน์ลูกค้า เติมเครดิต และตอบกลับอัตโนมัติ</p>
+      </div>
+      <div class="info-feature-card">
+        <div class="info-feature-icon">
+          <!-- send / paper-plane icon — Telegram -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </div>
+        <h3>ส่งสลิปผ่าน Telegram</h3>
+        <p>ส่งสลิปและผลการตรวจสอบเข้ากลุ่ม Telegram ของทีมได้ทันที</p>
+      </div>
+      <div class="info-feature-card">
+        <div class="info-feature-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>จัดการได้หลายเว็บ</h3>
+        <p>รองรับการจัดการหลายเว็บไซต์ ทำรายการเติมเครดิตเข้าแต่ละเว็บไซต์ได้อัตโนมัติ</p>
+      </div>
+      
+    </div>
+
+    <div class="info-notice">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>
+        <strong>กรุณาเข้าใช้งานผ่าน URL ขององค์กรของท่าน</strong>
+        <p>หากยังไม่มี URL กรุณาติดต่อผู้ดูแลระบบ</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
        HEADER
        ============================================================ -->
-  <header class="header">
+  <!-- Ghost mode banner -->
+  <div id="ghostModeBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(71,85,105,0.9);color:#e2e8f0;font-size:0.82rem;font-weight:600;padding:6px 16px;text-align:center;letter-spacing:0.04em;">
+    👻 กำลังอยู่ในโหมดล่องหน — คุณจะไม่ปรากฏในรายชื่อผู้ใช้ออนไลน์
+  </div>
+
+  <header class="header" id="mainHeader">
     <div class="header-content">
       <div class="header-title">
         <h1>ATslip Mark-II</h1>
@@ -33,6 +94,11 @@
         <span id="teamBadge" class="team-badge" style="display: none;"></span>
       </div>
       <div class="header-actions">
+        <!-- Online team members -->
+        <div id="topbarOnlineUsers" class="topbar-online-users"></div>
+        <!-- User profile (Telegram login) -->
+        <div id="topbarProfileWrap"></div>
+
         <!-- 3-dot menu (Telegram version): รวมการตอบกลับ + การแจ้งเตือน + การเชื่อมต่อ -->
         <div class="kebab-menu-wrap">
           <button class="kebab-menu-btn" id="kebabMenuBtn" onclick="toggleKebabMenu()" aria-label="เมนู" title="เมนู">
@@ -60,6 +126,11 @@
             <button class="kebab-menu-item" onclick="kebabOpenApiKeys()">
               <i data-lucide="key-round"></i>
               <span>ตั้งค่า API Keys</span>
+            </button>
+            <div class="tenant-menu-divider"></div>
+            <button class="kebab-menu-item" onclick="kebabOpenManageUsers()">
+              <i data-lucide="users"></i>
+              <span>จัดการผู้ใช้งาน</span>
             </button>
           </div>
         </div>
@@ -100,7 +171,7 @@
       <p class="text-muted mt-3">กำลังโหลดข้อมูล...</p>
     </div>
 
-    <!-- Empty State -->
+    <!-- Empty State (shown only when no team slug in URL) -->
     <div id="emptyState" class="empty-state" style="display: none;">
       <div class="empty-state-icon">
         <i data-lucide="alert-circle" size="32"></i>
@@ -492,6 +563,14 @@
             >
           </div>
 
+          <div class="form-group">
+            <label class="form-label required" for="tenantApiVersion">เวอร์ชัน Admin Backend</label>
+            <select id="tenantApiVersion" class="form-input">
+              <option value="v1">v1 — Admin เก่า</option>
+              <option value="v2">v2 — Admin ใหม่</option>
+            </select>
+            <p class="form-help">เลือก v1 ถ้าเว็บใช้ระบบ Admin เก่า, v2 ถ้าใช้ระบบ Admin ใหม่</p>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -518,6 +597,18 @@
         </button>
       </div>
       <div class="modal-body">
+        <!-- Tabs -->
+        <div class="lineoa-tabs" style="display: flex; gap: var(--space-xs); margin-bottom: var(--space-lg); border-bottom: 1px solid var(--color-border);">
+          <button id="lineOATabBtnDirect" class="lineoa-tab-btn active" onclick="switchLineOATab('direct')" style="padding: var(--space-sm) var(--space-md); border: none; background: none; cursor: pointer; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid var(--color-primary); color: var(--color-primary);">
+            เชื่อมต่อ LINE OA โดยตรง
+          </button>
+          <button id="lineOATabBtnUshop" class="lineoa-tab-btn" onclick="switchLineOATab('ushop')" style="padding: var(--space-sm) var(--space-md); border: none; background: none; cursor: pointer; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; color: var(--color-text-muted);">
+            เชื่อมต่อกับ U-shop
+          </button>
+        </div>
+
+        <!-- ===== TAB: Direct LINE OA ===== -->
+        <div id="lineOATabDirect">
         <!-- Add LINE OA Form -->
         <div id="addLineOAForm" style="display: none; margin-bottom: var(--space-lg); background: var(--color-gray-50); padding: var(--space-lg); border-radius: var(--radius-md);">
           <h4 style="margin: 0 0 var(--space-md) 0; display: flex; align-items: center; gap: var(--space-sm);">
@@ -565,6 +656,89 @@
         
         <!-- LINE OA List -->
         <div id="lineOAList"></div>
+        </div>
+        <!-- ===== /TAB: Direct LINE OA ===== -->
+
+        <!-- ===== TAB: U-shop ===== -->
+        <div id="lineOATabUshop" style="display: none;">
+          <div style="background: var(--color-gray-50); padding: var(--space-lg); border-radius: var(--radius-md); margin-bottom: var(--space-md);">
+            <h4 style="margin: 0 0 var(--space-sm) 0; display: flex; align-items: center; gap: var(--space-sm);">
+              <i data-lucide="link" size="18"></i>
+              เชื่อมต่อกับ univers_shop (ระบบรวมแชท LINE OA)
+            </h4>
+            <p style="margin: 0 0 var(--space-md) 0; font-size: 0.8125rem; color: var(--color-text-muted); line-height: 1.5;">
+              เปิดใช้งานเพื่อให้ univers_shop ส่งสลิปของลูกค้ามาประมวลผลที่ ATslip
+              และให้ ATslip สั่ง univers_shop ตอบกลับลูกค้าแทน (รองรับหลาย OA)
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+              <label style="display: flex; align-items: center; gap: var(--space-sm); cursor: pointer;">
+                <input type="checkbox" id="ushopEnabled" style="width: 18px; height: 18px;">
+                <span style="font-weight: 500; font-size: 0.875rem;">เปิดใช้งานการเชื่อมต่อ U-shop สำหรับเว็บนี้</span>
+              </label>
+
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">U-shop Base URL <span style="color: var(--color-danger);">*</span></label>
+                <input type="text" id="ushopBaseUrl" placeholder="https://univers-shop.app" style="width: 100%; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.8125rem;">
+                <small style="color: var(--color-text-muted); font-size: 0.75rem;">URL ของ univers_shop ที่ ATslip จะใช้สั่งตอบกลับลูกค้า</small>
+              </div>
+
+              <div style="display: flex; gap: var(--space-sm); justify-content: flex-end;">
+                <button type="button" class="btn btn-primary lineoa-btn-compact" onclick="saveUshopConnection()">
+                  <i data-lucide="save" size="16"></i>
+                  บันทึก
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ข้อมูลสำหรับนำไปตั้งค่าใน univers_shop -->
+          <div id="ushopCredentials" style="display: none; background: var(--color-gray-50); padding: var(--space-lg); border-radius: var(--radius-md);">
+            <h4 style="margin: 0 0 var(--space-sm) 0; display: flex; align-items: center; gap: var(--space-sm);">
+              <i data-lucide="key-round" size="18"></i>
+              ข้อมูลสำหรับตั้งค่าใน univers_shop
+            </h4>
+            <p style="margin: 0 0 var(--space-md) 0; font-size: 0.8125rem; color: var(--color-text-muted);">
+              นำค่าด้านล่างไปกรอกในหน้าตั้งค่า LINE channel ของ univers_shop
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">ATslip Inbound URL</label>
+                <div class="lineoa-webhook-row">
+                  <input type="text" id="ushopInboundUrl" readonly class="lineoa-webhook-input">
+                  <button class="btn btn-secondary lineoa-btn-compact" onclick="copyFieldValue('ushopInboundUrl')" title="คัดลอก">
+                    <i data-lucide="copy" size="13"></i> คัดลอก
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">API Key</label>
+                <div class="lineoa-webhook-row">
+                  <input type="text" id="ushopApiKey" readonly class="lineoa-webhook-input">
+                  <button class="btn btn-secondary lineoa-btn-compact" onclick="copyFieldValue('ushopApiKey')" title="คัดลอก">
+                    <i data-lucide="copy" size="13"></i> คัดลอก
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style="display: block; font-weight: 500; margin-bottom: var(--space-xs); font-size: 0.875rem;">Tenant ID</label>
+                <div class="lineoa-webhook-row">
+                  <input type="text" id="ushopTenantId" readonly class="lineoa-webhook-input">
+                  <button class="btn btn-secondary lineoa-btn-compact" onclick="copyFieldValue('ushopTenantId')" title="คัดลอก">
+                    <i data-lucide="copy" size="13"></i> คัดลอก
+                  </button>
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary lineoa-btn-compact" onclick="regenerateUshopKey()" title="สร้าง API Key ใหม่">
+                  <i data-lucide="refresh-cw" size="13"></i> สร้าง API Key ใหม่
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ===== /TAB: U-shop ===== -->
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary lineoa-btn-compact" onclick="closeLineOAModal()">
@@ -614,6 +788,12 @@
         <input type="hidden" id="loginTenantId">
         <div id="loginTenantName" class="login-tenant-name"></div>
         
+        <!-- แสดงเมื่อ v2: ไม่ต้องใส่ captcha -->
+        <div id="v2LoginNotice" class="v2-login-notice" style="display:none;">
+          <i data-lucide="zap" size="16"></i>
+          v2 — ไม่ต้องใส่ captcha, กดเลย “เข้าสู่ระบบ”
+        </div>
+        
         <div class="form-group">
           <label class="form-label">ชื่อผู้ใช้</label>
           <input 
@@ -634,6 +814,7 @@
           >
         </div>
 
+        <div id="captchaSection">
         <div class="form-group">
           <label class="form-label required">Captcha</label>
           <div class="captcha-container">
@@ -659,6 +840,7 @@
             autocomplete="off"
             required
           >
+        </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -780,9 +962,11 @@
         <div class="api-key-add-form">
           <div class="form-group">
             <label class="form-label">บริการ</label>
-            <select id="newKeyService" class="form-input">
+            <select id="newKeyService" class="form-input" onchange="onNewKeyServiceChange()">
               <option value="easyslip">EasySlip</option>
               <option value="slip2go">Slip2Go</option>
+              <option value="slipok">SlipOK</option>
+              <option value="slipverify">RDCW</option>
             </select>
           </div>
           <div class="form-group">
@@ -791,7 +975,8 @@
           </div>
           <div class="form-group">
             <label class="form-label">API Key / Token</label>
-            <input type="text" id="newKeyToken" class="form-input" placeholder="วาง API Key ที่นี่">
+            <input type="text" id="newKeyToken" class="form-input" placeholder="EasySlip/Slip2Go: ใส่ token | SlipOK: ใส่ API Key | RDCW: clientId|clientSecret">
+            <p class="form-help" id="newKeyTokenHint" style="margin-top:4px;font-size:0.8rem;color:#888;display:none;">RDCW: ใช้รูปแบบ <code>clientId|clientSecret</code></p>
           </div>
           <div style="text-align:right;">
             <button class="btn btn-primary" onclick="addApiKey()" id="addApiKeyBtn">
@@ -806,18 +991,56 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       MANAGE USERS MODAL
+       ============================================================ -->
+  <div id="manageUsersModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i data-lucide="users"></i> จัดการผู้ใช้งาน</h3>
+        <button class="modal-close" onclick="closeManageUsersModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 0;">
+        <div id="manageUsersList" style="min-height: 120px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeManageUsersModal()">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
-  <script src="js/config.js?v=1.7"></script>
-  <script src="js/api.js?v=1.11"></script>
+  <script src="js/config.js?v=2.1"></script>
+  <script src="js/auth.js?v=1.0"></script>
+  <script src="js/api.js?v=1.12"></script>
   <script src="js/ui.js?v=1.7"></script>
   <script src="js/reply-message.js?v=1.2"></script>
   <script src="js/telegram-connect.js?v=1.6"></script>
-  <script src="js/app-2.js?v=1.3"></script>
+  <script src="js/app-2.js?v=1.10"></script>
   <script src="js/realtime.js?v=1.5"></script>
-  
+  <script src="js/manage-users.js?v=1.0"></script>
+  <script src="js/team-selector.js?v=1.0"></script>
+
   <script>
     // Initialize Lucide icons
     lucide.createIcons();
+
+    // Ghost mode banner
+    (function () {
+      const isGhost = new URLSearchParams(location.search).get('ghost') === '1'
+        || localStorage.getItem('ma_ghost') === '1';
+      if (isGhost) {
+        const banner = document.getElementById('ghostModeBanner');
+        if (banner) {
+          banner.style.display = 'block';
+          // เพิ่ม top padding ให้ header ไม่ทับ banner
+          const header = document.getElementById('mainHeader');
+          if (header) header.style.marginTop = '32px';
+        }
+      }
+    })();
   </script>
 </body>
 </html>

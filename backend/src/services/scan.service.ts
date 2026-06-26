@@ -2,6 +2,7 @@
 // ฟังก์ชันสำหรับสแกนสลิปและจับคู่กับบัญชีธนาคาร
 
 import type { Env } from '../types';
+import { getAdminAuthHeaders } from '../utils/helpers';
 
 interface EasySlipResponse {
   success: boolean;
@@ -74,6 +75,7 @@ interface MatchedTenant {
   team_id: string;
   name: string;
   admin_api_url: string;
+  api_version?: string;
   accountId?: string; // ID ของบัญชีธนาคารที่ match (สำหรับใช้ใน credit submission)
 }
 
@@ -329,24 +331,28 @@ export class ScanService {
 
   /**
    * สแกนสลิปโดยใช้ SlipOK API (https://slipok.com)
-   * ต้องใช้ API Key + Branch ID คู่กัน
+   * pipeToken รูปแบบ "url|apiKey" เช่น "https://api.slipok.com/api/line/apikey/68281|SLIPOK12VCAG3"
+   * ไม่ส่ง log=true เพื่อให้ตรวจสอบสลิปได้โดยไม่จำกัดเฉพาะบัญชีที่ลงทะเบียนไว้
    * คืนค่าเป็นรูปแบบเดียวกับ EasySlip เพื่อให้ downstream matcher ใช้ได้โดยไม่ต้องแก้
    */
   static async scanSlipWithSlipOK(
     imageFile: File,
-    apiKey: string,
-    branchId: string,
+    pipeToken: string,
   ): Promise<EasySlipResponse> {
-    if (!apiKey || !apiKey.trim()) throw new Error('SlipOK API key is empty');
-    if (!branchId || !/^\d+$/.test(branchId.trim())) throw new Error('SlipOK Branch ID must be numeric');
+    const pipeIdx = pipeToken.indexOf('|');
+    if (pipeIdx === -1) throw new Error('SlipOK token ต้องเป็นรูปแบบ url|apiKey');
+    const slipokUrl = pipeToken.slice(0, pipeIdx).trim();
+    const apiKey = pipeToken.slice(pipeIdx + 1).trim();
+    if (!slipokUrl) throw new Error('SlipOK URL is empty');
+    if (!apiKey) throw new Error('SlipOK API key is empty');
 
     const formData = new FormData();
     formData.append('files', imageFile);
-    formData.append('log', 'true');
+    // ไม่ส่ง log=true เพื่อให้ตรวจสอบได้โดยไม่จำกัดเฉพาะบัญชีที่ลงทะเบียนไว้
 
     console.log('[ScanService] Calling SlipOK API...', {
+      url: slipokUrl,
       apiKeyLen: apiKey.length,
-      branchId,
       fileSize: imageFile.size,
     });
 
@@ -355,7 +361,7 @@ export class ScanService {
 
     let response: Response;
     try {
-      response = await fetch(`https://api.slipok.com/api/line/apikey/${branchId.trim()}`, {
+      response = await fetch(slipokUrl, {
         method: 'POST',
         headers: { 'x-authorization': apiKey },
         body: formData,
@@ -475,18 +481,169 @@ export class ScanService {
   }
 
   /**
+   * สแกนสลิปโดยใช้ Slip Verify API (https://suba.rdcw.co.th)
+   * Auth: Basic base64(clientId:clientSecret)
+   * api_key = "clientId|clientSecret" (pipe-separated ใน field เดียว)
+   * ส่งไฟล์แบบ multipart (field name "file")
+   * คืนค่าเป็นรูปแบบเดียวกับ EasySlip เพื่อให้ downstream matcher ใช้ได้
+   *
+   * Actual success response shape (SlipVerify v2):
+   * {
+   *   valid: true,
+   *   data: {
+   *     transRef, sendingBank, receivingBank, transDate, transTime,
+   *     amount, paidLocalAmount, paidLocalCurrency, transFeeAmount,
+   *     countryCode, ref1, ref2, ref3,
+   *     sender:   { displayName, name, account: { type, value }, proxy: { type, value } },
+   *     receiver: { displayName, name, account: { type, value }, proxy: { type, value } },
+   *   }
+   * }
+   */
+  static async scanSlipWithSlipVerify(
+    imageFile: File,
+    pipeToken: string,
+  ): Promise<EasySlipResponse> {
+    if (!pipeToken || !pipeToken.includes('|')) {
+      throw new Error('Slip Verify token ต้องเป็นรูปแบบ clientId|clientSecret');
+    }
+    const sepIdx = pipeToken.indexOf('|');
+    const clientId = pipeToken.slice(0, sepIdx).trim();
+    const clientSecret = pipeToken.slice(sepIdx + 1).trim();
+    if (!clientId) throw new Error('Slip Verify clientId is empty');
+    if (!clientSecret) throw new Error('Slip Verify clientSecret is empty');
+
+    const cred = btoa(`${clientId}:${clientSecret}`);
+
+    const formData = new FormData();
+    formData.append('file', imageFile);
+
+    console.log('[ScanService] Calling Slip Verify API...', {
+      clientIdLen: clientId.length,
+      fileSize: imageFile.size,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let response: Response;
+    try {
+      response = await fetch('https://suba.rdcw.co.th/v2/inquiry', {
+        method: 'POST',
+        headers: { 'Authorization': `Basic ${cred}` },
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') throw new Error('SlipVerify timeout: ใช้เวลานานเกิน 30 วินาที');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const raw = await response.text();
+    let result: any;
+    try { result = raw ? JSON.parse(raw) : {}; }
+    catch {
+      throw new Error(`SlipVerify invalid JSON (HTTP ${response.status}): ${String(raw).slice(0, 200)}`);
+    }
+
+    console.log('[ScanService] 📥 SlipVerify Response:', {
+      httpStatus: response.status,
+      valid: result?.valid,
+      code: result?.code,
+      hasData: !!result?.data,
+    });
+
+    // Error response: { code: number, message: string }
+    if (!response.ok || result?.valid !== true) {
+      const code = result?.code ?? response.status;
+      const msg = result?.message || response.statusText || 'Scan failed';
+      // code 1007 = usage exceeded, 1008 = subscription expired
+      throw new Error(`SlipVerify error (${code}): ${msg}`);
+    }
+
+    // All actual data is nested under result.data
+    const s = result.data;
+    const sendingBankId = s.sendingBank ? String(s.sendingBank) : '';
+    const receivingBankId = s.receivingBank ? String(s.receivingBank) : '';
+
+    const senderAccountRaw = s.sender?.account?.value || '';
+    const receiverAccountRaw = s.receiver?.account?.value || '';
+    const senderName = String(s.sender?.displayName || s.sender?.name || '');
+    const receiverName = String(s.receiver?.displayName || s.receiver?.name || '');
+
+    // parse transDate (yyyyMMdd) + transTime (HH:mm:ss) → ISO string
+    let isoDate = '';
+    try {
+      const d = String(s.transDate || '');
+      const t = String(s.transTime || '00:00:00');
+      if (d.length === 8) {
+        isoDate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t}+07:00`;
+      }
+    } catch { /* ignore */ }
+
+    const mapped = {
+      payload: String(result.discriminator || ''),
+      transRef: String(s.transRef || ''),
+      date: isoDate || String(s.transDate || ''),
+      countryCode: String(s.countryCode || 'TH'),
+      amount: {
+        amount: Number(s.amount || 0),
+        local: {
+          amount: Number(s.paidLocalAmount || s.amount || 0),
+          currency: String(s.paidLocalCurrency || '764'),
+        },
+      },
+      fee: Number(s.transFeeAmount || 0),
+      ref1: s.ref1 || '',
+      ref2: s.ref2 || '',
+      ref3: s.ref3 || '',
+      sender: {
+        bank: this.bankFromCode(sendingBankId),
+        account: {
+          name: { th: senderName, en: String(s.sender?.name || senderName) },
+          bank: senderAccountRaw ? { type: 'BANKAC' as const, account: senderAccountRaw } : undefined,
+          proxy: s.sender?.proxy?.value
+            ? { type: (s.sender.proxy.type || 'MSISDN') as any, account: String(s.sender.proxy.value) }
+            : undefined,
+        },
+      },
+      receiver: {
+        bank: this.bankFromCode(receivingBankId),
+        account: {
+          name: { th: receiverName, en: String(s.receiver?.name || receiverName) },
+          bank: receiverAccountRaw ? { type: 'BANKAC' as const, account: receiverAccountRaw } : undefined,
+          proxy: s.receiver?.proxy?.value
+            ? { type: (s.receiver.proxy.type || 'MSISDN') as any, account: String(s.receiver.proxy.value) }
+            : undefined,
+        },
+      },
+    };
+
+    return {
+      success: true,
+      data: { status: 200, data: mapped as any },
+    };
+  }
+
+  /**
    * สแกนสลิปโดยใช้ key เดียว (เรียกจาก scan.ts หลังจากเลือก key ด้วย round-robin แล้ว)
    * ใช้แทน _callProvider แบบ private เดิม
    */
   static async callProvider(
     imageFile: File,
-    key: { service: 'easyslip' | 'slip2go' | 'slipok'; api_key: string; branch_id?: string | null },
+    key: { service: 'easyslip' | 'slip2go' | 'slipok' | 'slipverify'; api_key: string; branch_id?: string | null },
   ): Promise<EasySlipResponse> {
     if (key.service === 'slip2go') {
       return this.scanSlipWithSlip2Go(imageFile, key.api_key);
     }
     if (key.service === 'slipok') {
-      return this.scanSlipWithSlipOK(imageFile, key.api_key, key.branch_id || '');
+      // api_key = "url|apiKey" (pipe-separated)
+      return this.scanSlipWithSlipOK(imageFile, key.api_key);
+    }
+    if (key.service === 'slipverify') {
+      // api_key = "clientId|clientSecret" (pipe-separated)
+      return this.scanSlipWithSlipVerify(imageFile, key.api_key);
     }
     return this.scanSlip(imageFile, key.api_key);
   }
@@ -656,7 +813,7 @@ export class ScanService {
     let tenants;
     if (teamSlug && teamSlug !== 'default') {
       tenants = await env.DB.prepare(
-        `SELECT DISTINCT t.id, t.team_id, t.name, t.admin_api_url, s.session_token
+        `SELECT DISTINCT t.id, t.team_id, t.name, t.admin_api_url, t.api_version, s.session_token
          FROM tenants t
          INNER JOIN admin_sessions s ON s.tenant_id = t.id
          INNER JOIN teams tm ON tm.id = t.team_id AND tm.slug = ?
@@ -666,7 +823,7 @@ export class ScanService {
         .all();
     } else {
       tenants = await env.DB.prepare(
-        `SELECT DISTINCT t.id, t.team_id, t.name, t.admin_api_url, s.session_token
+        `SELECT DISTINCT t.id, t.team_id, t.name, t.admin_api_url, t.api_version, s.session_token
          FROM tenants t
          INNER JOIN admin_sessions s ON s.tenant_id = t.id
          WHERE s.expires_at > ? AND t.status = 'active'`
@@ -866,9 +1023,11 @@ export class ScanService {
     senderNameEn?: string,
     senderAccount?: string,
     senderBank?: { id?: string; name?: string; short?: string },
-    logger?: (...args: any[]) => void
+    logger?: (...args: any[]) => void,
+    apiVersion?: string
   ): Promise<any | null> {
     const log = logger || console.log;
+    const isV2 = String(apiVersion || 'v1') === 'v2';
     const minNameChars = 4;
     const minAccountDigits = 3;
     
@@ -912,8 +1071,42 @@ export class ScanService {
     
     for (const name of searchNames) {
       log(`[ScanService] 🔍 Searching for: "${name}"`);
-      
-      // ค้นหาทั้ง member และ non-member พร้อมกัน (parallel)
+
+      let memberResults: any[] = [];
+      let nonMemberResults: any[] = [];
+
+      if (isV2) {
+        // v2: single endpoint, no category split
+        const v2Url = `${adminApiUrl}/api/proxy/v1/admin/members?page=1&limit=100&search=${encodeURIComponent(name!)}`;
+        log('[ScanService] 🔎 v2 member search:', v2Url);
+        try {
+          const resp = await fetch(v2Url, {
+            method: 'GET',
+            headers: getAdminAuthHeaders(sessionToken, 'v2'),
+          });
+          if (resp.ok) {
+            const data = await resp.json() as any;
+            const list: any[] = data?.data?.list || [];
+            // Normalize v2 fields: fullName → fullname, accountNumber → bankAccount
+            memberResults = list.map((u: any) => ({
+              ...u,
+              fullname: u.fullName || u.fullname,
+              bankAccount: u.accountNumber || u.bankAccount,
+              bank_account: u.accountNumber || u.bank_account,
+              category: 'member',
+            }));
+            log(`[ScanService] ✅ v2 found ${memberResults.length} member(s)`);
+          } else {
+            log(`[ScanService] ⚠️ v2 search failed: ${resp.status}`);
+          }
+        } catch (e: any) {
+          log(`[ScanService] ⚠️ v2 search exception:`, e.message);
+        }
+        allCandidates.push(...memberResults);
+        continue; // skip v1 parallel fetch
+      }
+
+      // v1: ค้นหาทั้ง member และ non-member พร้อมกัน (parallel)
       const memberUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=member`;
       const nonMemberUrl = `${adminApiUrl}/api/users/list?page=1&limit=100&search=${encodeURIComponent(name!)}&userCategory=non-member`;
 
@@ -922,17 +1115,11 @@ export class ScanService {
       const [memberResponse, nonMemberResponse] = await Promise.all([
         fetch(memberUrl, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`,
-            'Accept': 'application/json',
-          },
+          headers: getAdminAuthHeaders(sessionToken, 'v1'),
         }),
         fetch(nonMemberUrl, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`,
-            'Accept': 'application/json',
-          },
+          headers: getAdminAuthHeaders(sessionToken, 'v1'),
         })
       ]);
 

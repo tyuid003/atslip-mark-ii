@@ -164,6 +164,12 @@ class RealtimeClient {
       this.onNewPending(message.data);
     } else if (message.type === 'transaction_updated') {
       this.onTransactionUpdated(message.data);
+    } else if (message.type === 'join_request') {
+      this.onJoinRequest(message.data);
+    } else if (message.type === 'join_request_resolved') {
+      this.onJoinRequestResolved(message.data);
+    } else if (message.type === 'member_kicked') {
+      window.dispatchEvent(new CustomEvent('memberKicked', { detail: message.data }));
     }
   }
 
@@ -341,6 +347,32 @@ class RealtimeClient {
   }
 
   /**
+   * Handle incoming join request notification (show approval card to team members)
+   */
+  onJoinRequest(data) {
+    // เฉพาะ user ที่เป็นสมาชิกของทีมนี้ถึงจะเห็น
+    if (!window.currentTeamId || String(data.team_id) !== String(window.currentTeamId)) return;
+    const me = window.atslipAuth?.user;
+    // ไม่แสดงให้ตัวเองเห็น
+    if (me && String(me.telegram_id) === String(data.telegram_id)) return;
+    showJoinRequestCard(data);
+  }
+
+  /**
+   * Handle join_request_resolved — notify the requester
+   */
+  onJoinRequestResolved(data) {
+    const me = window.atslipAuth?.user;
+    if (!me) return;
+    if (String(me.telegram_id) === String(data.telegram_id)) {
+      window.dispatchEvent(new CustomEvent('joinRequestResolved', { detail: data }));
+    }
+    // ลบ notification card ถ้ายังแสดงอยู่
+    const card = document.getElementById(`join-req-card-${data.request_id}`);
+    if (card) card.remove();
+  }
+
+  /**
    * Disconnect WebSocket
    */
   disconnect() {
@@ -357,6 +389,70 @@ class RealtimeClient {
     }
   }
 }
+
+// ============================================================
+// JOIN REQUEST APPROVAL CARD
+// ============================================================
+function showJoinRequestCard(data) {
+  const slug = window.currentTeamSlug || '';
+  const requestId = data.request_id;
+  const existing = document.getElementById(`join-req-card-${requestId}`);
+  if (existing) return; // ไม่แสดงซ้ำ
+
+  let container = document.getElementById('joinRequestContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'joinRequestContainer';
+    container.className = 'join-request-container';
+    document.body.appendChild(container);
+  }
+
+  const card = document.createElement('div');
+  card.id = `join-req-card-${requestId}`;
+  card.className = 'join-request-card';
+
+  const avatarHtml = data.photo
+    ? `<img src="${data.photo}" class="join-req-avatar-img" alt="">`
+    : `<div class="join-req-avatar-init">${(data.display_name || '?').charAt(0).toUpperCase()}</div>`;
+
+  const name = String(data.display_name || data.telegram_id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const teamName = String(data.team_name || slug).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  card.innerHTML = `
+    <div class="join-req-avatar">${avatarHtml}</div>
+    <div class="join-req-body">
+      <div class="join-req-text">
+        <strong>${name}</strong> ได้ขออนุมัติการเข้าใช้งานทีม <strong>${teamName}</strong>
+        <span class="join-req-sub">กดปฏิเสธหากท่านไม่รู้จัก</span>
+      </div>
+      <div class="join-req-actions">
+        <button class="join-req-btn approve" onclick="resolveJoinRequest('${slug}','${requestId}','approve')">อนุมัติ</button>
+        <button class="join-req-btn reject"  onclick="resolveJoinRequest('${slug}','${requestId}','reject')">ปฏิเสธ</button>
+      </div>
+    </div>
+    <button class="join-req-close" onclick="document.getElementById('join-req-card-${requestId}')?.remove()" aria-label="ปิด">✕</button>
+  `;
+
+  container.appendChild(card);
+  // auto-dismiss หลัง 2 นาที
+  setTimeout(() => card.remove(), 120000);
+}
+
+window.resolveJoinRequest = async function(slug, requestId, action) {
+  const card = document.getElementById(`join-req-card-${requestId}`);
+  if (card) card.style.opacity = '0.5';
+  try {
+    if (action === 'approve') await api.approveJoinRequest(slug, requestId);
+    else await api.rejectJoinRequest(slug, requestId);
+    if (card) card.remove();
+    if (typeof addNotification === 'function') {
+      addNotification(action === 'approve' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธแล้ว');
+    }
+  } catch (e) {
+    if (card) card.style.opacity = '1';
+    alert('เกิดข้อผิดพลาด: ' + (e.message || e));
+  }
+};
 
 // Auto-initialize on script load
 const realtimeClient = new RealtimeClient();

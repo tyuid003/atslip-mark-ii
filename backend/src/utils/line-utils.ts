@@ -91,7 +91,11 @@ export function buildFlexMessage(settings: any, status: 'credited' | 'duplicate'
       ? settings.duplicate_status_text
       : settings.failed_status_text;
   const statusColor = isSuccessStatus ? settings.status_success_color : settings.status_failed_color;
-  const resolvedMemberCode = scanData?.credit?.resolved_memberCode || scanData?.matched_user_id || scanData?.sender?.id || '-';
+  const resolvedMemberCode = scanData?.credit?.resolved_memberCode
+    || scanData?.sender?.username
+    || scanData?.matched_user_id
+    || scanData?.sender?.id
+    || '-';
   const amount = Number(scanData?.slip?.amount || 0);
 
   return {
@@ -200,3 +204,56 @@ export function buildFlexMessage(settings: any, status: 'credited' | 'duplicate'
     },
   };
 }
+
+/**
+ * buildUshopLogCard — สร้างข้อมูลการ์ดแบบ structured สำหรับให้ univers_shop
+ * แสดงผลในหน้าแชทเป็นการ์ด (ไม่ใช่ข้อความเปล่า ๆ) ให้แอดมินเห็นเหมือน flex
+ */
+export function buildUshopLogCard(
+  settings: any,
+  status: 'credited' | 'duplicate' | 'failed',
+  scanData: any
+): any {
+  const statusText = status === 'credited'
+    ? settings.success_status_text
+    : status === 'duplicate'
+      ? settings.duplicate_status_text
+      : settings.failed_status_text;
+  const statusColor = status === 'credited' ? settings.status_success_color : settings.status_failed_color;
+  const resolvedMemberCode = scanData?.credit?.resolved_memberCode
+    || scanData?.sender?.username
+    || scanData?.matched_user_id
+    || scanData?.sender?.id
+    || '-';
+  const amount = Number(scanData?.slip?.amount || 0);
+
+  return {
+    kind: 'flex',
+    status,
+    title: settings.header_title_text,
+    statusText,
+    statusColor,
+    memberCode: String(resolvedMemberCode),
+    amount,
+    amountText: `${amount.toFixed(2)} THB`,
+    date: formatDisplayDate(scanData?.slip?.date),
+    ref: scanData?.slip?.ref || '',
+    footer: settings.footer_text,
+    // ── ข้อมูลสไตล์ต่อ tenant เพื่อให้ U-shop render การ์ดเหมือน LINE OA จริง ──
+    style: {
+      logoUrl: settings.logo_image_url,
+      headerBg: settings.header_background_color,
+      headerTitleColor: settings.header_title_color,
+      bodyBg: settings.body_background_color,
+      labelsColor: settings.labels_color,
+      valuesColor: settings.values_color,
+      separatorColor: settings.separator_color,
+      secondaryTextColor: settings.secondary_text_color,
+      buttonText: settings.button_text,
+      buttonColor: settings.button_color,
+      playUrl: settings.play_url,
+      footerBg: settings.footer_background_color,
+    },
+  };
+}
+

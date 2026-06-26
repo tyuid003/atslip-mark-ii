@@ -1,0 +1,601 @@
+﻿<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Admin — ATslip</title>
+  <link rel="icon" type="image/gif" href="assets/images/logo.webp">
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="css/variables.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Kanit', sans-serif; background: #f8fafc; color: #111827; min-height: 100vh; }
+
+    /* ── Ghost mode banner ─────────────────────────────── */
+    #ghostBanner {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: rgba(71,85,105,0.92);
+      color: #e2e8f0; font-size: 0.82rem; font-weight: 600;
+      padding: 6px 16px; text-align: center; letter-spacing: 0.04em;
+    }
+
+    /* ── Header ────────────────────────────────────────── */
+    .ma-header {
+      background: #fff; border-bottom: 1px solid #e5e7eb;
+      padding: 0 1.5rem; height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .ma-header-title { display: flex; align-items: center; gap: 10px; }
+    .ma-header-title h1 { font-size: 1rem; font-weight: 700; }
+    .ma-badge { background: #fef3c7; color: #92400e; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .ma-user-info { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #374151; }
+    .ma-user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+    .ma-logout-btn { background: none; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; color: #6b7280; }
+    .ma-logout-btn:hover { background: #f9fafb; }
+
+    /* ── Layout — single column ────────────────────────── */
+    .ma-body { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ── Section card ──────────────────────────────────── */
+    .ma-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: visible; }
+    .ma-section-header {
+      padding: 14px 18px; border-bottom: 1px solid #f3f4f6;
+      display: flex; align-items: center; justify-content: space-between;
+      border-radius: 12px 12px 0 0;
+    }
+    .ma-section-title { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .ma-section-body { padding: 0; }
+
+    /* ── Login screen ──────────────────────────────────── */
+    #loginScreen {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .ma-login-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+      padding: 2.5rem 2rem; max-width: 360px; width: 100%; text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.06);
+    }
+    .ma-login-card h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .ma-login-card p { font-size: 0.85rem; color: #6b7280; margin-bottom: 1.5rem; }
+    .ma-login-btn {
+      background: #2563eb; color: #fff; border: none;
+      border-radius: 8px; padding: 10px 24px; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; width: 100%;
+    }
+    .ma-login-btn:hover { background: #1d4ed8; }
+    #loginError { color: #ef4444; font-size: 0.82rem; margin-top: 10px; display: none; }
+
+    /* ── Buttons ───────────────────────────────────────── */
+    .ma-btn { border: none; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .ma-btn-primary { background: #2563eb; color: #fff; }
+    .ma-btn-primary:hover { background: #1d4ed8; }
+    .ma-btn-danger { background: #fef2f2; color: #ef4444; }
+    .ma-btn-danger:hover { background: #fee2e2; }
+    .ma-btn-warn { background: #fff7ed; color: #f97316; }
+    .ma-btn-warn:hover { background: #ffedd5; }
+    .ma-btn-green { background: #f0fdf4; color: #16a34a; }
+    .ma-btn-green:hover { background: #dcfce7; }
+    .ma-btn-gray { background: #f9fafb; color: #374151; border: 1px solid #e5e7eb; }
+    .ma-btn-gray:hover { background: #f3f4f6; }
+
+    /* ── Team rows ─────────────────────────────────────── */
+    .ma-team-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 18px; border-bottom: 1px solid #f9fafb;
+    }
+    .ma-team-row:last-child { border-bottom: none; }
+    .ma-team-info { flex: 1; min-width: 0; }
+    .ma-team-name { font-weight: 600; font-size: 0.88rem; }
+    .ma-team-slug { font-size: 0.75rem; color: #9ca3af; }
+    .ma-team-count { font-size: 0.75rem; color: #6b7280; }
+    .ma-team-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── User rows ─────────────────────────────────────── */
+    .ma-user-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 18px; border-bottom: 1px solid #f9fafb;
+    }
+    .ma-user-row:last-child { border-bottom: none; }
+    .ma-u-clickable { cursor: pointer; flex-shrink: 0; }
+    .ma-u-clickable:hover .ma-u-avatar, .ma-u-clickable:hover .ma-u-avatar-init { opacity: 0.8; }
+    .ma-u-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; display: block; }
+    .ma-u-avatar-init {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1rem;
+    }
+    .ma-u-info { flex: 1; min-width: 0; cursor: pointer; }
+    .ma-u-info:hover .ma-u-name { color: #2563eb; }
+    .ma-u-name { font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.1s; }
+    .ma-u-tgname { font-size: 0.72rem; color: #9ca3af; }
+    .ma-u-teams { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .ma-u-team-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #eff6ff; color: #2563eb; border-radius: 4px;
+      font-size: 0.7rem; padding: 2px 6px; font-weight: 600;
+    }
+    .ma-chip-remove {
+      background: none; border: none; cursor: pointer; color: #93c5fd;
+      font-size: 0.75rem; padding: 0; line-height: 1; display: flex; align-items: center;
+    }
+    .ma-chip-remove:hover { color: #ef4444; }
+    .ma-u-no-team { font-size: 0.72rem; color: #ef4444; }
+    .ma-master-badge { background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 0.7rem; padding: 2px 7px; font-weight: 700; }
+
+    /* ── Three-dot menu ────────────────────────────────── */
+    .ma-u-menu-wrap { position: relative; flex-shrink: 0; }
+    .ma-u-menu-btn {
+      background: none; border: none; cursor: pointer; color: #9ca3af;
+      border-radius: 6px; padding: 5px 6px; display: flex; align-items: center;
+    }
+    .ma-u-menu-btn:hover { background: #f3f4f6; color: #374151; }
+    .ma-u-dropdown {
+      display: none; position: absolute; right: 0; top: calc(100% + 4px);
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 160px; z-index: 200; overflow: hidden;
+    }
+    .ma-u-dropdown.open { display: block; }
+    .ma-u-drop-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 14px; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; background: none; border: none; width: 100%; text-align: left; font-family: inherit;
+    }
+    .ma-u-drop-item:hover { background: #f9fafb; }
+    .ma-u-drop-item.danger { color: #ef4444; }
+    .ma-u-drop-item.danger:hover { background: #fef2f2; }
+    .ma-u-drop-item.warn { color: #f97316; }
+    .ma-u-drop-item.warn:hover { background: #fff7ed; }
+    .ma-u-drop-item.green { color: #16a34a; }
+    .ma-u-drop-item.green:hover { background: #f0fdf4; }
+    .ma-drop-divider { height: 1px; background: #f3f4f6; margin: 3px 0; }
+
+    /* ── User detail popup ─────────────────────────────── */
+    #userDetailPopup {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 2000; align-items: center; justify-content: center;
+    }
+    #userDetailPopup.active { display: flex; }
+    .udp-card { background: #fff; border-radius: 16px; padding: 1.5rem; max-width: 360px; width: 100%; box-shadow: 0 16px 48px rgba(0,0,0,0.15); }
+    .udp-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; }
+    .udp-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    .udp-avatar-init { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.3rem; }
+    .udp-name { font-size: 1rem; font-weight: 700; }
+    .udp-tgname { font-size: 0.78rem; color: #9ca3af; }
+    .udp-section-title { font-size: 0.75rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 6px; }
+    .udp-team-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f9fafb; }
+    .udp-team-row:last-child { border-bottom: none; }
+    .udp-team-name { flex: 1; font-size: 0.85rem; font-weight: 600; }
+    .udp-status-online { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #16a34a; font-weight: 600; }
+    .udp-status-online::before { content: ''; display: block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a; }
+    .udp-status-member { font-size: 0.72rem; color: #9ca3af; }
+    .udp-no-team { font-size: 0.82rem; color: #ef4444; padding: 8px 0; }
+    .udp-loading { font-size: 0.8rem; color: #9ca3af; padding: 8px 0; }
+
+    /* ── Create team form ──────────────────────────────── */
+    .ma-create-form { padding: 14px 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .ma-input { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; flex: 1; min-width: 120px; font-family: inherit; }
+    .ma-input:focus { outline: none; border-color: #2563eb; }
+
+    /* ── Edit team modal ───────────────────────────────── */
+    .ma-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; }
+    .ma-modal-overlay.active { display: flex; }
+    .ma-modal { background: #fff; border-radius: 14px; padding: 1.5rem; width: 100%; max-width: 420px; box-shadow: 0 16px 48px rgba(0,0,0,0.15); }
+    .ma-modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; }
+    .ma-modal label { display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 4px; margin-top: 10px; }
+    .ma-modal .ma-input { width: 100%; margin-bottom: 0; }
+    .ma-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    /* ── Ghost switch popup ────────────────────────────── */
+    .ghost-popup-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 500; align-items: center; justify-content: center; }
+    .ghost-popup-overlay.active { display: flex; }
+    .ghost-popup { background: #fff; border-radius: 12px; padding: 1.5rem; max-width: 340px; width: 100%; text-align: center; }
+    .ghost-popup h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .ghost-popup p { font-size: 0.82rem; color: #6b7280; margin-bottom: 1.2rem; }
+    .ghost-switch-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 1rem; font-weight: 600; font-size: 0.9rem; }
+    .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #d1d5db; border-radius: 24px; transition: 0.2s; }
+    .toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+    input:checked + .toggle-slider { background: #2563eb; }
+    input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    /* ── Team visit target link ────────────────────────── */
+    .ma-visit-btn { background: #f0fdf4; color: #16a34a; }
+    .ma-visit-btn:hover { background: #dcfce7; }
+
+    /* loading / empty */
+    .ma-loading { padding: 24px; text-align: center; color: #9ca3af; font-size: 0.85rem; }
+    .ma-error { padding: 16px 18px; color: #ef4444; font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+
+<!-- Ghost mode banner -->
+<div id="ghostBanner">👻 กำลังอยู่ในโหมดล่องหน — คุณจะไม่ปรากฏในรายชื่อผู้ใช้ออนไลน์</div>
+
+<!-- Login screen -->
+<div id="loginScreen" style="display:none;">
+  <div class="ma-login-card">
+    <div style="font-size:2.5rem;margin-bottom:0.75rem;">🛡️</div>
+    <h2>Master Admin</h2>
+    <p>ล็อกอินด้วยบัญชี Telegram ที่มีสิทธิ์ Master</p>
+    <button class="ma-login-btn" onclick="doLogin()">
+      <i data-lucide="log-in" style="vertical-align:middle;margin-right:6px;"></i>เข้าสู่ระบบ
+    </button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="mainApp" style="display:none;">
+  <div id="ghostBannerSpace" style="height:0;"></div>
+  <header class="ma-header">
+    <div class="ma-header-title">
+      <span style="font-size:1.4rem;">🛡️</span>
+      <h1>ATslip Master Admin</h1>
+      <span class="ma-badge">MASTER</span>
+    </div>
+    <div class="ma-user-info">
+      <span id="maUserName">—</span>
+      <button class="ma-logout-btn" onclick="doLogout()">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="ma-body">
+    <!-- TEAMS SECTION -->
+    <div class="ma-section">
+      <div class="ma-section-header">
+        <div class="ma-section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+          รายการทีม
+        </div>
+        <button class="ma-btn ma-btn-primary" onclick="toggleCreateTeamForm()">+ สร้างทีม</button>
+      </div>
+      <div id="createTeamForm" style="display:none;" class="ma-create-form">
+        <input type="text" class="ma-input" id="newTeamName" placeholder="ชื่อทีม" style="flex:2;">
+        <input type="text" class="ma-input" id="newTeamSlug" placeholder="slug (a-z, 0-9, -)">
+        <button class="ma-btn ma-btn-primary" onclick="createTeam()">สร้าง</button>
+        <button class="ma-btn ma-btn-gray" onclick="toggleCreateTeamForm()">ยกเลิก</button>
+      </div>
+      <div id="teamsList" class="ma-loading">กำลังโหลด...</div>
+    </div>
+
+    <!-- USERS SECTION -->
+    <div class="ma-section">
+      <div class="ma-section-header">
+        <div class="ma-section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          ผู้ใช้งานทั้งหมด
+        </div>
+        <button class="ma-btn ma-btn-gray" onclick="loadUsers()" title="รีเฟรช" style="font-size:1rem;">↻</button>
+      </div>
+      <div id="usersList" class="ma-loading">กำลังโหลด...</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Edit team modal -->
+<div id="editTeamModal" class="ma-modal-overlay">
+  <div class="ma-modal">
+    <h3>✏️ แก้ไขทีม</h3>
+    <input type="hidden" id="editTeamOldSlug">
+    <label>ชื่อทีม</label>
+    <input type="text" class="ma-input" id="editTeamName">
+    <label>Slug (URL)</label>
+    <input type="text" class="ma-input" id="editTeamSlug">
+    <div class="ma-modal-footer">
+      <button class="ma-btn ma-btn-gray" onclick="closeEditTeamModal()">ยกเลิก</button>
+      <button class="ma-btn ma-btn-primary" onclick="saveEditTeam()">บันทึก</button>
+    </div>
+  </div>
+</div>
+<!-- Action modal (add/kick/ban with dropdown) -->
+<div id="actionModal" class="ma-modal-overlay">
+  <div class="ma-modal" style="max-width:380px;">
+    <h3 id="actionModalTitle">เลือกทีม</h3>
+    <label id="actionModalLabel">ทีม</label>
+    <select class="ma-input" id="actionModalTeamSelect"></select>
+    <div id="actionModalReasonWrap" style="display:none;">
+      <label>เหตุผล (ไม่บังคับ)</label>
+      <input type="text" class="ma-input" id="actionModalReason" placeholder="ระบุเหตุผล...">
+    </div>
+    <div class="ma-modal-footer">
+      <button class="ma-btn ma-btn-gray" onclick="closeActionModal()">ยกเลิก</button>
+      <button class="ma-btn" id="actionModalConfirmBtn" onclick="confirmAction()">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ghost mode popup -->
+<div id="ghostPopup" class="ghost-popup-overlay">
+  <div class="ghost-popup">
+    <h3>👻 โหมดล่องหน</h3>
+    <p>เปิดโหมดนี้ คุณจะเยี่ยมชมทีมได้โดยไม่ปรากฏในรายชื่อออนไลน์</p>
+    <div class="ghost-switch-row">
+      <span>ปิด</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="ghostSwitch" onchange="onGhostToggle(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+      <span>เปิด</span>
+    </div>
+    <div id="ghostVisitLink" style="display:none;margin-bottom:1rem;">
+      <a id="ghostLink" href="#" target="_blank" class="ma-btn ma-btn-green" style="display:inline-block;text-decoration:none;">เปิดหน้าทีม →</a>
+    </div>
+    <button class="ma-btn ma-btn-gray" onclick="closeGhostPopup()">ปิด</button>
+  </div>
+</div>
+
+<!-- User detail popup -->
+<div id="userDetailPopup">
+  <div class="udp-card">
+    <div class="udp-header">
+      <div id="udpAvatarWrap"></div>
+      <div><div class="udp-name" id="udpName"></div><div class="udp-tgname" id="udpTgName"></div></div>
+    </div>
+    <div id="udpTeamsSection"></div>
+    <div style="margin-top:14px;text-align:right;">
+      <button class="ma-btn ma-btn-gray" onclick="closeUserDetail()">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js?v=2.1"></script>
+<script src="js/api.js?v=1.12"></script>
+<script>
+const BACKEND = (typeof API_CONFIG !== 'undefined') ? API_CONFIG.BASE_URL : 'https://atslip-backend.tyuid003.workers.dev';
+function getSession() { return localStorage.getItem('atslip_session'); }
+async function checkMasterAuth() {
+  const token = getSession();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${BACKEND}/api/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.user?.is_master ? data.user : null;
+  } catch { return null; }
+}
+function doLogin() { window.location.href = `/login.html?next=${encodeURIComponent('/master.html')}`; }
+function doLogout() { ['atslip_session','atslip_user','atslip_photo'].forEach(k => localStorage.removeItem(k)); window.location.reload(); }
+
+let allTeams = [], allUsers = [], currentActionType = '', currentActionTid = '', currentActionTeams = [];
+
+async function masterInit() {
+  const user = await checkMasterAuth();
+  if (!user) { document.getElementById('loginScreen').style.display = 'flex'; return; }
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('maUserName').textContent = user.display_name || user.telegram_first_name || user.telegram_id;
+  await loadTeams();
+  loadUsers();
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.ma-u-menu-wrap'))
+      document.querySelectorAll('.ma-u-dropdown.open').forEach(d => d.classList.remove('open'));
+  });
+}
+
+async function loadTeams() {
+  const el = document.getElementById('teamsList');
+  el.innerHTML = '<div class="ma-loading">กำลังโหลด...</div>';
+  try { const res = await api.masterListTeams(); allTeams = res.teams || []; renderTeams(allTeams); }
+  catch (e) { el.innerHTML = `<div class="ma-error">โหลดล้มเหลว: ${e?.message||e}</div>`; }
+}
+
+function renderTeams(teams) {
+  const el = document.getElementById('teamsList');
+  if (!teams.length) { el.innerHTML = '<div class="ma-loading">ยังไม่มีทีม</div>'; return; }
+  el.innerHTML = teams.map(t => `
+    <div class="ma-team-row">
+      <div class="ma-team-info">
+        <div class="ma-team-name">${escH(t.name)}</div>
+        <div class="ma-team-slug">${escH(t.slug)}</div>
+        <div class="ma-team-count">สมาชิก ${t.member_count ?? 0} คน</div>
+      </div>
+      <div class="ma-team-actions">
+        <button class="ma-btn ma-visit-btn" onclick="openGhostPopup('${escH(t.slug)}')">👻 เยี่ยมชม</button>
+        <button class="ma-btn ma-btn-gray" onclick="openEditTeam('${escH(t.slug)}','${escH(t.name)}')">แก้ไข</button>
+        <button class="ma-btn ma-btn-danger" onclick="deleteTeam('${escH(t.slug)}','${escH(t.name)}')">ลบ</button>
+      </div>
+    </div>`).join('');
+}
+
+function toggleCreateTeamForm() {
+  const f = document.getElementById('createTeamForm');
+  f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+  if (f.style.display === 'flex') document.getElementById('newTeamName').focus();
+}
+async function createTeam() {
+  const name = document.getElementById('newTeamName').value.trim();
+  const slug = document.getElementById('newTeamSlug').value.trim();
+  if (!name || !slug) { alert('กรุณากรอกชื่อและ slug'); return; }
+  try {
+    await api.masterCreateTeam({ name, slug });
+    document.getElementById('newTeamName').value = ''; document.getElementById('newTeamSlug').value = '';
+    document.getElementById('createTeamForm').style.display = 'none'; loadTeams();
+  } catch (e) { alert('เกิดข้อผิดพลาด: ' + (e?.message||e)); }
+}
+function openEditTeam(slug, name) {
+  document.getElementById('editTeamOldSlug').value = slug;
+  document.getElementById('editTeamName').value = name;
+  document.getElementById('editTeamSlug').value = slug;
+  document.getElementById('editTeamModal').classList.add('active');
+}
+function closeEditTeamModal() { document.getElementById('editTeamModal').classList.remove('active'); }
+async function saveEditTeam() {
+  const oldSlug = document.getElementById('editTeamOldSlug').value;
+  const name = document.getElementById('editTeamName').value.trim();
+  const slug = document.getElementById('editTeamSlug').value.trim();
+  try { await api.masterUpdateTeam(oldSlug, { name, slug }); closeEditTeamModal(); loadTeams(); }
+  catch (e) { alert('เกิดข้อผิดพลาด: ' + (e?.message||e)); }
+}
+async function deleteTeam(slug, name) {
+  if (!confirm(`ลบทีม "${name}" (${slug})?\nการลบจะลบข้อมูลทั้งหมดในทีมด้วย`)) return;
+  try { await api.masterDeleteTeam(slug); loadTeams(); loadUsers(); }
+  catch (e) { alert('เกิดข้อผิดพลาด: ' + (e?.message||e)); }
+}
+
+async function loadUsers() {
+  const el = document.getElementById('usersList');
+  el.innerHTML = '<div class="ma-loading">กำลังโหลด...</div>';
+  try { const res = await api.masterListUsers(); allUsers = res.users || []; renderUsers(allUsers); }
+  catch (e) { el.innerHTML = `<div class="ma-error">โหลดล้มเหลว: ${e?.message||e}</div>`; }
+}
+
+function renderUsers(users) {
+  const el = document.getElementById('usersList');
+  if (!users.length) { el.innerHTML = '<div class="ma-loading">ไม่มีผู้ใช้งาน</div>'; return; }
+  el.innerHTML = users.map((u, idx) => {
+    const avatarHtml = u.photo
+      ? `<img src="${u.photo}" class="ma-u-avatar" alt="">`
+      : `<div class="ma-u-avatar-init">${(u.display_name||'?').charAt(0).toUpperCase()}</div>`;
+    const nameHtml = (u.display_name !== u.telegram_name && u.telegram_name)
+      ? `<div class="ma-u-name">${escH(u.display_name)}</div><div class="ma-u-tgname">${escH(u.telegram_name)}</div>`
+      : `<div class="ma-u-name">${escH(u.display_name)}</div>`;
+    const masterBadge = u.is_master ? '<span class="ma-master-badge">MASTER</span>' : '';
+    const teamsHtml = u.teams.length
+      ? u.teams.map(t => `<span class="ma-u-team-chip">${escH(t.name)}<button class="ma-chip-remove" title="นำออก" onclick="event.stopPropagation();removeFromTeam('${escH(u.telegram_id)}','${escH(t.slug)}','${escH(t.name)}')">&#x2715;</button></span>`).join('')
+      : '<span class="ma-u-no-team">ไม่มีทีม</span>';
+    const tid = escH(u.telegram_id);
+    const teamsJson = escH(JSON.stringify(u.teams));
+    const menuId = `udd-${idx}`;
+    return `
+      <div class="ma-user-row">
+        <div class="ma-u-clickable" onclick="openUserDetail('${tid}')">${avatarHtml}</div>
+        <div class="ma-u-info" onclick="openUserDetail('${tid}')">
+          ${nameHtml}
+          <div class="ma-u-teams">${masterBadge}${teamsHtml}</div>
+        </div>
+        <div class="ma-u-menu-wrap">
+          <button class="ma-u-menu-btn" onclick="event.stopPropagation();toggleUserMenu('${menuId}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+          </button>
+          <div id="${menuId}" class="ma-u-dropdown">
+            <button class="ma-u-drop-item green" onclick="openActionModal('add','${tid}','[]')">&#x2795; เพิ่มเข้าทีม</button>
+            <div class="ma-drop-divider"></div>
+            <button class="ma-u-drop-item warn" onclick="openActionModal('kick','${tid}','${teamsJson}')">&#x1F6AA; เตะออกจากทีม</button>
+            <button class="ma-u-drop-item danger" onclick="openActionModal('ban','${tid}','${teamsJson}')">&#x1F6AB; ระงับจากทีม</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleUserMenu(menuId) {
+  const menu = document.getElementById(menuId);
+  const wasOpen = menu.classList.contains('open');
+  document.querySelectorAll('.ma-u-dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) menu.classList.add('open');
+}
+async function removeFromTeam(telegramId, teamSlug, teamName) {
+  if (!confirm(`นำ user ออกจากทีม "${teamName}"?`)) return;
+  try { await api.masterKick(telegramId, teamSlug); loadUsers(); }
+  catch (e) { alert('เกิดข้อผิดพลาด: ' + (e?.message||e)); }
+}
+
+function openActionModal(type, telegramId, teamsJson) {
+  document.querySelectorAll('.ma-u-dropdown.open').forEach(d => d.classList.remove('open'));
+  currentActionType = type; currentActionTid = telegramId;
+  const select = document.getElementById('actionModalTeamSelect');
+  const title = document.getElementById('actionModalTitle');
+  const label = document.getElementById('actionModalLabel');
+  const reasonWrap = document.getElementById('actionModalReasonWrap');
+  const confirmBtn = document.getElementById('actionModalConfirmBtn');
+  document.getElementById('actionModalReason').value = '';
+  if (type === 'add') {
+    currentActionTeams = allTeams;
+    title.textContent = 'เพิ่มเข้าทีม'; label.textContent = 'เลือกทีมที่ต้องการเพิ่ม';
+    reasonWrap.style.display = 'none'; confirmBtn.className = 'ma-btn ma-btn-primary'; confirmBtn.textContent = 'เพิ่ม';
+  } else {
+    let teams = []; try { teams = JSON.parse((teamsJson||'[]').replace(/&#39;/g,"'")); } catch {}
+    currentActionTeams = teams;
+    if (type === 'kick') {
+      title.textContent = 'เตะออกจากทีม'; label.textContent = 'เลือกทีมที่จะเตะออก';
+      reasonWrap.style.display = 'none'; confirmBtn.className = 'ma-btn ma-btn-warn'; confirmBtn.textContent = 'เตะออก';
+    } else {
+      title.textContent = 'ระงับจากทีม'; label.textContent = 'เลือกทีมที่จะระงับ';
+      reasonWrap.style.display = 'block'; confirmBtn.className = 'ma-btn ma-btn-danger'; confirmBtn.textContent = 'ระงับ';
+    }
+  }
+  select.innerHTML = currentActionTeams.length
+    ? currentActionTeams.map(t => `<option value="${escH(t.slug)}">${escH(t.name)} (${escH(t.slug)})</option>`).join('')
+    : '<option value="">— ไม่มีทีม —</option>';
+  document.getElementById('actionModal').classList.add('active');
+}
+function closeActionModal() { document.getElementById('actionModal').classList.remove('active'); }
+async function confirmAction() {
+  const slug = document.getElementById('actionModalTeamSelect').value;
+  if (!slug) { alert('กรุณาเลือกทีม'); return; }
+  const reason = document.getElementById('actionModalReason').value.trim();
+  try {
+    if (currentActionType === 'add')  await api.masterAddToTeam(currentActionTid, slug);
+    if (currentActionType === 'kick') await api.masterKick(currentActionTid, slug);
+    if (currentActionType === 'ban')  await api.masterBan(currentActionTid, slug, reason);
+    closeActionModal(); loadUsers();
+  } catch (e) { alert('เกิดข้อผิดพลาด: ' + (e?.message||e)); }
+}
+
+async function openUserDetail(telegramId) {
+  const u = allUsers.find(x => x.telegram_id === telegramId);
+  if (!u) return;
+  document.getElementById('udpAvatarWrap').innerHTML = u.photo
+    ? `<img src="${u.photo}" class="udp-avatar" alt="">`
+    : `<div class="udp-avatar-init">${(u.display_name||'?').charAt(0).toUpperCase()}</div>`;
+  document.getElementById('udpName').textContent = u.display_name;
+  document.getElementById('udpTgName').textContent = u.telegram_name || ('ID: ' + u.telegram_id);
+  const sec = document.getElementById('udpTeamsSection');
+  if (!u.teams.length) { sec.innerHTML = '<div class="udp-no-team">ยังไม่ได้อยู่ในทีมใด</div>'; }
+  else {
+    sec.innerHTML = '<div class="udp-section-title">ทีมที่เป็นสมาชิก</div><div class="udp-loading">กำลังตรวจสอบ...</div>';
+    document.getElementById('userDetailPopup').classList.add('active');
+    const session = getSession();
+    let onlineTeamIds = new Set();
+    await Promise.all(u.teams.map(async t => {
+      try {
+        const r = await fetch(`${BACKEND}/api/presence?team_id=${encodeURIComponent(t.id)}`, { headers: { 'Authorization': `Bearer ${session}` } });
+        if (r.ok) { const d = await r.json(); if ((d.users||[]).some(x => String(x.user_id) === String(telegramId))) onlineTeamIds.add(t.id); }
+      } catch {}
+    }));
+    sec.innerHTML = `<div class="udp-section-title">ทีมที่เป็นสมาชิก</div>
+      ${u.teams.map(t => `<div class="udp-team-row">
+        <div class="udp-team-name">${escH(t.name)}</div>
+        ${onlineTeamIds.has(t.id) ? '<span class="udp-status-online">ออนไลน์</span>' : '<span class="udp-status-member">สมาชิก</span>'}
+      </div>`).join('')}`;
+    return;
+  }
+  document.getElementById('userDetailPopup').classList.add('active');
+}
+function closeUserDetail() { document.getElementById('userDetailPopup').classList.remove('active'); }
+
+// ghost state is page-session only — NOT stored in localStorage
+let ghostTeamSlug = '';
+let ghostOn = false;
+function openGhostPopup(slug) {
+  ghostTeamSlug = slug;
+  document.getElementById('ghostSwitch').checked = ghostOn;
+  updateGhostVisitLink(slug, ghostOn);
+  document.getElementById('ghostPopup').classList.add('active');
+}
+function closeGhostPopup() { document.getElementById('ghostPopup').classList.remove('active'); }
+function onGhostToggle(on) { ghostOn = on; showGhostBanner(on); updateGhostVisitLink(ghostTeamSlug, on); }
+function showGhostBanner(on) { document.getElementById('ghostBanner').style.display = on ? 'block' : 'none'; document.getElementById('ghostBannerSpace').style.height = on ? '32px' : '0'; }
+function updateGhostVisitLink(slug, on) {
+  const wrap = document.getElementById('ghostVisitLink'); const link = document.getElementById('ghostLink');
+  // always show link (with ?ghost=1 when on, without when off) so master can visit either way
+  link.href = on ? `/?ghost=1#/${slug}` : `/#/${slug}`;
+  link.textContent = on ? 'เปิดหน้าทีม (ล่องหน) →' : 'เปิดหน้าทีม (ปกติ) →';
+  wrap.style.display = slug ? 'block' : 'none';
+}
+
+function escH(str) { return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+['editTeamModal','actionModal'].forEach(id => { document.getElementById(id).addEventListener('click', function(e) { if (e.target===this) this.classList.remove('active'); }); });
+document.getElementById('ghostPopup').addEventListener('click', function(e) { if (e.target===this) closeGhostPopup(); });
+document.getElementById('userDetailPopup').addEventListener('click', function(e) { if (e.target===this) closeUserDetail(); });
+
+masterInit();
+</script>
+</body>
+</html>

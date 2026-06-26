@@ -1,6 +1,11 @@
 name = "atslip-backend"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat_v2"]
+
+[vars]
+TELEGRAM_API_ID = "38079589"
+TELEGRAM_API_HASH = "8ca625ce4abf4f11553a5771fe5296e6"
 
 # Worker routes — app.atslip.biz/api/* จะถูก handle โดย Worker นี้
 # (Worker routes มีลำดับความสำคัญสูงกว่า Cloudflare Pages)
@@ -24,10 +29,19 @@ id = "4bdbda645df643df91bd042bd176b24d"
 name = "PENDING_NOTIFICATIONS"
 class_name = "PendingNotificationsDO"
 
+# Durable Objects for Telegram Auth sessions
+[[durable_objects.bindings]]
+name = "TELEGRAM_AUTH_DO"
+class_name = "TelegramAuthDO"
+
 # Migration for Durable Objects (required for first deployment)
 [[migrations]]
 tag = "v1"
 new_classes = ["PendingNotificationsDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["TelegramAuthDO"]
 
 [env.production]
 routes = [

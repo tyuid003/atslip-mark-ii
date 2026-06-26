@@ -19,6 +19,18 @@ const API_CONFIG = {
 };
 
 // ============================================================
+// AUTH SERVICE CONFIGURATION
+// ============================================================
+// AUTH_SERVICE_URL = URL ของ Node.js auth service (ดูใน auth-service/)
+// ตั้งค่าตาม environment ที่ deploy:
+//   - Local dev: http://localhost:4000
+//   - Production: https://auth.atslip.biz (หรือ URL ที่ deploy auth-service ไว้)
+const AUTH_CONFIG = {
+  AUTH_SERVICE_URL: '',  // ← CF Worker handles /api/tg-auth/* directly (same origin)
+  BACKEND_URL: '',                            // '' = ใช้ Pages proxy (relative)
+};
+
+// ============================================================
 // CONSOLE LOG SUPPRESSION (memory)
 // ============================================================
 // เปิด DevTools ทิ้งไว้นานๆ + console จำนวนมาก = แท็บกินแรม 800MB+
@@ -124,17 +136,33 @@ function getRouteInfoFromURL() {
   const hash = window.location.hash || '';
   if (hash.startsWith('#/')) {
     const path = hash.substring(2).split('/').filter(Boolean);
-    const rawTeamSlug = (path[0] || 'default').toString().trim().toLowerCase();
-    const teamSlug = rawTeamSlug.replace(/[^a-z0-9-]/g, '') || 'default';
+    // ถ้าไม่มี path เลย (แค่ '#/') → redirect to info
+    if (path.length === 0) {
+      return { teamSlug: '', page: 'info', isTeamSelector: false, isInfo: true, isLogin: false };
+    }
+    const rawTeamSlug = (path[0] || '').toString().trim().toLowerCase();
+    // ถ้า path แรกคือ 'info' → แสดงหน้า info
+    if (rawTeamSlug === 'info') {
+      return { teamSlug: '', page: 'info', isTeamSelector: false, isInfo: true, isLogin: false };
+    }
+    const teamSlug = rawTeamSlug.replace(/[^a-z0-9-]/g, '') || '';
     const page = (path[1] || 'dashboard').toString().trim().toLowerCase();
-    return { teamSlug, page };
+    const isLogin = page === 'login';
+    const isTeamSelector = !teamSlug || page === 'team-selector';
+    return { teamSlug, page, isTeamSelector, isInfo: false, isLogin };
+  }
+
+  // ไม่มี hash เลย → info page
+  if (!hash || hash === '#') {
+    return { teamSlug: '', page: 'info', isTeamSelector: false, isInfo: true, isLogin: false };
   }
 
   const params = new URLSearchParams(window.location.search);
-  const rawTeamParam = (params.get('team') || 'default').toString().trim().toLowerCase();
-  const teamParam = rawTeamParam.replace(/[^a-z0-9-]/g, '') || 'default';
+  const rawTeamParam = (params.get('team') || '').toString().trim().toLowerCase();
+  const teamParam = rawTeamParam.replace(/[^a-z0-9-]/g, '') || '';
   const pageParam = (params.get('page') || 'dashboard').toString().trim().toLowerCase();
-  return { teamSlug: teamParam, page: pageParam };
+  const isLogin = pageParam === 'login';
+  return { teamSlug: teamParam, page: pageParam, isTeamSelector: !teamParam, isInfo: false, isLogin };
 }
 
 function getTeamFromURL() {

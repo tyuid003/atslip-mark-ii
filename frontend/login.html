@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>เข้าสู่ระบบ — ATslip Mark-II</title>
+  <link rel="icon" type="image/gif" href="assets/images/logo.webp">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- QR Code library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="css/variables.css">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-gray-50);
+      color: var(--color-gray-900);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    .login-header {
+      background: var(--color-white);
+      border-bottom: 1px solid var(--color-gray-200);
+      padding: 0 1.5rem;
+      height: 47px;
+      display: flex;
+      align-items: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .login-header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .login-header-title h1 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--color-gray-900);
+    }
+    .login-header-badge {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      padding: 2px 10px;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    /* ── Page layout ─────────────────────────── */
+    .login-page {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    /* ── Card ────────────────────────────────── */
+    .login-card {
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: 1rem;
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 420px;
+      padding: 2.25rem 2rem;
+    }
+
+    .login-card-title {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .login-card-title h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--color-gray-900);
+    }
+    .login-card-subtitle {
+      text-align: center;
+      color: var(--color-gray-500);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+
+    /* ── Telegram icon ───────────────────────── */
+    .tg-icon {
+      width: 52px;
+      height: 52px;
+      background: #229ED9;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+    }
+    .tg-icon svg { color: white; }
+
+    /* ── Divider ─────────────────────────────── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+      color: var(--color-gray-400);
+      font-size: 0.8rem;
+    }
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--color-gray-200);
+    }
+
+    /* ── QR Section ──────────────────────────── */
+    .qr-section { text-align: center; }
+    .qr-label {
+      font-size: 0.8rem;
+      color: var(--color-gray-500);
+      margin-bottom: 0.75rem;
+    }
+    .qr-box {
+      width: 180px;
+      height: 180px;
+      margin: 0 auto;
+      border-radius: 0.75rem;
+      border: 2px solid var(--color-gray-200);
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .qr-box #qrCanvas {
+      width: 160px;
+      height: 160px;
+      display: none;
+    }
+    .qr-scanned-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border-radius: 0.6rem;
+      animation: qrFadeIn 0.25s ease-out;
+      z-index: 2;
+    }
+    .qr-scanned-overlay.show { display: flex; }
+    .qr-scanned-overlay .spinner-ring {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 3px solid var(--color-gray-200);
+      border-top-color: #229ED9;
+      animation: spin 0.8s linear infinite;
+    }
+    .qr-scanned-overlay .scanned-text {
+      font-size: 0.78rem;
+      color: var(--color-gray-700);
+      font-weight: 500;
+      text-align: center;
+      line-height: 1.3;
+    }
+    .qr-scanned-overlay .scanned-check {
+      color: #16a34a;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    @keyframes qrFadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .qr-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: var(--color-gray-400);
+      font-size: 0.75rem;
+    }
+    .qr-status-text {
+      font-size: 0.75rem;
+      color: var(--color-gray-500);
+      margin-top: 0.5rem;
+      min-height: 1rem;
+    }
+    .qr-status-text.success { color: var(--color-success); }
+    .qr-status-text.error   { color: var(--color-danger); }
+    .qr-refresh-btn {
+      margin-top: 0.5rem;
+      background: none;
+      border: 1px solid var(--color-gray-300);
+      border-radius: 0.5rem;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: var(--color-gray-600);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: inherit;
+    }
+    .qr-refresh-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+    /* ── Phone section ───────────────────────── */
+    .phone-section { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .form-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--color-gray-700);
+      margin-bottom: 0.25rem;
+      display: block;
+    }
+    .input-row { display: flex; gap: 0.5rem; }
+    .country-select {
+      width: 90px;
+      flex-shrink: 0;
+      padding: 0.55rem 0.5rem;
+      border: 1px solid var(--color-gray-300);
+      border-radius: 0.5rem;
+      background: white;
+      font-size: 0.875rem;
+      font-family: inherit;
+      color: var(--color-gray-900);
+      cursor: pointer;
+      appearance: none;
+      text-align: center;
+    }
+    .country-select:focus { outline: none; border-color: var(--color-primary); }
+    .form-input {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--color-gray-300);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      color: var(--color-gray-900);
+      background: white;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .form-input::placeholder { color: var(--color-gray-400); }
+
+    /* OTP input group */
+    .otp-row { display: flex; gap: 8px; justify-content: center; margin: 0.25rem 0; }
+    .otp-row input {
+      width: 44px;
+      height: 52px;
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+      border: 1.5px solid var(--color-gray-300);
+      border-radius: 0.5rem;
+      font-family: inherit;
+      color: var(--color-gray-900);
+      background: white;
+      outline: none;
+      transition: border-color 0.15s;
+      caret-color: transparent;
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    .otp-row input::-webkit-outer-spin-button,
+    .otp-row input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      appearance: none;
+      margin: 0;
+    }
+    .otp-row input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .otp-row input.filled { border-color: var(--color-primary); background: var(--color-primary-light); }
+
+    /* ── Buttons ─────────────────────────────── */
+    .btn {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-primary { background: var(--color-primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+    .btn-outline {
+      background: white;
+      border: 1px solid var(--color-gray-300);
+      color: var(--color-gray-700);
+    }
+    .btn-outline:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+    .btn-tg {
+      background: #229ED9;
+      color: white;
+    }
+    .btn-tg:hover:not(:disabled) { opacity: 0.88; }
+
+    /* ── Alert ───────────────────────────────── */
+    .alert {
+      padding: 0.65rem 0.85rem;
+      border-radius: 0.5rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      display: none;
+    }
+    .alert.show { display: block; }
+    .alert-error   { background: var(--color-danger-light);  color: #991b1b; border-left: 3px solid var(--color-danger); }
+    .alert-success { background: var(--color-success-light); color: #065f46; border-left: 3px solid var(--color-success); }
+    .alert-info    { background: var(--color-primary-light); color: #1e40af; border-left: 3px solid var(--color-primary); }
+
+    /* ── Steps ───────────────────────────────── */
+    .phone-step { display: none; flex-direction: column; gap: 0.75rem; }
+    .phone-step.active { display: flex; }
+
+    /* ── Loading spinner ─────────────────────── */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    .spinner-dark {
+      border-color: rgba(0,0,0,0.15);
+      border-top-color: var(--color-primary);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer note ─────────────────────────── */
+    .login-footer-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--color-gray-400);
+      margin-top: 1.5rem;
+    }
+
+    /* ── QR loading overlay ──────────────────── */
+    .qr-loading {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.625rem;
+    }
+
+    /* ── Success screen ──────────────────────── */
+    #successScreen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      text-align: center;
+    }
+    .success-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--color-gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .success-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .success-name { font-size: 1.1rem; font-weight: 700; }
+    .success-sub  { font-size: 0.8rem; color: var(--color-gray-500); }
+    .success-check {
+      width: 52px; height: 52px;
+      background: var(--color-success-light);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="login-header" style="justify-content:space-between">
+    <div class="login-header-title">
+      <h1>ATslip Mark-II</h1>
+      <span class="login-header-badge">v2.0</span>
+    </div>
+    <a href="/" id="backToSelectorBtn" style="font-size:0.8rem;color:var(--color-gray-500);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+      <svg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
+      เลือกทีม
+    </a>
+  </header>
+
+  <div class="login-page">
+    <div class="login-card">
+
+      <!-- Telegram Icon -->
+      <div class="tg-icon">
+        <i data-lucide="send" size="26"></i>
+      </div>
+
+      <!-- Success screen (shown after login) -->
+      <div id="successScreen">
+        <div class="success-avatar" id="successAvatar">
+          <i data-lucide="user" size="32" style="color:var(--color-gray-400)"></i>
+        </div>
+        <div class="success-check">
+          <i data-lucide="check" size="24" style="color:var(--color-success)"></i>
+        </div>
+        <div class="success-name" id="successName"></div>
+        <div class="success-sub">เข้าสู่ระบบสำเร็จ</div>
+        <p style="font-size:0.8rem;color:var(--color-gray-500)">กำลังพาคุณไปยังหน้าหลัก...</p>
+      </div>
+
+      <!-- Login form (shown when not logged in) -->
+      <div id="loginForm">
+        <div class="login-card-title">
+          <h2>เข้าสู่ระบบ</h2>
+        </div>
+        <p class="login-card-subtitle" id="loginSubtitle">เข้าสู่ระบบด้วย Telegram ของคุณ</p>
+
+        <!-- QR Section -->
+        <div class="qr-section">
+          <p class="qr-label">สแกน QR ด้วยแอป Telegram</p>
+          <div class="qr-box" id="qrBox">
+            <div id="qrCanvas"></div>
+            <div id="qrPlaceholder" class="qr-placeholder">
+              <i data-lucide="qr-code" size="40" style="color:var(--color-gray-300)"></i>
+              <span>กำลังโหลด QR...</span>
+            </div>
+            <div id="qrLoading" class="qr-loading" style="display:none">
+              <div class="spinner spinner-dark"></div>
+            </div>
+            <div id="qrScannedOverlay" class="qr-scanned-overlay">
+              <div class="spinner-ring"></div>
+              <div class="scanned-text">
+                <span class="scanned-check">✓</span> สแกนสำเร็จ<br>
+                กำลังเข้าสู่ระบบ...
+              </div>
+            </div>
+          </div>
+          <p class="qr-status-text" id="qrStatusText">รอการสแกน...</p>
+          <button class="qr-refresh-btn" id="qrRefreshBtn" onclick="startQR()" style="display:none">
+            <i data-lucide="refresh-cw" size="12"></i> สร้าง QR ใหม่
+          </button>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider">หรือ</div>
+
+        <!-- Phone section -->
+        <div class="phone-section">
+          <div class="alert" id="phoneAlert"></div>
+
+          <!-- Step 1: enter phone number -->
+          <div class="phone-step active" id="stepPhone">
+            <div>
+              <label class="form-label">หมายเลขโทรศัพท์</label>
+              <div class="input-row">
+                <select class="country-select" id="countryCode">
+                  <option value="+66">🇹🇭 +66</option>
+                  <option value="+1">🇺🇸 +1</option>
+                  <option value="+44">🇬🇧 +44</option>
+                  <option value="+81">🇯🇵 +81</option>
+                  <option value="+82">🇰🇷 +82</option>
+                  <option value="+86">🇨🇳 +86</option>
+                  <option value="+91">🇮🇳 +91</option>
+                  <option value="+65">🇸🇬 +65</option>
+                  <option value="+60">🇲🇾 +60</option>
+                  <option value="+62">🇮🇩 +62</option>
+                </select>
+                <input
+                  type="tel"
+                  class="form-input"
+                  id="phoneInput"
+                  placeholder="8xxxxxxxxx"
+                  inputmode="numeric"
+                  maxlength="15"
+                  oninput="this.value=this.value.replace(/\D/g,'')"
+                  onblur="this.value=this.value.replace(/^0+/,'')"
+                  onkeydown="if(event.key==='Enter')sendOTP()"
+                >
+              </div>
+            </div>
+            <button class="btn btn-tg" id="sendOtpBtn" onclick="sendOTP()">
+              <i data-lucide="send" size="16"></i>
+              ส่ง OTP
+            </button>
+          </div>
+
+          <!-- Step 2: enter OTP code -->
+          <div class="phone-step" id="stepOTP">
+            <p style="font-size:0.8rem;color:var(--color-gray-600);text-align:center">
+              กรุณากรอกรหัส OTP ที่ได้รับใน Telegram
+            </p>
+            <div class="otp-row" id="otpRow">
+              <input type="tel" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+              <input type="tel" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+              <input type="tel" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+              <input type="tel" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+              <input type="tel" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+            </div>
+            <button class="btn btn-tg" id="verifyOtpBtn" onclick="verifyOTP()">
+              <i data-lucide="check-circle" size="16"></i>
+              ยืนยัน OTP
+            </button>
+            <button class="btn btn-outline" onclick="backToPhone()">
+              ← กลับ
+            </button>
+          </div>
+
+          <!-- Step 3: 2FA password -->
+          <div class="phone-step" id="step2FA">
+            <p style="font-size:0.8rem;color:var(--color-gray-600);text-align:center">
+              บัญชีนี้เปิดใช้งาน 2FA กรุณากรอกรหัสผ่าน Cloud
+            </p>
+            <div>
+              <label class="form-label">Cloud Password</label>
+              <input
+                type="password"
+                class="form-input"
+                id="twoFaInput"
+                placeholder="รหัสผ่าน 2FA"
+                onkeydown="if(event.key==='Enter')verify2FA()"
+              >
+            </div>
+            <button class="btn btn-tg" id="verify2FaBtn" onclick="verify2FA()">
+              <i data-lucide="shield-check" size="16"></i>
+              ยืนยัน 2FA
+            </button>
+            <button class="btn btn-outline" onclick="backToPhone()">
+              ← กลับ
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p class="login-footer-note">
+        <i data-lucide="lock" size="11" style="vertical-align:middle"></i>
+        ระบบใช้ Telegram MTProto — ข้อมูลของคุณปลอดภัย
+      </p>
+    </div>
+  </div>
+
+  <script src="js/config.js?v=2.3"></script>
+  <script>
+    // ============================================================
+    // CONFIG
+    // ============================================================
+    const AUTH_URL   = window.AUTH_CONFIG?.AUTH_SERVICE_URL ?? '';
+    const BACKEND    = window.AUTH_CONFIG?.BACKEND_URL ?? '';
+
+    // ============================================================
+    // DEVICE TOKEN (UUID stored in localStorage)
+    // ============================================================
+    function getOrCreateDeviceToken() {
+      let t = localStorage.getItem('atslip_device_token');
+      if (!t) {
+        t = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+        localStorage.setItem('atslip_device_token', t);
+      }
+      return t;
+    }
+
+    // ============================================================
+    // POST-LOGIN: register with backend & redirect
+    // ============================================================
+    // finishLogin throws on error — callers must catch and display appropriately
+    async function finishLogin(sessionStr, user, photo) {
+      if (!user || !user.id) throw new Error('ไม่ได้รับข้อมูลผู้ใช้จาก Telegram');
+      if (!sessionStr)       throw new Error('ไม่ได้รับ session string จาก Telegram');
+
+      const deviceToken = getOrCreateDeviceToken();
+      const res = await fetch(`${BACKEND}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id:          user.id,
+          telegram_first_name:  user.firstName,
+          telegram_last_name:   user.lastName,
+          telegram_username:    user.username,
+          telegram_phone:       user.phone,
+          session_string:       sessionStr,
+          device_token:         deviceToken,
+          photo_base64:         photo ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error ?? 'ลงทะเบียน session ล้มเหลว');
+
+      // Store app session
+      localStorage.setItem('atslip_session', data.app_session_token);
+      localStorage.setItem('atslip_user', JSON.stringify(data.user));
+      if (photo) localStorage.setItem('atslip_photo', photo);
+      else       localStorage.removeItem('atslip_photo');
+
+      showSuccess(user, photo);
+      setTimeout(() => {
+        const p = new URLSearchParams(location.search);
+        const teamSlug = (p.get('team') || '').replace(/[^a-z0-9-]/g, '');
+        let redirect = p.get('next') || (teamSlug ? `/#/${teamSlug}` : '/');
+        // Safety: bare hash (e.g. '#/foo') must become '/#/foo' to leave login.html
+        if (redirect.startsWith('#')) redirect = '/' + redirect;
+        location.href = redirect;
+      }, 1600);
+    }
+
+    // ============================================================
+    // SUCCESS SCREEN
+    // ============================================================
+    function showSuccess(user, photo) {
+      document.getElementById('loginForm').style.display = 'none';
+      const ss = document.getElementById('successScreen');
+      ss.style.display = 'flex';
+
+      const name = user.firstName + (user.lastName ? ' ' + user.lastName : '');
+      document.getElementById('successName').textContent = name;
+
+      if (photo) {
+        document.getElementById('successAvatar').innerHTML = `<img src="${photo}" alt="avatar">`;
+      }
+      lucide.createIcons();
+    }
+
+    // ============================================================
+    // QR LOGIN
+    // ============================================================
+    let qrSessionId   = null;
+    let qrPollTimer   = null;
+    let qrQRInstance  = null;
+
+    async function startQR() {
+      clearQRPoll();
+      setQRStatus('กำลังสร้าง QR...', '');
+      document.getElementById('qrRefreshBtn').style.display = 'none';
+      document.getElementById('qrLoading').style.display = 'flex';
+      hideQRScannedOverlay();
+
+      try {
+        const res  = await fetch(`${AUTH_URL}/api/tg-auth/qr-start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error ?? 'ไม่สามารถสร้าง QR ได้');
+
+        qrSessionId = data.sessionId;
+        renderQR(data.url);
+        setQRStatus('รอการสแกน...', '');
+        document.getElementById('qrLoading').style.display = 'none';
+
+        qrPollTimer = setInterval(pollQR, 2000);
+      } catch (e) {
+        document.getElementById('qrLoading').style.display = 'none';
+        setQRStatus('ไม่สามารถสร้าง QR: ' + e.message, 'error');
+        document.getElementById('qrRefreshBtn').style.display = 'inline-flex';
+      }
+    }
+
+    function renderQR(url) {
+      if (!url) return;
+      const canvas = document.getElementById('qrCanvas');
+      canvas.innerHTML = '';
+      canvas.style.display = 'block';
+      document.getElementById('qrPlaceholder').style.display = 'none';
+      if (qrQRInstance) { try { qrQRInstance.clear(); } catch(_){} }
+      qrQRInstance = new QRCode(canvas, {
+        text: url,
+        width: 160, height: 160,
+        colorDark: '#111827',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    }
+
+    async function pollQR() {
+      if (!qrSessionId) return;
+      try {
+        const res  = await fetch(`${AUTH_URL}/api/tg-auth/qr-status/${qrSessionId}`);
+        const data = await res.json();
+        if (!data.ok) { clearQRPoll(); setQRStatus('Session หมดอายุ', 'error'); document.getElementById('qrRefreshBtn').style.display = 'inline-flex'; return; }
+
+        if (data.url && data.url !== currentQRUrl()) renderQR(data.url);
+
+        // Show "scanning" overlay as soon as Telegram signals the user scanned (DC migration starts).
+        // This gives instant feedback while we wait for finalization (~2-5 s).
+        if (data.scanned && data.status !== 'done' && data.status !== 'error') {
+          showQRScannedOverlay();
+          setQRStatus('สแกนสำเร็จ! กำลังเข้าสู่ระบบ...', 'success');
+        }
+
+        if (data.status === 'done') {
+          clearQRPoll();
+          showQRScannedOverlay();
+          setQRStatus('สแกนสำเร็จ! กำลังเข้าสู่ระบบ...', 'success');
+          try {
+            await finishLogin(data.session, data.user, data.photo);
+          } catch (e) {
+            hideQRScannedOverlay();
+            setQRStatus('เข้าสู่ระบบล้มเหลว: ' + e.message, 'error');
+            document.getElementById('qrRefreshBtn').style.display = 'inline-flex';
+          }
+        } else if (data.status === 'error') {
+          clearQRPoll();
+          hideQRScannedOverlay();
+          setQRStatus(data.error ?? 'เกิดข้อผิดพลาด', 'error');
+          document.getElementById('qrRefreshBtn').style.display = 'inline-flex';
+        }
+      } catch (_) { /* network error — retry next poll */ }
+    }
+
+    function showQRScannedOverlay() {
+      const el = document.getElementById('qrScannedOverlay');
+      if (el) el.classList.add('show');
+    }
+    function hideQRScannedOverlay() {
+      const el = document.getElementById('qrScannedOverlay');
+      if (el) el.classList.remove('show');
+    }
+
+    function currentQRUrl() {
+      // simple cache to avoid re-rendering same QR
+      return window._lastQRUrl;
+    }
+    const _origRenderQR = renderQR;
+    window.renderQR = function(url) {
+      if (url === window._lastQRUrl) return;
+      window._lastQRUrl = url;
+      _origRenderQR(url);
+    };
+
+    function clearQRPoll() {
+      if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+    }
+
+    function setQRStatus(msg, cls) {
+      const el = document.getElementById('qrStatusText');
+      el.textContent = msg;
+      el.className   = 'qr-status-text' + (cls ? ' ' + cls : '');
+    }
+
+    // ============================================================
+    // PHONE OTP
+    // ============================================================
+    let phoneSessionId = null;
+
+    function showPhoneAlert(type, msg) {
+      const el = document.getElementById('phoneAlert');
+      el.textContent = msg;
+      el.className   = `alert show alert-${type}`;
+    }
+    function hidePhoneAlert() {
+      document.getElementById('phoneAlert').className = 'alert';
+    }
+
+    function setPhoneStep(stepId) {
+      ['stepPhone','stepOTP','step2FA'].forEach(id => {
+        document.getElementById(id).classList.toggle('active', id === stepId);
+      });
+      hidePhoneAlert();
+    }
+
+    function backToPhone() {
+      phoneSessionId = null;
+      setPhoneStep('stepPhone');
+    }
+
+    async function sendOTP() {
+      const cc    = document.getElementById('countryCode').value;
+      const phone = document.getElementById('phoneInput').value.trim();
+      if (!phone) return showPhoneAlert('error', 'กรุณากรอกหมายเลขโทรศัพท์');
+
+      const fullPhone = cc + phone.replace(/^0/, '');
+      const btn = document.getElementById('sendOtpBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> กำลังส่ง...';
+      hidePhoneAlert();
+
+      try {
+        const res  = await fetch(`${AUTH_URL}/api/tg-auth/send-code`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber: fullPhone }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error ?? 'ส่ง OTP ล้มเหลว');
+
+        phoneSessionId = data.sessionId;
+        setupOTPInputs();
+        setPhoneStep('stepOTP');
+        showPhoneAlert('info', 'ส่ง OTP ไปยัง Telegram ของคุณแล้ว');
+      } catch (e) {
+        showPhoneAlert('error', e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="send" size="16"></i> ส่ง OTP';
+        lucide.createIcons();
+      }
+    }
+
+    function setupOTPInputs() {
+      const inputs = document.querySelectorAll('.otp-digit');
+      inputs.forEach((inp, i) => {
+        inp.value = '';
+        inp.classList.remove('filled');
+        inp.oninput = (e) => {
+          const v = e.target.value.replace(/\D/g, '').slice(-1);
+          e.target.value = v;
+          e.target.classList.toggle('filled', !!v);
+          if (v && i < inputs.length - 1) inputs[i+1].focus();
+          checkAutoSubmit();
+        };
+        inp.onkeydown = (e) => {
+          if (e.key === 'Backspace' && !inp.value && i > 0) inputs[i-1].focus();
+        };
+        inp.onpaste = (e) => {
+          e.preventDefault();
+          const paste = (e.clipboardData.getData('text') || '').replace(/\D/g,'').slice(0,5);
+          inputs.forEach((inp2, j) => {
+            inp2.value = paste[j] || '';
+            inp2.classList.toggle('filled', !!inp2.value);
+          });
+          if (paste.length === 5) { checkAutoSubmit(); }
+          else inputs[Math.min(paste.length, 4)].focus();
+        };
+      });
+      setTimeout(() => inputs[0].focus(), 100);
+    }
+
+    function getOTPValue() {
+      return Array.from(document.querySelectorAll('.otp-digit')).map(i => i.value).join('');
+    }
+
+    function checkAutoSubmit() {
+      if (getOTPValue().length === 5) verifyOTP();
+    }
+
+    async function verifyOTP() {
+      const code = getOTPValue();
+      if (code.length < 5) return showPhoneAlert('error', 'กรุณากรอก OTP ให้ครบ 5 หลัก');
+      if (!phoneSessionId) return showPhoneAlert('error', 'Session หมดอายุ กรุณาขอ OTP ใหม่');
+
+      const btn = document.getElementById('verifyOtpBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> กำลังตรวจสอบ...';
+      hidePhoneAlert();
+
+      try {
+        const res  = await fetch(`${AUTH_URL}/api/tg-auth/verify-code`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: phoneSessionId, code }),
+        });
+        const data = await res.json();
+
+        if (!data.ok) throw new Error(data.error ?? 'OTP ไม่ถูกต้อง');
+
+        if (data.needs2fa) {
+          setPhoneStep('step2FA');
+          showPhoneAlert('info', 'บัญชีนี้มีการยืนยันตัวตน 2 ขั้นตอน');
+          return;
+        }
+
+        await finishLogin(data.session, data.user, data.photo);
+      } catch (e) {
+        showPhoneAlert('error', e.message || 'เกิดข้อผิดพลาด');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check-circle" size="16"></i> ยืนยัน OTP';
+        lucide.createIcons();
+      }
+    }
+
+    async function verify2FA() {
+      const password = document.getElementById('twoFaInput').value;
+      if (!password) return showPhoneAlert('error', 'กรุณากรอกรหัสผ่าน 2FA');
+      if (!phoneSessionId) return showPhoneAlert('error', 'Session หมดอายุ กรุณาขอ OTP ใหม่');
+
+      const btn = document.getElementById('verify2FaBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> กำลังตรวจสอบ...';
+      hidePhoneAlert();
+
+      try {
+        const res  = await fetch(`${AUTH_URL}/api/tg-auth/verify-2fa`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: phoneSessionId, password }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error ?? 'รหัสผ่าน 2FA ไม่ถูกต้อง');
+
+        await finishLogin(data.session, data.user, data.photo);
+      } catch (e) {
+        showPhoneAlert('error', e.message || 'เกิดข้อผิดพลาด');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="shield-check" size="16"></i> ยืนยัน 2FA';
+        lucide.createIcons();
+      }
+    }
+
+    // ============================================================
+    // TEAM FROM URL
+    // ============================================================
+    const _urlParams = new URLSearchParams(location.search);
+    const _teamSlug  = (_urlParams.get('team') || '').replace(/[^a-z0-9-]/g, '');
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+
+      // Show team name in subtitle
+      if (_teamSlug) {
+        const subtitle = document.getElementById('loginSubtitle');
+        if (subtitle) subtitle.textContent = `เข้าสู่ระบบทีม ${_teamSlug}`;
+      }
+
+      // Redirect if already logged in
+      const session = localStorage.getItem('atslip_session');
+      if (session) {
+        fetch(`${BACKEND}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${session}` }
+        }).then(r => r.json()).then(d => {
+          if (d.ok) {
+            const p = new URLSearchParams(location.search);
+            const teamSlug = (p.get('team') || '').replace(/[^a-z0-9-]/g, '');
+            let redirect = p.get('next') || (teamSlug ? `/#/${teamSlug}` : '/');
+            if (redirect.startsWith('#')) redirect = '/' + redirect;
+            location.href = redirect;
+          } else {
+            localStorage.removeItem('atslip_session');
+            localStorage.removeItem('atslip_user');
+            localStorage.removeItem('atslip_photo');
+            startQR();
+          }
+        }).catch(() => startQR());
+      } else {
+        startQR();
+      }
+    });
+  </script>
+</body>
+</html>

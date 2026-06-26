@@ -107,6 +107,24 @@ export function sanitizeUrl(url: string): string {
 }
 
 /**
+ * สร้าง auth headers สำหรับ admin backend API
+ * v1: Authorization: Bearer {token}
+ * v2: Cookie: bo-access-token={token}
+ */
+export function getAdminAuthHeaders(sessionToken: string, apiVersion: string): Record<string, string> {
+  if (apiVersion === 'v2') {
+    return {
+      'Cookie': `bo-access-token=${sessionToken}`,
+      'Accept': 'application/json',
+    };
+  }
+  return {
+    'Authorization': `Bearer ${sessionToken}`,
+    'Accept': 'application/json',
+  };
+}
+
+/**
  * เข้ารหัส Basic Auth
  */
 export function encodeBasicAuth(username: string, password: string): string {

@@ -28,6 +28,9 @@ export async function handleMatchPendingTransaction(
         fullname?: string;
         category?: string;
       };
+      scanned_by_id?: string | null;
+      scanned_by_name?: string | null;
+      scanned_by_photo?: string | null;
     };
 
     if (!body.matched_user_id || !body.matched_username) {
@@ -123,28 +126,37 @@ export async function handleMatchPendingTransaction(
       }
     }
 
+    // scanned_by — ใช้ของที่ส่งมา ถ้าไม่มีก็ไม่ overwrite (NULL)
+    const scannedById   = body.scanned_by_id   ? String(body.scanned_by_id).substring(0, 64)   : null;
+    const scannedByName = body.scanned_by_name ? String(body.scanned_by_name).substring(0, 255) : null;
+    const scannedByPhotoRaw = body.scanned_by_photo || null;
+    const scannedByPhoto = scannedByPhotoRaw ? String(scannedByPhotoRaw).substring(0, 32768) : null;
+
     // Update matched info (and tenant_id if provided — ใช้เมื่อผู้ใช้เลือก tenant ใหม่ตอนจับคู่ใหม่)
     let result;
     if (body.tenant_id) {
       result = await env.DB.prepare(
-        `UPDATE pending_transactions 
-         SET matched_user_id = ?, 
-             matched_username = ?,
-             tenant_id = ?,
+        `UPDATE pending_transactions
+         SET matched_user_id = ?, matched_username = ?, tenant_id = ?,
+             scanned_by_id = ?, scanned_by_name = ?, scanned_by_photo = ?,
              status = 'matched'
          WHERE id = ?`
       )
-        .bind(finalMatchedUserId, finalMatchedUsername, body.tenant_id, transactionId)
+        .bind(finalMatchedUserId, finalMatchedUsername, body.tenant_id,
+              scannedById, scannedByName, scannedByPhoto,
+              transactionId)
         .run();
     } else {
       result = await env.DB.prepare(
-        `UPDATE pending_transactions 
-         SET matched_user_id = ?, 
-             matched_username = ?,
+        `UPDATE pending_transactions
+         SET matched_user_id = ?, matched_username = ?,
+             scanned_by_id = ?, scanned_by_name = ?, scanned_by_photo = ?,
              status = 'matched'
          WHERE id = ?`
       )
-        .bind(finalMatchedUserId, finalMatchedUsername, transactionId)
+        .bind(finalMatchedUserId, finalMatchedUsername,
+              scannedById, scannedByName, scannedByPhoto,
+              transactionId)
         .run();
     }
 
@@ -180,6 +192,9 @@ export async function handleMatchPendingTransaction(
             status: 'matched',
             matched_user_id: finalMatchedUserId,
             matched_username: finalMatchedUsername,
+            scanned_by_id: scannedById,
+            scanned_by_name: scannedByName,
+            scanned_by_photo: scannedByPhoto,
             tenant_id: body.tenant_id || (updated as any)?.tenant_id,
             tenant_name: (updated as any)?.tenant_name || null,
             updated_at: Math.floor(Date.now() / 1000),

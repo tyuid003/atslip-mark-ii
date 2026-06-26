@@ -213,6 +213,41 @@ export async function getOrCreateLineMessageSettings(
     .first<LineMessageSettings>()) as LineMessageSettings;
 }
 
+/**
+ * อ่าน settings แบบ read-only (ไม่ INSERT) — ใช้กับ flow ที่ไม่มี line_oas จริง
+ * (เช่น U-shop) เพราะตาราง line_message_settings มี FK line_oa_id → line_oas(id)
+ * การ INSERT synthetic line_oa_id จะชน FOREIGN KEY constraint
+ *
+ * ลำดับ: หา row ของ tenant นี้ (ถ้ามี LINE OA ที่ตั้งค่าไว้แล้วก็ใช้สไตล์เดียวกัน)
+ * ถ้าไม่มีเลย → คืนค่า default ใน memory
+ */
+export async function getLineMessageSettingsReadOnly(
+  env: Env,
+  tenantId: string
+): Promise<LineMessageSettings> {
+  await ensureLineMessageSettingsTable(env);
+
+  const existing = await env.DB.prepare(
+    `SELECT * FROM line_message_settings WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 1`
+  )
+    .bind(tenantId)
+    .first<LineMessageSettings>();
+
+  if (existing) {
+    return existing;
+  }
+
+  const now = currentTimestamp();
+  return {
+    id: 'default',
+    line_oa_id: `ushop-${tenantId}`,
+    tenant_id: tenantId,
+    ...DEFAULT_SETTINGS,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export async function updateLineMessageSettings(
   env: Env,
   lineOAId: string,
