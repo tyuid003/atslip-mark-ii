@@ -1340,6 +1340,14 @@ function showDuplicatePopup(dupData, imgDataUrl) {
     ? `<div class="dup-slip-img-wrap"><img src="${imgDataUrl}" alt="สลิป" class="dup-slip-img"></div>`
     : '';
 
+  const actionBtns = _dupPopupTxId ? `
+    <button class="dup-slip-withdraw-btn" id="dupWithdrawBtn" onclick="window._dupWithdrawItem(this)" title="ดึงเครดิตกลับ">
+      <i data-lucide="undo-2"></i> ดึงเครดิตกลับ
+    </button>
+    <button class="dup-slip-credit-btn" id="dupCreditBtn" onclick="window._dupCreditItem(this)" title="เติมเครดิต">
+      <i data-lucide="coins"></i> เติมเครดิต
+    </button>` : '';
+
   const deleteBtn = _dupPopupTxId
     ? `<button class="dup-slip-delete-btn" onclick="window._dupDeleteAndClose()" title="ลบรายการ">
          <i data-lucide="trash-2"></i> ลบรายการ
@@ -1388,7 +1396,10 @@ function showDuplicatePopup(dupData, imgDataUrl) {
       </div>
       <div class="modal-footer dup-slip-footer">
         ${deleteBtn}
-        <button class="dup-slip-close-btn" onclick="closeDuplicatePopup()">ปิด</button>
+        <div class="dup-slip-footer-right">
+          ${actionBtns}
+          <button class="dup-slip-close-btn" onclick="closeDuplicatePopup()">ปิด</button>
+        </div>
       </div>
     </div>
   `;
@@ -1413,6 +1424,64 @@ window._dupDeleteAndClose = function () {
   if (!_dupPopupTxId) return;
   deletePendingItem(_dupPopupTxId).then(deleted => { if (deleted) closeDuplicatePopup(); });
 };
+window._dupCreditItem = async function (btnEl) {
+  if (!_dupPopupTxId) return;
+  if (btnEl.dataset.loading === '1') return;
+  btnEl.dataset.loading = '1';
+  btnEl.disabled = true;
+  const orig = btnEl.innerHTML;
+  btnEl.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-radius:50%;border-top-color:transparent;animation:spin 0.8s linear infinite;vertical-align:middle"></span> กำลังเติม...';
+  try {
+    const response = await api.creditPendingTransaction(_dupPopupTxId, {
+      scanned_by_id:    window.atslipAuth?.user?.telegram_id   || null,
+      scanned_by_name:  window.atslipGetDisplayName?.(window.atslipAuth?.user) || null,
+      scanned_by_photo: localStorage.getItem('atslip_photo')  || null,
+    });
+    addNotification(response?.data?.status === 'duplicate' ? '⚠️ รายการซ้ำในระบบแอดมิน' : '✅ เติมเครดิตสำเร็จ');
+    await loadPendingTransactions();
+    _refreshScanLogIfVisible();
+    closeDuplicatePopup();
+  } catch (err) {
+    addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + err.message);
+    btnEl.dataset.loading = '0';
+    btnEl.disabled = false;
+    btnEl.innerHTML = orig;
+    if (window.lucide) lucide.createIcons();
+  }
+};
+window._dupWithdrawItem = async function (btnEl) {
+  if (!_dupPopupTxId) return;
+  if (btnEl.dataset.loading === '1') return;
+  btnEl.dataset.loading = '1';
+  btnEl.disabled = true;
+  const orig = btnEl.innerHTML;
+  btnEl.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-radius:50%;border-top-color:transparent;animation:spin 0.8s linear infinite;vertical-align:middle"></span> กำลังดึง...';
+  try {
+    await api.withdrawPendingCredit(_dupPopupTxId, {
+      remark: 'Manual withdraw from duplicate popup',
+      scanned_by_id:    window.atslipAuth?.user?.telegram_id   || null,
+      scanned_by_name:  window.atslipGetDisplayName?.(window.atslipAuth?.user) || null,
+      scanned_by_photo: localStorage.getItem('atslip_photo')  || null,
+    });
+    addNotification('✅ ดึงเครดิตกลับสำเร็จ');
+    await loadPendingTransactions();
+    _refreshScanLogIfVisible();
+    closeDuplicatePopup();
+  } catch (err) {
+    addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + err.message);
+    btnEl.dataset.loading = '0';
+    btnEl.disabled = false;
+    btnEl.innerHTML = orig;
+    if (window.lucide) lucide.createIcons();
+  }
+};
+
+// อัพเดทชื่อยูสเซอร์ใน popup แบบ realtime หลังจากจับคู่สำเร็จ
+function _refreshDupPopupUser(displayName, tenantId) {
+  const el = document.getElementById('dupSlipUserText');
+  if (el) el.textContent = displayName || '—';
+  if (tenantId) _dupPopupTenantId = tenantId;
+}
 
 async function deletePendingItem(transactionId) {
   // สร้าง custom confirmation modal
@@ -1898,6 +1967,10 @@ async function selectUser(indexOrId, fallbackName) {
 
     const finalUsername = result?.data?.transaction?.matched_username || fullname;
     addNotification(`✅ จับคู่กับ ${finalUsername} (${matchedUserId}) สำเร็จ`);
+    // อัพเดท duplicate popup แบบ realtime ถ้ากำลังแสดงอยู่
+    if (document.getElementById('dupSlipModal') && currentSearchTransactionId === _dupPopupTxId) {
+      _refreshDupPopupUser(finalUsername || matchedUserId, currentSearchTenantId);
+    }
     closeUserSearch();
     await loadPendingTransactions();
     _refreshScanLogIfVisible();

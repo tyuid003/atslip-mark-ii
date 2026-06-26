@@ -1213,3 +1213,62 @@ body {
 .dup-slip-close-btn:hover {
   background: var(--color-gray-200);
 }
+.dup-slip-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.dup-slip-footer-right {
+  display: flex;
+  gap: var(--space-sm);
+  margin-left: auto;
+  align-items: center;
+}
+
+.dup-slip-credit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 1rem;
+  background: var(--color-success);
+  color: var(--color-white);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.dup-slip-credit-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.dup-slip-credit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dup-slip-withdraw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 1rem;
+  background: transparent;
+  color: var(--color-warning);
+  border: 1.5px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dup-slip-withdraw-btn:hover:not(:disabled) {
+  background: var(--color-warning);
+  color: var(--color-white);
+}
+
+.dup-slip-withdraw-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
