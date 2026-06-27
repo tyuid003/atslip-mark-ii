@@ -462,6 +462,22 @@ class API {
     if (tenantId) params.set('tenant_id', tenantId);
     return this.request(`/api/users/search?${params.toString()}`);
   }
+
+  // ============================================================
+  // ANTI-DUP + ACCOUNT MODES SETTINGS APIs
+  // ============================================================
+  async getAntidupSettings() { return this.request('/api/settings/antidup'); }
+  async setAntidupSetting(accountId, enabled) {
+    return this.request('/api/settings/antidup', { method: 'POST', body: JSON.stringify({ account_id: accountId, enabled }) });
+  }
+  async getAntidupCrossSettings() { return this.request('/api/settings/antidup-cross'); }
+  async setAntidupCrossSetting(accountId, enabled, windowSeconds) {
+    return this.request('/api/settings/antidup-cross', { method: 'POST', body: JSON.stringify({ account_id: accountId, enabled, window_seconds: windowSeconds }) });
+  }
+  async getAccountModes() { return this.request('/api/settings/account-modes'); }
+  async setAccountMode(accountId, auto) {
+    return this.request('/api/settings/account-modes', { method: 'POST', body: JSON.stringify({ account_id: accountId, auto }) });
+  }
 }
 
 // Create API instance

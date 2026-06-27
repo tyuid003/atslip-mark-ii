@@ -653,15 +653,20 @@ async function viewBankAccounts(tenantId) {
     const bankData = response.data || {};
     const accounts = bankData.accounts || [];
 
-    // ดึง metadata จาก D1 ด้วย
+    // ดึง metadata และ account modes พร้อมกัน
     let metadata = [];
+    let accountModes = {};
     try {
-      const metadataResponse = await api.getBankAccountsMetadata(tenantId);
-      metadata = (metadataResponse.data || {}).accounts || [];
+      const [metadataResponse, modesResponse] = await Promise.allSettled([
+        api.getBankAccountsMetadata(tenantId),
+        api.getAccountModes(),
+      ]);
+      if (metadataResponse.status === 'fulfilled') metadata = (metadataResponse.value.data || {}).accounts || [];
+      if (modesResponse.status === 'fulfilled') accountModes = modesResponse.value.account_modes || {};
     } catch (err) {
     }
 
-    renderBankAccountsList(accounts, metadata);
+    renderBankAccountsList(accounts, metadata, accountModes);
     document.getElementById('bankAccountsModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
@@ -669,7 +674,7 @@ async function viewBankAccounts(tenantId) {
   }
 }
 
-function renderBankAccountsList(accounts, metadata = []) {
+function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
   let html = '';
 
   if (accounts.length === 0) {
@@ -681,6 +686,9 @@ function renderBankAccountsList(accounts, metadata = []) {
       const meta = metadata.find(m => m.account_id === accountId);
       const englishName = meta?.account_name_en || '';
       const metaId = meta?.id || '';
+      // account mode: true = auto (default), false = manual
+      const isAuto = accountModes[accountId] !== false;
+      const safeAccId = accountId.replace(/'/g, "\\'");
 
       html += `
         <div class="bank-account-item">
@@ -690,6 +698,14 @@ function renderBankAccountsList(accounts, metadata = []) {
               <div class="bank-name">${account.accountName || 'ไม่ระบุชื่อ'}</div>
               <div class="bank-number">${account.accountNumber || '-'}</div>
               ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">โหมดรับสลิป:</span>
+                <label class="toggle-switch" style="margin:0;">
+                  <input type="checkbox" ${isAuto ? 'checked' : ''} onchange="window._setAccountMode('${safeAccId}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:0.78rem;color:${isAuto ? 'var(--color-success,#16a34a)' : 'var(--color-gray-500)'};font-weight:500;" id="acc-mode-label-${safeAccId}">${isAuto ? 'Auto' : 'Manual'}</span>
+              </div>
               ${metaId ? `
               <div style="margin-top: var(--space-xs);">
                 <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ</label>
@@ -732,6 +748,20 @@ function renderBankAccountsList(accounts, metadata = []) {
   lucide.createIcons();
 }
 
+window._setAccountMode = async function (accountId, auto) {
+  try {
+    await api.setAccountMode(accountId, auto);
+    const label = document.getElementById('acc-mode-label-' + accountId);
+    if (label) {
+      label.textContent = auto ? 'Auto' : 'Manual';
+      label.style.color = auto ? 'var(--color-success,#16a34a)' : 'var(--color-gray-500)';
+    }
+    addNotification(auto ? '✅ เปลี่ยนเป็น Auto' : '✅ เปลี่ยนเป็น Manual');
+  } catch (e) {
+    addNotification('❌ บันทึกไม่สำเร็จ: ' + e.message);
+  }
+};
+
 async function refreshBankAccountsNow() {
   if (!currentTenantId) return;
 
@@ -756,15 +786,20 @@ async function refreshBankAccountsNow() {
     const accountsResponse = await api.getBankAccounts(currentTenantId);
     const accounts = (accountsResponse.data || {}).accounts || [];
     
-    // ดึง metadata ด้วย
+    // ดึง metadata + modes พร้อมกัน
     let metadata = [];
+    let accountModes = {};
     try {
-      const metadataResponse = await api.getBankAccountsMetadata(currentTenantId);
-      metadata = (metadataResponse.data || {}).accounts || [];
+      const [metadataResponse, modesResponse] = await Promise.allSettled([
+        api.getBankAccountsMetadata(currentTenantId),
+        api.getAccountModes(),
+      ]);
+      if (metadataResponse.status === 'fulfilled') metadata = (metadataResponse.value.data || {}).accounts || [];
+      if (modesResponse.status === 'fulfilled') accountModes = modesResponse.value.account_modes || {};
     } catch (err) {
     }
     
-    renderBankAccountsList(accounts, metadata);
+    renderBankAccountsList(accounts, metadata, accountModes);
 
     // รีเฟรชรายการ tenant เพื่ออัพเดทสถานะ (clear cache ก่อน)
     sessionStorage.removeItem('tenants_cache');
@@ -786,11 +821,16 @@ async function refreshBankAccountsNow() {
       const accountsResponse = await api.getBankAccounts(currentTenantId);
       const accounts = (accountsResponse.data || {}).accounts || [];
       let metadata = [];
+      let accountModes = {};
       try {
-        const metadataResponse = await api.getBankAccountsMetadata(currentTenantId);
-        metadata = (metadataResponse.data || {}).accounts || [];
+        const [metadataResponse, modesResponse] = await Promise.allSettled([
+          api.getBankAccountsMetadata(currentTenantId),
+          api.getAccountModes(),
+        ]);
+        if (metadataResponse.status === 'fulfilled') metadata = (metadataResponse.value.data || {}).accounts || [];
+        if (modesResponse.status === 'fulfilled') accountModes = modesResponse.value.account_modes || {};
       } catch (err) {}
-      renderBankAccountsList(accounts, metadata);
+      renderBankAccountsList(accounts, metadata, accountModes);
     }
     lucide.createIcons();
   } finally {

@@ -624,6 +624,18 @@ export default {
     if (method === 'POST' && pathname === '/api/settings/antidup') {
       return await AntidupSettingsAPI.handlePost(request, env);
     }
+    if (method === 'GET' && pathname === '/api/settings/antidup-cross') {
+      return await AntidupSettingsAPI.handleGetCross(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/settings/antidup-cross') {
+      return await AntidupSettingsAPI.handlePostCross(request, env);
+    }
+    if (method === 'GET' && pathname === '/api/settings/account-modes') {
+      return await AntidupSettingsAPI.handleGetAccountModes(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/settings/account-modes') {
+      return await AntidupSettingsAPI.handlePostAccountMode(request, env);
+    }
 
     // ============================================================
     // PRESENCE ROUTES

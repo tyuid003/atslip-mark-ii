@@ -563,6 +563,84 @@ export const ScanAPI = {
         }
       }
 
+      // ── Cross-user anti-dup (เช็คซ้ำกับรายการฝากของสมาชิกอื่น) ────────────────────
+      if (!isV2Tenant && sessionTokenForAntidup) {
+        try {
+          const crossAccId = receiverAccount && sessionTokenForAntidup
+            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionTokenForAntidup, receiverAccount, env)
+            : null;
+          const crossEnabled = crossAccId
+            ? await AntidupSettingsAPI.isCrossEnabled(env, matchedTenant.team_id, crossAccId)
+            : false;
+
+          if (crossEnabled && crossAccId) {
+            const windowMs = (await AntidupSettingsAPI.getCrossWindowSeconds(env, matchedTenant.team_id, crossAccId)) * 1000;
+            const slipAmount = slip.amount?.amount;
+            const slipTime = normalizeTimeMs(slip.date);
+            const today = new Date().toISOString().slice(0, 10);
+            const cacheKey = `tenant:${matchedTenant.id}:crossdup-cache-${today}`;
+
+            let txnList: any[] | null = null;
+            try {
+              const cached = await env.BANK_KV.get(cacheKey, 'json') as { fetchedAt: number; transactions: any[] } | null;
+              if (cached && (Date.now() - cached.fetchedAt) < 60_000) {
+                txnList = cached.transactions;
+                log('[ScanAPI] 🗃️ Cross-dup: cached', txnList.length, 'transactions');
+              }
+            } catch { /* ignore */ }
+
+            if (!txnList) {
+              try {
+                const listResp = await fetch(
+                  `${matchedTenant.admin_api_url}/api/user-transactions/list?page=1&limit=100&sortCol=transfer_at&sortAsc=desc&fromDate=${today}&toDate=${today}`,
+                  { headers: { Authorization: `Bearer ${sessionTokenForAntidup}`, Accept: 'application/json' } },
+                );
+                if (listResp.ok) {
+                  const listData = await listResp.json() as { list?: any[] };
+                  txnList = (listData.list || []).filter((t: any) => t.typeName === 'ฝาก' || t.directionName === 'DEPOSIT');
+                  await env.BANK_KV.put(cacheKey, JSON.stringify({ fetchedAt: Date.now(), transactions: txnList }), { expirationTtl: 300 });
+                  log('[ScanAPI] 🔄 Cross-dup: fetched', txnList.length, 'transactions from API');
+                }
+              } catch (fetchErr: any) {
+                log('[ScanAPI] ⚠️ Cross-dup: fetch error', fetchErr?.message);
+              }
+            }
+
+            if (txnList && slipTime !== null && typeof slipAmount === 'number') {
+              const currentMemberCode = matchedUser?.memberCode || '';
+              const crossDup = txnList.find((t: any) => {
+                // ข้ามรายการของสมาชิกเดิม (สวิทช์ 1 จัดการแล้ว)
+                if (currentMemberCode && String(t.userMemberCode || '') === currentMemberCode) return false;
+                if (typeof t.creditAmount !== 'number' || Math.abs(t.creditAmount - slipAmount) > 0.01) return false;
+                const txnTime = normalizeTimeMs(t.transferAt);
+                return txnTime !== null && Math.abs(txnTime - slipTime) <= windowMs;
+              });
+
+              if (crossDup) {
+                log('[ScanAPI] ⚠️ Cross-dup: duplicate from member', crossDup.userMemberCode);
+                return jsonResponse({
+                  success: false,
+                  error: 'พบรายการฝากซ้ำจากสมาชิกอื่น (Cross Anti-Dup)',
+                  data: {
+                    status: 'duplicate',
+                    tenant: { id: matchedTenant.id, name: matchedTenant.name },
+                    slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
+                    sender: {
+                      id: matchedUser?.id || null,
+                      name: matchedUser?.fullname || senderNameTh || senderNameEn || 'Unknown',
+                      username: matchedUser?.memberCode || matchedUser?.username || null,
+                      matched: !!matchedUser,
+                    },
+                  },
+                }, 400);
+              }
+            }
+          }
+        } catch (crossDupErr: any) {
+          log('[ScanAPI] ⚠️ Cross-dup check error (non-blocking):', crossDupErr?.message);
+        }
+      }
+
       // ตรวจสอบสลิปซ้ำก่อนบันทึก
       const existingSlip = await env.DB.prepare(
         `SELECT id, matched_user_id, matched_username, tenant_id, status FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
@@ -690,10 +768,19 @@ export const ScanAPI = {
       // ถ้า matched user และ auto-deposit เปิดอยู่ → ทำการเติมเครดิตอัตโนมัติ
       let creditResult = null;
       if (matchedUser) {
-        // ตรวจสอบว่า auto-deposit เปิดอยู่หรือไม่
+        // ตรวจสอบว่า auto-deposit เปิดอยู่หรือไม่ (tenant level)
         const autoDepositEnabled = await CreditService.isAutoDepositEnabled(env, matchedTenant.id);
-        
-        if (autoDepositEnabled) {
+
+        // ตรวจสอบ account mode (auto/manual per account)
+        const toAccountIdForMode = receiverAccount
+          ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url,
+              session ? String((session as any).session_token || '') : null, receiverAccount, env)
+          : null;
+        const accountIsAuto = toAccountIdForMode
+          ? await AntidupSettingsAPI.getAccountIsAuto(env, matchedTenant.team_id, toAccountIdForMode)
+          : true;
+
+        if (autoDepositEnabled && accountIsAuto) {
           log('[ScanAPI] 🎯 Auto-deposit is ENABLED - triggering credit submission...');
 
           const toAccountId = receiverAccount
@@ -877,7 +964,7 @@ export const ScanAPI = {
             // สถานะยังคงเป็น matched (ไม่เปลี่ยน)
           }
         } else {
-          log('[ScanAPI] ⏭️ Auto-deposit is DISABLED - skipping credit submission');
+          log('[ScanAPI] ⏭️ Auto-deposit is DISABLED or account is MANUAL - skipping credit submission');
         }
       } else {
         log('[ScanAPI] ⏭️ No matched user - skipping credit submission');

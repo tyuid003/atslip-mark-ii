@@ -87,15 +87,23 @@
     if (modal) modal.style.display = 'none';
   };
 
+  // state for cross-dup popup
+  let _pendingCrossAccId = null;
+  let _pendingCrossCheckbox = null;
+
   async function _loadAntidupAccounts() {
     const container = document.getElementById('antidupAccountList');
     if (!container) return;
     container.innerHTML = '<div class="loading" style="margin:auto;"></div>';
 
     try {
-      // ดึงรายการ accountId ที่เปิด anti-dup
-      const settingsResp = await window.api.request('/api/settings/antidup');
+      // ดึง settings ทั้ง 2 switch พร้อมกัน
+      const [settingsResp, crossResp] = await Promise.all([
+        window.api.getAntidupSettings(),
+        window.api.getAntidupCrossSettings(),
+      ]);
       const enabledAccounts = new Set(settingsResp.enabled_accounts || []);
+      const crossSettings = crossResp.cross_settings || {};
 
       // ดึงรายชื่อเว็บ
       const tenantsResp = await window.api.request(`/api/tenants?team_slug=${window.currentTeamSlug || ''}`);
@@ -110,13 +118,11 @@
       for (const tenant of tenants) {
         let accounts = [];
         try {
-          // ดึง KV accounts (primary = source เดียวกับ bank popup) + D1 metadata (fallback)
           const [kvResp, metaResp] = await Promise.allSettled([
             window.api.request(`/api/tenants/${tenant.id}/accounts`),
             window.api.request(`/api/tenants/${tenant.id}/bank-accounts/metadata`),
           ]);
 
-          // Primary: KV accounts — เหมือน bank popup, ถูกต้องเสมอ
           const kvList = kvResp.status === 'fulfilled'
             ? (kvResp.value?.data?.accounts || kvResp.value?.accounts || [])
             : [];
@@ -130,7 +136,6 @@
               bankIconUrl: a.bankIconUrl || '',
             }));
           } else {
-            // Fallback: D1 metadata + iconMap จาก KV (กรณี KV หมดอายุ)
             const metaList = metaResp.status === 'fulfilled'
               ? (metaResp.value?.data?.accounts || [])
               : [];
@@ -142,31 +147,51 @@
               bankIconUrl: '',
             }));
           }
-        } catch { /* ไม่มี session / ไม่เชื่อมต่อ */ }
+        } catch { /* no session */ }
 
-        html += `<div style="margin-bottom:16px;">
+        html += `<div style="margin-bottom:18px;">
           <div style="font-size:0.78rem;color:var(--text-muted,#888);font-weight:600;letter-spacing:.04em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border,#e5e7eb);">${_esc(tenant.name)}</div>`;
 
         if (!accounts.length) {
           html += `<p style="font-size:0.82rem;color:var(--text-muted,#888);margin:4px 0 0;">ไม่พบบัญชี (กรุณา Sync บัญชีก่อน)</p>`;
         } else {
           for (const acc of accounts) {
-            const checked = enabledAccounts.has(acc.id) ? 'checked' : '';
+            const sw1 = enabledAccounts.has(acc.id) ? 'checked' : '';
+            const crossCfg = crossSettings[acc.id] || {};
+            const sw2 = crossCfg.enabled ? 'checked' : '';
             const iconHtml = acc.bankIconUrl
-              ? `<img src="${_esc(acc.bankIconUrl)}" alt="${_esc(acc.bankName)}" class="bank-icon" style="width:32px;height:32px;border-radius:6px;flex-shrink:0;margin-right:8px;" onerror="this.style.display='none'">`
+              ? `<img src="${_esc(acc.bankIconUrl)}" alt="${_esc(acc.bankName)}" style="width:30px;height:30px;border-radius:6px;flex-shrink:0;margin-right:8px;" onerror="this.style.display='none'">`
               : '';
-            html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;">
-              <div style="display:flex;align-items:center;flex:1;min-width:0;">
+            html += `<div style="padding:8px 0;border-bottom:1px solid var(--border-light,#f3f4f6);">
+              <div style="display:flex;align-items:center;margin-bottom:8px;">
                 ${iconHtml}
-                <div style="font-size:0.88rem;min-width:0;">
+                <div style="font-size:0.88rem;flex:1;min-width:0;">
                   <div style="font-weight:500;">${_esc(acc.accountName)}</div>
                   ${acc.accountNumber ? `<div style="color:var(--text-muted,#888);font-size:0.8rem;">${_esc(acc.accountNumber)}</div>` : ''}
                 </div>
               </div>
-              <label class="toggle-switch" style="flex-shrink:0;margin-left:12px;">
-                <input type="checkbox" ${checked} onchange="window._antidupToggle('${_esc(acc.id)}', this.checked)">
-                <span class="toggle-slider"></span>
-              </label>
+              <div style="display:flex;flex-direction:column;gap:6px;padding-left:38px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                  <div>
+                    <div style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำภายในยูสเซอร์</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted,#888);line-height:1.4;">ตรวจว่าลูกค้าคนเดิมเคยได้รับเครดิตยอดนี้ไปแล้ว (ภายใน 1 นาที)</div>
+                  </div>
+                  <label class="toggle-switch" style="flex-shrink:0;margin-top:2px;">
+                    <input type="checkbox" ${sw1} onchange="window._antidupToggle('${_esc(acc.id)}', this.checked)">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                  <div>
+                    <div style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำกับรายการอื่น</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted,#888);line-height:1.4;">ป้องกันทุจริต: ตรวจว่ามีสมาชิกอื่นใช้สลิปเดียวกัน (ยอด+เวลาตรงกัน)</div>
+                  </div>
+                  <label class="toggle-switch" style="flex-shrink:0;margin-top:2px;">
+                    <input type="checkbox" ${sw2} onchange="window._antidupCrossToggle('${_esc(acc.id)}', this.checked, this)">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
             </div>`;
           }
         }
@@ -180,13 +205,77 @@
 
   window._antidupToggle = async function (accountId, enabled) {
     try {
-      await window.api.request('/api/settings/antidup', {
-        method: 'POST',
-        body: JSON.stringify({ account_id: accountId, enabled }),
-      });
+      await window.api.setAntidupSetting(accountId, enabled);
     } catch (err) {
       alert('บันทึกไม่สำเร็จ: ' + err.message);
     }
+  };
+
+  window._antidupCrossToggle = function (accountId, enabled, checkboxEl) {
+    if (!enabled) {
+      // ปิด → บันทึกทันที
+      window.api.setAntidupCrossSetting(accountId, false, 60).catch(function (err) {
+        alert('บันทึกไม่สำเร็จ: ' + err.message);
+        checkboxEl.checked = true; // revert
+      });
+    } else {
+      // เปิด → แสดง popup ให้กำหนด window
+      _pendingCrossAccId = accountId;
+      _pendingCrossCheckbox = checkboxEl;
+      _showCrossDupWindowPopup();
+    }
+  };
+
+  function _showCrossDupWindowPopup() {
+    // ลบ popup เก่า (ถ้ามี)
+    const old = document.getElementById('crossDupWindowModal');
+    if (old) old.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'crossDupWindowModal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:var(--surface,#fff);border-radius:12px;padding:24px;width:320px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <h3 style="margin:0 0 8px;font-size:1rem;font-weight:600;">ตั้งค่าช่วงเวลาเช็คซ้ำ</h3>
+        <p style="font-size:0.83rem;color:var(--text-muted,#888);margin:0 0 16px;line-height:1.5;">
+          ระบบจะตรวจว่ามีสมาชิกอื่นฝากยอดเดียวกันภายในช่วงเวลานี้<br>
+          (หน่วย: วินาที — ค่าแนะนำ: 60 วินาที)
+        </p>
+        <label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:6px;">ช่วงเวลา (วินาที)</label>
+        <input id="crossDupWindowInput" type="number" min="1" max="3600" value="60"
+          style="width:100%;padding:8px 10px;border:1px solid var(--border,#d1d5db);border-radius:8px;font-size:0.95rem;box-sizing:border-box;outline:none;">
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+          <button onclick="window._cancelCrossDupModal()" style="padding:8px 16px;border:1px solid var(--border,#d1d5db);background:transparent;border-radius:8px;cursor:pointer;font-size:0.88rem;">ยกเลิก</button>
+          <button onclick="window._confirmCrossDupModal()" style="padding:8px 16px;background:var(--primary,#3b82f6);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;">ยืนยัน</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    setTimeout(() => document.getElementById('crossDupWindowInput')?.focus(), 50);
+  }
+
+  window._confirmCrossDupModal = async function () {
+    const input = document.getElementById('crossDupWindowInput');
+    const seconds = Math.max(1, parseInt(input?.value || '60', 10) || 60);
+    const accountId = _pendingCrossAccId;
+    const cb = _pendingCrossCheckbox;
+    _pendingCrossAccId = null;
+    _pendingCrossCheckbox = null;
+    const overlay = document.getElementById('crossDupWindowModal');
+    if (overlay) overlay.remove();
+    try {
+      await window.api.setAntidupCrossSetting(accountId, true, seconds);
+    } catch (err) {
+      alert('บันทึกไม่สำเร็จ: ' + err.message);
+      if (cb) cb.checked = false;
+    }
+  };
+
+  window._cancelCrossDupModal = function () {
+    if (_pendingCrossCheckbox) _pendingCrossCheckbox.checked = false;
+    _pendingCrossAccId = null;
+    _pendingCrossCheckbox = null;
+    const overlay = document.getElementById('crossDupWindowModal');
+    if (overlay) overlay.remove();
   };
 
   function _esc(str) {
