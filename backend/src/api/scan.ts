@@ -565,10 +565,10 @@ export const ScanAPI = {
 
       // ตรวจสอบสลิปซ้ำก่อนบันทึก
       const existingSlip = await env.DB.prepare(
-        `SELECT id, matched_user_id, matched_username, tenant_id FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
+        `SELECT id, matched_user_id, matched_username, tenant_id, status FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
       )
         .bind(slip.transRef)
-        .first<{ id: string; matched_user_id: string | null; matched_username: string | null; tenant_id: string }>();
+        .first<{ id: string; matched_user_id: string | null; matched_username: string | null; tenant_id: string; status: string }>();
 
       if (existingSlip) {
         log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
@@ -577,6 +577,7 @@ export const ScanAPI = {
           error: 'สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)',
           data: {
             status: 'duplicate',
+            current_status: existingSlip.status,
             transaction_id: existingSlip.id,
             matched_user_id: existingSlip.matched_user_id || null,
             matched_username: existingSlip.matched_username || null,

@@ -27,6 +27,7 @@ let allPendingTransactions = []; // Store all pending data before filtering/sort
 let _pendingFirstLoad = true; // ใช้ skeleton เฉพาะโหลดครั้งแรก (ป้องกัน flicker ตอนอัพเดท)
 let _dupPopupTxId = null; // transaction_id สำหรับ popup สลิปซ้ำ
 let _dupPopupTenantId = null; // tenant_id สำหรับ popup สลิปซ้ำ
+let _dupPopupCurrentStatus = null; // สถานะปัจจุบันของ transaction ใน popup
 
 function levenshteinDistance(a, b) {
   const s = String(a || '');
@@ -1321,16 +1322,24 @@ function showDuplicatePopup(dupData, imgDataUrl) {
   _dupPopupTxId = dupData.transaction_id || null;
   _dupPopupTenantId = dupData.tenant?.id || null;
 
+  // หา current_status จาก response หรือจาก allPendingTransactions cache
+  let currentStatus = dupData.current_status || null;
+
   // หา matched user จาก allPendingTransactions (ถ้ามี transaction_id)
   let matchedUserDisplay = '—';
   if (dupData.matched_username || dupData.matched_user_id) {
     matchedUserDisplay = dupData.matched_username || dupData.matched_user_id;
   } else if (_dupPopupTxId) {
     const existing = allPendingTransactions.find(t => t.id === _dupPopupTxId);
-    if (existing && (existing.matched_username || existing.matched_user_id)) {
-      matchedUserDisplay = existing.matched_username || existing.matched_user_id;
+    if (existing) {
+      if (existing.matched_username || existing.matched_user_id) {
+        matchedUserDisplay = existing.matched_username || existing.matched_user_id;
+      }
+      if (!currentStatus && existing.status) currentStatus = existing.status;
     }
   }
+
+  _dupPopupCurrentStatus = currentStatus;
 
   const amount = typeof dupData.slip?.amount === 'number'
     ? dupData.slip.amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1340,17 +1349,15 @@ function showDuplicatePopup(dupData, imgDataUrl) {
     ? `<div class="dup-slip-img-wrap"><img src="${imgDataUrl}" alt="สลิป" class="dup-slip-img"></div>`
     : '';
 
-  const actionBtns = _dupPopupTxId ? `
-    <button class="dup-slip-withdraw-btn" id="dupWithdrawBtn" onclick="window._dupWithdrawItem(this)" title="ดึงเครดิตกลับ">
-      <i data-lucide="undo-2"></i> ดึงเครดิตกลับ
-    </button>
-    <button class="dup-slip-credit-btn" id="dupCreditBtn" onclick="window._dupCreditItem(this)" title="เติมเครดิต">
-      <i data-lucide="coins"></i> เติมเครดิต
-    </button>` : '';
+  // Status badge
+  const statusLabels = { credited: 'เติมแล้ว', duplicate: 'ยอดซ้ำ', matched: 'จับคู่แล้ว', pending: 'รอดำเนินการ' };
+  const statusHtml = currentStatus
+    ? `<span class="dup-status-badge dup-status-${currentStatus}">${statusLabels[currentStatus] || currentStatus}</span>`
+    : '<span class="dup-slip-val">—</span>';
 
   const deleteBtn = _dupPopupTxId
-    ? `<button class="dup-slip-delete-btn" onclick="window._dupDeleteAndClose()" title="ลบรายการ">
-         <i data-lucide="trash-2"></i> ลบรายการ
+    ? `<button class="dup-slip-delete-btn dup-icon-btn" onclick="window._dupDeleteAndClose()" title="ลบรายการ">
+         <i data-lucide="trash-2"></i>
        </button>`
     : '';
 
@@ -1371,6 +1378,10 @@ function showDuplicatePopup(dupData, imgDataUrl) {
       <div class="modal-body dup-slip-body">
         ${imageHtml}
         <div class="dup-slip-details">
+          <div class="dup-slip-row">
+            <span class="dup-slip-label">สถานะ</span>
+            <span class="dup-slip-val">${statusHtml}</span>
+          </div>
           <div class="dup-slip-row">
             <span class="dup-slip-label">ยอดเงิน</span>
             <span class="dup-slip-val dup-slip-amount">${amount} บาท</span>
@@ -1397,8 +1408,10 @@ function showDuplicatePopup(dupData, imgDataUrl) {
       <div class="modal-footer dup-slip-footer">
         ${deleteBtn}
         <div class="dup-slip-footer-right">
-          ${actionBtns}
-          <button class="dup-slip-close-btn" onclick="closeDuplicatePopup()">ปิด</button>
+          <div id="dupActionBtnWrap">${_dupActionBtnHtml(currentStatus)}</div>
+          <button class="dup-slip-close-btn dup-icon-btn" onclick="closeDuplicatePopup()" title="ปิด">
+            <i data-lucide="x"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -1409,11 +1422,30 @@ function showDuplicatePopup(dupData, imgDataUrl) {
   if (window.lucide) lucide.createIcons();
 }
 
+// สร้าง HTML ของปุ่ม credit/withdraw ตามสถานะ
+function _dupActionBtnHtml(status) {
+  if (!_dupPopupTxId) return '';
+  if (status === 'credited') {
+    return `<button class="dup-slip-withdraw-btn dup-icon-btn" id="dupActionBtn" onclick="window._dupWithdrawItem(this)" title="ดึงเครดิตกลับ"><i data-lucide="undo-2"></i></button>`;
+  }
+  return `<button class="dup-slip-credit-btn dup-icon-btn" id="dupActionBtn" onclick="window._dupCreditItem(this)" title="เติมเครดิต"><i data-lucide="coins"></i></button>`;
+}
+
+// อัพเดท action button ใน popup หลังจากสถานะเปลี่ยน
+function _refreshDupActionBtn(newStatus) {
+  _dupPopupCurrentStatus = newStatus;
+  const wrap = document.getElementById('dupActionBtnWrap');
+  if (!wrap) return;
+  wrap.innerHTML = _dupActionBtnHtml(newStatus);
+  if (window.lucide) lucide.createIcons();
+}
+
 function closeDuplicatePopup() {
   const el = document.getElementById('dupSlipModal');
   if (el) el.remove();
   _dupPopupTxId = null;
   _dupPopupTenantId = null;
+  _dupPopupCurrentStatus = null;
 }
 
 window.closeDuplicatePopup = closeDuplicatePopup;
@@ -1481,6 +1513,10 @@ function _refreshDupPopupUser(displayName, tenantId) {
   const el = document.getElementById('dupSlipUserText');
   if (el) el.textContent = displayName || '—';
   if (tenantId) _dupPopupTenantId = tenantId;
+  // ถ้าสถานะยังไม่ใช่ credited → เปลี่ยนเป็น matched และ refresh ปุ่ม
+  if (_dupPopupCurrentStatus !== 'credited') {
+    _refreshDupActionBtn('matched');
+  }
 }
 
 async function deletePendingItem(transactionId) {
