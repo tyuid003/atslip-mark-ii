@@ -56,8 +56,8 @@ export class TelegramAuthDO {
   }
 
   async alarm(): Promise<void> {
-    // If auth is still pending, extend lifetime by 2 more minutes
-    if (this.qrStatus === 'pending' || (this.phone && !this.sessionStr)) {
+    // If auth is still pending (รวมถึงรอกรอกรหัส 2FA) → extend lifetime by 2 more minutes
+    if (this.qrStatus === 'pending' || this.qrStatus === 'needs2fa' || (this.phone && !this.sessionStr)) {
       await this.state.storage.setAlarm(Date.now() + 2 * 60 * 1000).catch(() => {});
     }
   }
@@ -176,10 +176,23 @@ export class TelegramAuthDO {
     const result = await this.client.invoke(new Api.auth.CheckPassword({ password: pwdCheck }));
 
     const sessionStr = (this.client.session as StringSession).save();
-    const photo = await this.getPhoto((result as any).user);
+    // QR flow: ผล CheckPassword อาจไม่มี user → ดึงด้วย getMe()
+    let tgUser = (result as any).user ?? null;
+    if (!tgUser) {
+      try { tgUser = await this.client.getMe(); } catch { /* ignore */ }
+    }
+    const photo = await this.getPhoto(tgUser);
+    const formatted = formatUser(tgUser);
+
+    // finalize QR state ด้วย (เผื่อ frontend ยัง poll QR อยู่)
+    this.sessionStr = sessionStr;
+    this.user = formatted;
+    this.photo = photo;
+    this.qrStatus = 'done';
+
     await this.client.disconnect().catch(() => {}); this.client = null;
 
-    return this.json({ ok: true, session: sessionStr, user: formatUser((result as any).user), photo });
+    return this.json({ ok: true, session: sessionStr, user: formatted, photo });
   }
 
   // ── QR Login ─────────────────────────────────────────────────────────
@@ -215,6 +228,10 @@ export class TelegramAuthDO {
     }
     if (this.qrStatus === 'error') {
       return this.json({ ok: true, status: 'error', session: null, user: null, photo: null, url: null, error: this.qrError });
+    }
+    // บัญชีเปิด 2FA — หยุด poll แล้วให้ frontend แสดงช่องกรอกรหัสผ่าน (เรียก /api/tg-auth/verify-2fa)
+    if (this.qrStatus === 'needs2fa') {
+      return this.json({ ok: true, status: 'needs2fa', needs2fa: true, session: null, user: null, photo: null, url: null, error: null });
     }
     if (!this.client) {
       return this.json({ ok: false, error: 'QR session expired — please restart' });
@@ -331,6 +348,13 @@ export class TelegramAuthDO {
     } catch (e: any) {
       const msg = e?.errorMessage ?? e?.message ?? 'DC migration failed';
       this.dlog('handleDCMigration error: ' + msg);
+      // บัญชีเปิด 2FA (รหัสผ่านสองชั้น) — client ต่อ DC ถูกต้องแล้วและอยู่ในสถานะรอรหัส
+      // เก็บ client ไว้ (ห้าม disconnect) แล้วเปลี่ยนสถานะเป็น needs2fa เพื่อให้ user กรอกรหัสต่อ
+      if (msg === 'SESSION_PASSWORD_NEEDED') {
+        this.qrStatus = 'needs2fa';
+        this.dlog('handleDCMigration: 2FA required — waiting for password');
+        return;
+      }
       this.qrStatus = 'error';
       this.qrError = 'DC migration failed: ' + msg;
     }

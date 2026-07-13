@@ -280,14 +280,16 @@ export const BankAccountsAPI = {
         } : null,
       });
       
+      // ค้นหาบัญชีโดย accountNumber หรือ numeric id (รองรับทั้งสองรูปแบบ)
+      const searchId = String(accountId);
       const account = accounts.find((acc: any) => {
-        const accId = String(acc.accountNumber || acc.account_number || acc.id || '');
-        const searchId = String(accountId);
-        console.log('[BankAccountsAPI] Comparing:', accId, '===', searchId, '=>', accId === searchId);
-        return accId === searchId;
+        const byNumber = String(acc.accountNumber || acc.account_number || '') === searchId;
+        const byId = String(acc.id || '') === searchId;
+        return byNumber || byId;
       });
 
       if (!account) {
+        console.warn('[BankAccountsAPI] Account not found for id:', searchId, 'available:', accounts.map((a: any) => ({ id: a.id, num: a.accountNumber })));
         return errorResponse('Account not found', 404);
       }
 
@@ -296,7 +298,9 @@ export const BankAccountsAPI = {
       const now = Math.floor(Date.now() / 1000);
       const accountNumber = account.accountNumber || account.account_number || '';
       const accountName = account.accountName || account.name || account.account_name || '';
-      const bankId = account.bankId || account.id || account.bank_id || '';
+      // ใช้ accountNumber เป็น account_id เสมอ (สอดคล้องกับ matchReceiver ใน scan.service.ts)
+      const storedAccountId = accountNumber || searchId;
+      const bankId = account.bankId || account.bank_id || '';
       const bankName = account.bankName || account.bank_name || '';
       const bankShort = account.bankShort || account.bank_short || '';
 
@@ -310,10 +314,10 @@ export const BankAccountsAPI = {
           id,
           teamId,
           tenantId,
-          accountId, // account_id = accountNumber
+          storedAccountId, // account_id = accountNumber (consistent with matchReceiver)
           accountNumber,
           accountName,
-          '', // account_name_en (empty)
+          '', // account_name_en (empty, user fills later)
           bankId,
           bankName,
           bankShort,
@@ -324,7 +328,7 @@ export const BankAccountsAPI = {
         .run();
 
       return successResponse(
-        { id, account_id: accountId, created: true },
+        { id, account_id: storedAccountId, created: true },
         'Metadata created successfully'
       );
     } catch (error: any) {

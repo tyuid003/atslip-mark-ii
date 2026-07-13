@@ -25,23 +25,57 @@ async function openManageUsersModal() {
   }
 
   try {
-    const res = await api.listMembers(slug);
-    renderMemberList(res.members || [], slug);
+    const [membersRes, pendingRes] = await Promise.all([
+      api.listMembers(slug),
+      api.getPendingJoinRequests(slug).catch(() => ({ requests: [] })),
+    ]);
+    renderManageUsers(membersRes.members || [], pendingRes.requests || [], slug);
   } catch (e) {
     listEl.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">โหลดข้อมูลล้มเหลว: ${e?.message || e}</div>`;
   }
 }
 
-function renderMemberList(members, slug) {
+// รวม render ของ pending requests + members
+function renderManageUsers(members, pending, slug) {
   const listEl = document.getElementById('manageUsersList');
+  if (!listEl) return;
+  listEl.innerHTML = renderPendingSection(pending, slug) + renderMemberSection(members, slug);
+}
+
+// ── ส่วนคำขอเข้าร่วม (รออนุมัติ) ──────────────────────────
+function renderPendingSection(pending, slug) {
+  if (!pending || !pending.length) return '';
+  const rows = pending.map(r => {
+    const avatarHtml = r.photo
+      ? `<img src="${r.photo}" class="mu-avatar" alt="avatar">`
+      : `<div class="mu-avatar mu-avatar-init">${(r.display_name || '?').charAt(0).toUpperCase()}</div>`;
+    return `
+      <div class="mu-row" data-req="${escHtml(r.id)}">
+        <div class="mu-avatar-wrap">${avatarHtml}</div>
+        <div class="mu-info">
+          <div class="mu-name">${escHtml(r.display_name || 'ผู้ใช้ใหม่')}</div>
+          <div class="mu-tg-name">ID: ${escHtml(String(r.telegram_id))}</div>
+        </div>
+        <div class="mu-actions">
+          <button class="mu-btn mu-btn-approve" onclick="joinApprove('${escHtml(slug)}','${escHtml(r.id)}')">อนุมัติ</button>
+          <button class="mu-btn mu-btn-reject" onclick="joinReject('${escHtml(slug)}','${escHtml(r.id)}')">ปฏิเสธ</button>
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="mu-section-title">คำขอเข้าร่วม (${pending.length})</div>
+    ${rows}
+    <div class="mu-section-title" style="margin-top:16px;">สมาชิก</div>`;
+}
+
+function renderMemberSection(members, slug) {
   if (!members.length) {
-    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:#888;">ยังไม่มีสมาชิก</div>';
-    return;
+    return '<div style="padding:24px;text-align:center;color:#888;">ยังไม่มีสมาชิก</div>';
   }
 
   const myTelegramId = window.atslipAuth?.user?.telegram_id;
 
-  listEl.innerHTML = members.map(m => {
+  return members.map(m => {
     const isMe = String(m.telegram_id) === String(myTelegramId);
     const avatarHtml = m.photo
       ? `<img src="${m.photo}" class="mu-avatar" alt="avatar">`
@@ -74,6 +108,35 @@ function renderMemberList(members, slug) {
         ${actionBtns}
       </div>`;
   }).join('');
+}
+
+// ── อนุมัติ / ปฏิเสธ คำขอเข้าร่วม ─────────────────────────
+async function joinApprove(slug, requestId) {
+  const row = document.querySelector(`.mu-row[data-req="${requestId}"]`);
+  const btns = row?.querySelector('.mu-actions');
+  if (btns) btns.innerHTML = '<span style="color:#888;font-size:0.8rem;">กำลังอนุมัติ...</span>';
+  try {
+    await api.approveJoinRequest(slug, requestId);
+    // reload ทั้งรายการเพื่ออัปเดตทั้ง pending + members
+    await openManageUsersModal();
+  } catch (e) {
+    alert('อนุมัติไม่สำเร็จ: ' + (e?.message || e));
+    await openManageUsersModal();
+  }
+}
+
+async function joinReject(slug, requestId) {
+  if (!confirm('ปฏิเสธคำขอเข้าร่วมนี้?')) return;
+  const row = document.querySelector(`.mu-row[data-req="${requestId}"]`);
+  const btns = row?.querySelector('.mu-actions');
+  if (btns) btns.innerHTML = '<span style="color:#888;font-size:0.8rem;">กำลังปฏิเสธ...</span>';
+  try {
+    await api.rejectJoinRequest(slug, requestId);
+    row?.remove();
+  } catch (e) {
+    alert('ปฏิเสธไม่สำเร็จ: ' + (e?.message || e));
+    await openManageUsersModal();
+  }
 }
 
 function escHtml(str) {
@@ -139,6 +202,14 @@ function closeManageUsersModal() {
   const modal = document.getElementById('manageUsersModal');
   if (modal) modal.style.display = 'none';
 }
+
+// รีเฟรชรายการเมื่อมีคำขอเข้าร่วมใหม่ระหว่างเปิด modal อยู่
+window.addEventListener('joinRequestArrived', () => {
+  const modal = document.getElementById('manageUsersModal');
+  if (modal && modal.style.display !== 'none') {
+    openManageUsersModal();
+  }
+});
 
 // ── รับ member_kicked event จาก WebSocket ─────────────────
 window.addEventListener('memberKicked', (e) => {

@@ -88,13 +88,15 @@ export async function enqueueScanJob(
 // ============================================================
 
 /**
- * ตรวจ concurrency ของทีม
+ * ตรวจ concurrency ของทีม — นับเฉพาะ job ที่ยัง "สด" (updated ภายใน 5 นาที)
+ * เพื่อไม่ให้ job ที่ค้าง (worker ตายกลางคัน) บล็อกงานใหม่
  */
 async function teamProcessingCount(env: Env, teamId: string): Promise<number> {
+  const freshCutoff = currentTimestamp() - 5 * 60;
   const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM scan_jobs WHERE team_id = ? AND status = 'processing'`,
+    `SELECT COUNT(*) AS c FROM scan_jobs WHERE team_id = ? AND status = 'processing' AND updated_at >= ?`,
   )
-    .bind(teamId)
+    .bind(teamId, freshCutoff)
     .first<{ c: number }>();
   return row?.c || 0;
 }
@@ -587,8 +589,13 @@ async function processUshopScanJob(env: Env, job: ScanJob): Promise<{ pendingTxI
 
 /**
  * processScanJob — claim และประมวลผลงานเดี่ยว
+ * @param opts.ignoreConcurrency — ข้าม gate per-team concurrency (ใช้กับ webhook ที่ประมวลผลงานตัวเองใน invocation แยก)
  */
-export async function processScanJob(env: Env, jobId: string): Promise<void> {
+export async function processScanJob(
+  env: Env,
+  jobId: string,
+  opts: { ignoreConcurrency?: boolean } = {},
+): Promise<void> {
   // ดูงานก่อนเพื่อตรวจ concurrency ต่อทีม
   const peek = await env.DB.prepare(
     `SELECT team_id, status FROM scan_jobs WHERE id = ? LIMIT 1`,
@@ -597,24 +604,39 @@ export async function processScanJob(env: Env, jobId: string): Promise<void> {
     .first<{ team_id: string; status: string }>();
   if (!peek || peek.status !== 'queued') return;
 
-  const proc = await teamProcessingCount(env, peek.team_id);
-  if (proc >= PER_TEAM_CONCURRENCY) {
-    // ไม่ claim ตอนนี้ ปล่อยให้ cron มาทำต่อ
-    return;
+  // webhook ประมวลผลงานตัวเอง = 1 job / 1 invocation → ไม่ต้องติด gate
+  // (gate มีไว้กัน cron batch claim มากเกินไปใน invocation เดียว)
+  if (!opts.ignoreConcurrency) {
+    const proc = await teamProcessingCount(env, peek.team_id);
+    if (proc >= PER_TEAM_CONCURRENCY) {
+      // ไม่ claim ตอนนี้ ปล่อยให้ cron มาทำต่อ
+      return;
+    }
   }
 
   const job = await claimJob(env, jobId);
   if (!job) return; // ถูก worker อื่นแย่งไป
 
+  // per-job hard timeout — กัน worker ตายกลางคันแล้ว job ค้างสถานะ processing
+  // ถ้าเกินเวลานี้ → throw เพื่อให้ markFailed ทำงาน (retry/DLQ ตามปกติ)
+  const JOB_TIMEOUT_MS = 90_000;
+  const withTimeout = <T>(p: Promise<T>): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`job timeout > ${JOB_TIMEOUT_MS / 1000}s`)), JOB_TIMEOUT_MS),
+      ),
+    ]);
+
   try {
     if (job.source === 'telegram') {
-      const r = await processTelegramScanJob(env, job);
+      const r = await withTimeout(processTelegramScanJob(env, job));
       await markSuccess(env, job.id, { text: r.resultText }, r.pendingTxId);
     } else if (job.source === 'line') {
-      const r = await processLineScanJob(env, job);
+      const r = await withTimeout(processLineScanJob(env, job));
       await markSuccess(env, job.id, r.debugResult || {}, r.pendingTxId);
     } else if (job.source === 'ushop') {
-      const r = await processUshopScanJob(env, job);
+      const r = await withTimeout(processUshopScanJob(env, job));
       await markSuccess(env, job.id, r.debugResult || {}, r.pendingTxId);
     } else {
       // Phase B: ยังรองรับเฉพาะ telegram และ line ผ่าน queue
@@ -638,8 +660,19 @@ export async function processQueueOnce(
   const now = currentTimestamp();
   const limit = opts.limit ?? 5;
 
-  // Recovery: reset jobs stuck in 'processing' for > 5 minutes back to 'queued'
+  // Recovery: จัดการ job ที่ค้างสถานะ 'processing' เกิน 5 นาที (worker ตายกลางคัน)
   const stuckCutoff = now - 5 * 60;
+  // 1) ถ้า attempts ครบ max แล้ว → dead_letter (กันวนไม่รู้จบจนคิวตัน)
+  await env.DB.prepare(
+    `UPDATE scan_jobs
+     SET status = 'dead_letter',
+         last_error = 'stuck in processing and exhausted max_attempts (worker timeout)',
+         completed_at = ?, updated_at = ?
+     WHERE status = 'processing' AND updated_at < ? AND attempts >= max_attempts`,
+  )
+    .bind(now, now, stuckCutoff)
+    .run();
+  // 2) ที่ยังมี attempts เหลือ → คืนกลับ queued ให้ลองใหม่
   await env.DB.prepare(
     `UPDATE scan_jobs
      SET status = 'queued', next_attempt_at = ?, updated_at = ?
@@ -658,6 +691,13 @@ export async function processQueueOnce(
     .all<{ id: string }>();
 
   const jobIds = (rows.results || []).map((r) => r.id);
-  await Promise.all(jobIds.map((id) => processScanJob(env, id)));
-  return { processed: jobIds.length };
+  // ประมวลผลทีละงาน (sequential) — cron เป็นตัวระบายสำรอง
+  // ทำทีละตัวเพื่อให้แต่ละ job มี connection budget พอ (Cloudflare จำกัด ~6 simultaneous connections/invocation)
+  // และให้ teamProcessingCount อัปเดตระหว่างงาน → per-team concurrency ทำงานจริง
+  let processed = 0;
+  for (const id of jobIds) {
+    await processScanJob(env, id);
+    processed += 1;
+  }
+  return { processed };
 }

@@ -458,6 +458,12 @@ export class CreditService {
     }
 
     const v2Endpoint = `${tenant.admin_api_url}/api/proxy/v1/admin/deposits`;
+    // transferAt: แปลงเป็น ISO 8601 (…000Z) ตามที่ v2 (Betax2) ต้องการ — ถ้าไม่ส่งจะเตือน "กรุณากรอกเวลาที่โอน"
+    let transferAtIso = transferDate;
+    const parsedTransfer = new Date(transferDate);
+    if (!Number.isNaN(parsedTransfer.getTime())) {
+      transferAtIso = parsedTransfer.toISOString();
+    }
     const v2Payload = {
       userId,
       amount: creditAmount,
@@ -468,10 +474,11 @@ export class CreditService {
       fromAccountName,
       bankAccountId,
       isBonus: false,
+      transferAt: transferAtIso,
     };
 
     log('[CreditService][v2] 🎯 Endpoint:', v2Endpoint);
-    log('[CreditService][v2] 📤 Payload:', { userId: v2Payload.userId, amount: v2Payload.amount, fromBankCode, bankAccountId });
+    log('[CreditService][v2] 📤 Payload:', { userId: v2Payload.userId, amount: v2Payload.amount, fromBankCode, bankAccountId, transferAt: transferAtIso });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);

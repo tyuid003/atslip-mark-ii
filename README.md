@@ -21,8 +21,10 @@ wrangler deploy
 
 # Frontend (Pages) — รันจากในโฟลเดอร์ frontend
 cd frontend
-npx wrangler pages deploy . --project-name atslip-frontend
+npx wrangler pages deploy . --project-name atslip-frontend --branch atslip --commit-dirty=true
 ```
+
+> ⚠️ **ต้องใส่ `--branch atslip` เสมอ** — production branch ของ Pages project นี้ชื่อ `atslip` (ไม่ใช่ `main`) โดเมนจริง `app.atslip.biz` เสิร์ฟจาก production branch นี้ ถ้า deploy โดยไม่ระบุ branch จะไปลงเป็น **Preview** (`main.atslip-frontend.pages.dev`) และโดเมนจริงจะไม่อัปเดต
 
 > ใน PowerShell ของเครื่องนี้ต้อง prepend PATH ของ Node.js ก่อน เพราะ `wrangler` ไม่ได้ติดตั้งแบบ global ของระบบ
 

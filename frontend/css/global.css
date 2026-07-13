@@ -978,6 +978,20 @@ body {
 .mu-btn-ban:hover { background: #ffedd5; }
 .mu-btn-unban { background: #f0fdf4; color: #16a34a; }
 .mu-btn-unban:hover { background: #dcfce7; }
+.mu-btn-approve { background: #eff6ff; color: #2563eb; }
+.mu-btn-approve:hover { background: #dbeafe; }
+.mu-btn-reject { background: #fef2f2; color: #ef4444; }
+.mu-btn-reject:hover { background: #fee2e2; }
+.mu-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-gray-500, #6b7280);
+  padding: 8px 2px 6px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  margin-bottom: 4px;
+}
 
 /* ============================================================
    SKELETON LOADING
@@ -1273,7 +1287,7 @@ body {
   cursor: not-allowed;
 }
 
-/* Duplicate popup — status badges */
+/* Duplicate popup ï¿½ status badges */
 .dup-status-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -1286,7 +1300,7 @@ body {
 .dup-status-matched   { background: var(--color-primary-light); color: var(--color-primary); }
 .dup-status-pending   { background: var(--color-gray-100);      color: var(--color-gray-500); }
 
-/* Duplicate popup — icon-only square buttons */
+/* Duplicate popup ï¿½ icon-only square buttons */
 .dup-icon-btn {
   width: 36px !important;
   height: 36px !important;

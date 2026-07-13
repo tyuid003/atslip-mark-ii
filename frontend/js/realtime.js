@@ -356,6 +356,8 @@ class RealtimeClient {
     // ไม่แสดงให้ตัวเองเห็น
     if (me && String(me.telegram_id) === String(data.telegram_id)) return;
     showJoinRequestCard(data);
+    // แจ้งหน้าจัดการผู้ใช้ให้ refresh ถ้าเปิดอยู่
+    window.dispatchEvent(new CustomEvent('joinRequestArrived', { detail: data }));
   }
 
   /**

@@ -170,23 +170,17 @@
                   ${acc.accountNumber ? `<div style="color:var(--text-muted,#888);font-size:0.8rem;">${_esc(acc.accountNumber)}</div>` : ''}
                 </div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:6px;padding-left:38px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                  <div>
-                    <div style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำภายในยูสเซอร์</div>
-                    <div style="font-size:0.75rem;color:var(--text-muted,#888);line-height:1.4;">ตรวจว่าลูกค้าคนเดิมเคยได้รับเครดิตยอดนี้ไปแล้ว (ภายใน 1 นาที)</div>
-                  </div>
-                  <label class="toggle-switch" style="flex-shrink:0;margin-top:2px;">
+              <div style="display:flex;flex-direction:column;gap:4px;padding-left:38px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <span style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำภายในยูสเซอร์</span>
+                  <label class="toggle-switch" style="flex-shrink:0;">
                     <input type="checkbox" ${sw1} onchange="window._antidupToggle('${_esc(acc.id)}', this.checked)">
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                  <div>
-                    <div style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำกับรายการอื่น</div>
-                    <div style="font-size:0.75rem;color:var(--text-muted,#888);line-height:1.4;">ป้องกันทุจริต: ตรวจว่ามีสมาชิกอื่นใช้สลิปเดียวกัน (ยอด+เวลาตรงกัน)</div>
-                  </div>
-                  <label class="toggle-switch" style="flex-shrink:0;margin-top:2px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <span style="font-size:0.82rem;font-weight:500;color:var(--text,#1f2937);">เช็คซ้ำกับรายการอื่น</span>
+                  <label class="toggle-switch" style="flex-shrink:0;">
                     <input type="checkbox" ${sw2} onchange="window._antidupCrossToggle('${_esc(acc.id)}', this.checked, this)">
                     <span class="toggle-slider"></span>
                   </label>

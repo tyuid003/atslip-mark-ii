@@ -681,14 +681,19 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
     html = '<div class="bank-accounts-empty"><i data-lucide="inbox" size="48" style="color: var(--color-gray-400); margin-bottom: var(--space-md);"></i><p>ไม่พบบัญชีธนาคาร</p><p style="font-size: 0.875rem; color: var(--color-gray-500);">กรุณาเชื่อมต่อ Admin Backend ก่อน</p></div>';
   } else {
     accounts.forEach((account) => {
-      // ใช้ accountNumber เป็น unique identifier (เพราะ id คือ bank id ไม่ใช่ account id)
-      const accountId = String(account.accountNumber || account.id || '');
-      const meta = metadata.find(m => m.account_id === accountId);
+      // ใช้ id (numeric admin ID) เป็น key หลัก เหมือนกับที่ scan.ts ใช้ resolveToAccountId
+      const accountId = String(account.id || account.accountNumber || '');
+      // metadata จับคู่ด้วย accountNumber (backward compat กับ D1 เก่า) หรือ id
+      const meta = metadata.find(m =>
+        m.account_id === String(account.accountNumber || '') ||
+        m.account_id === accountId
+      );
       const englishName = meta?.account_name_en || '';
       const metaId = meta?.id || '';
-      // account mode: true = auto (default), false = manual
       const isAuto = accountModes[accountId] !== false;
       const safeAccId = accountId.replace(/'/g, "\\'");
+      const safeMetaId = String(metaId).replace(/'/g, "\\'");
+      const safeEnName = englishName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
       html += `
         <div class="bank-account-item">
@@ -706,38 +711,15 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
                 </label>
                 <span style="font-size:0.78rem;color:${isAuto ? 'var(--color-success,#16a34a)' : 'var(--color-gray-500)'};font-weight:500;" id="acc-mode-label-${safeAccId}">${isAuto ? 'Auto' : 'Manual'}</span>
               </div>
-              ${metaId ? `
-              <div style="margin-top: var(--space-xs);">
-                <label style="font-size: 0.75rem; color: var(--color-gray-600); display: block; margin-bottom: 4px;">ชื่อภาษาอังกฤษ</label>
-                <div style="display: flex; gap: var(--space-xs);">
-                  <input 
-                    type="text" 
-                    value="${englishName}" 
-                    placeholder="Enter English name" 
-                    id="en-name-${metaId}"
-                    style="flex: 1; padding: 6px var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.875rem;"
-                  >
-                  <button 
-                    class="btn btn-sm btn-primary" 
-                    onclick="updateEnglishName('${metaId}')"
-                    style="padding: 6px var(--space-sm);"
-                  >
-                    <i data-lucide="check" size="14"></i> บันทึก
-                  </button>
-                </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">ชื่ออังกฤษ:</span>
+                <span style="font-size:0.8rem;color:var(--color-gray-800);">${englishName || '<span style="color:var(--color-gray-400);font-style:italic;">ยังไม่ได้ตั้ง</span>'}</span>
+                <button class="btn btn-sm" onclick="window._openEnglishNamePopup('${safeAccId}','${safeMetaId}','${safeEnName}')"
+                  style="padding:3px 8px;font-size:0.75rem;background:var(--color-gray-100);border:1px solid var(--color-border);">
+                  <i data-lucide="${metaId ? 'pencil' : 'plus'}" size="12"></i> ${metaId ? 'แก้ไข' : 'เพิ่ม'}
+                </button>
               </div>
-              ` : ''}
             </div>
-            ${!metaId ? `
-            <button 
-              class="btn btn-sm" 
-              onclick="addEnglishName('${accountId}')" 
-              style="padding: 6px var(--space-sm); background: var(--color-gray-100); border: 1px solid var(--color-border); white-space: nowrap;"
-              title="เพิ่มชื่ออังกฤษสำหรับบัญชีนี้"
-            >
-              <i data-lucide="plus" size="14"></i> เพิ่มชื่ออังกฤษ
-            </button>
-            ` : ''}
           </div>
         </div>
       `;
@@ -747,6 +729,68 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
   document.getElementById('bankAccountsList').innerHTML = html;
   lucide.createIcons();
 }
+
+// ─── Custom popup สำหรับกรอกชื่ออังกฤษ ───────────────────────────────────────
+window._openEnglishNamePopup = function (accountId, metaId, currentName) {
+  const old = document.getElementById('englishNameModal');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'englishNameModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--surface,#fff);border-radius:12px;padding:24px;width:340px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <h3 style="margin:0 0 16px;font-size:1rem;font-weight:600;">ชื่อ-นามสกุลภาษาอังกฤษ</h3>
+      <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:4px;">ชื่อภาษาอังกฤษ (First name)</label>
+      <input id="enNameFirst" type="text" placeholder="เช่น Malee" autocomplete="off"
+        style="width:100%;padding:8px 10px;border:1px solid var(--color-border,#d1d5db);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:10px;">
+      <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:4px;">นามสกุลภาษาอังกฤษ (Last name)</label>
+      <input id="enNameLast" type="text" placeholder="เช่น Sangsai" autocomplete="off"
+        style="width:100%;padding:8px 10px;border:1px solid var(--color-border,#d1d5db);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      <p style="font-size:0.75rem;color:var(--color-gray-500,#888);margin:6px 0 16px;">ใช้สำหรับจับคู่สลิปที่ชื่อผู้รับเป็นภาษาอังกฤษ</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="window._cancelEnglishNamePopup()" style="padding:8px 16px;border:1px solid var(--color-border,#d1d5db);background:transparent;border-radius:8px;cursor:pointer;font-size:0.88rem;">ยกเลิก</button>
+        <button onclick="window._confirmEnglishNamePopup('${accountId}','${metaId}')" style="padding:8px 16px;background:var(--color-primary,#3b82f6);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;">บันทึก</button>
+      </div>
+    </div>`;
+
+  // pre-fill ถ้ามีชื่อเดิม
+  document.body.appendChild(overlay);
+  if (currentName) {
+    const parts = currentName.trim().split(/\s+/);
+    document.getElementById('enNameFirst').value = parts[0] || '';
+    document.getElementById('enNameLast').value = parts.slice(1).join(' ') || '';
+  }
+  setTimeout(() => document.getElementById('enNameFirst')?.focus(), 50);
+};
+
+window._cancelEnglishNamePopup = function () {
+  const el = document.getElementById('englishNameModal');
+  if (el) el.remove();
+};
+
+window._confirmEnglishNamePopup = async function (accountId, metaId) {
+  const first = (document.getElementById('enNameFirst')?.value || '').trim();
+  const last = (document.getElementById('enNameLast')?.value || '').trim();
+  const fullName = [first, last].filter(Boolean).join(' ');
+  if (!fullName) { addNotification('❌ กรุณากรอกชื่อภาษาอังกฤษ'); return; }
+
+  window._cancelEnglishNamePopup();
+  try {
+    let resolvedMetaId = metaId;
+    // ถ้ายังไม่มี metadata → สร้างก่อน
+    if (!resolvedMetaId) {
+      const createResp = await api.createBankAccountMetadata(currentTenantId, accountId);
+      resolvedMetaId = createResp?.data?.id || createResp?.id || '';
+      if (!resolvedMetaId) throw new Error('สร้าง metadata ไม่สำเร็จ');
+    }
+    await api.updateEnglishName(resolvedMetaId, fullName);
+    addNotification('✅ บันทึกชื่ออังกฤษสำเร็จ');
+    await viewBankAccounts(currentTenantId);
+  } catch (e) {
+    addNotification('❌ บันทึกไม่สำเร็จ: ' + e.message);
+  }
+};
 
 window._setAccountMode = async function (accountId, auto) {
   try {
@@ -1462,13 +1506,16 @@ function showDuplicatePopup(dupData, imgDataUrl) {
   if (window.lucide) lucide.createIcons();
 }
 
-// สร้าง HTML ของปุ่ม credit/withdraw ตามสถานะ
+// สร้าง HTML ของปุ่ม credit/withdraw — แสดงทั้งคู่เสมอ
 function _dupActionBtnHtml(status) {
   if (!_dupPopupTxId) return '';
-  if (status === 'credited') {
-    return `<button class="dup-slip-withdraw-btn dup-icon-btn" id="dupActionBtn" onclick="window._dupWithdrawItem(this)" title="ดึงเครดิตกลับ"><i data-lucide="undo-2"></i></button>`;
-  }
-  return `<button class="dup-slip-credit-btn dup-icon-btn" id="dupActionBtn" onclick="window._dupCreditItem(this)" title="เติมเครดิต"><i data-lucide="coins"></i></button>`;
+  return `
+    <button class="dup-slip-credit-btn dup-icon-btn" id="dupActionBtnCredit" onclick="window._dupCreditItem(this)" title="เติมเครดิต">
+      <i data-lucide="coins"></i>
+    </button>
+    <button class="dup-slip-withdraw-btn dup-icon-btn" id="dupActionBtnWithdraw" onclick="window._dupWithdrawItem(this)" title="ดึงเครดิตกลับ">
+      <i data-lucide="undo-2"></i>
+    </button>`;
 }
 
 // อัพเดท action button ใน popup หลังจากสถานะเปลี่ยน

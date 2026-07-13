@@ -608,31 +608,36 @@ export const ScanAPI = {
 
             if (txnList && slipTime !== null && typeof slipAmount === 'number') {
               const currentMemberCode = matchedUser?.memberCode || '';
-              const crossDup = txnList.find((t: any) => {
-                // ข้ามรายการของสมาชิกเดิม (สวิทช์ 1 จัดการแล้ว)
-                if (currentMemberCode && String(t.userMemberCode || '') === currentMemberCode) return false;
-                if (typeof t.creditAmount !== 'number' || Math.abs(t.creditAmount - slipAmount) > 0.01) return false;
-                const txnTime = normalizeTimeMs(t.transferAt);
-                return txnTime !== null && Math.abs(txnTime - slipTime) <= windowMs;
-              });
+              // ถ้าไม่ทราบ memberCode ของผู้ฝากปัจจุบัน ไม่สามารถแยกว่าใครใช้สลิปซ้ำได้ → ข้ามไป
+              if (currentMemberCode) {
+                const crossDup = txnList.find((t: any) => {
+                  // ต้องเป็นบัญชีปลายทางเดียวกันเท่านั้น (ป้องกัน false positive จากบัญชีอื่น)
+                  if (String(t.accountId) !== String(crossAccId)) return false;
+                  // ข้ามรายการของสมาชิกเดิม (สวิทช์ 1 จัดการแล้ว)
+                  if (String(t.userMemberCode || '') === currentMemberCode) return false;
+                  if (typeof t.creditAmount !== 'number' || Math.abs(t.creditAmount - slipAmount) > 0.01) return false;
+                  const txnTime = normalizeTimeMs(t.transferAt);
+                  return txnTime !== null && Math.abs(txnTime - slipTime) <= windowMs;
+                });
 
-              if (crossDup) {
-                log('[ScanAPI] ⚠️ Cross-dup: duplicate from member', crossDup.userMemberCode);
-                return jsonResponse({
-                  success: false,
-                  error: 'พบรายการฝากซ้ำจากสมาชิกอื่น (Cross Anti-Dup)',
-                  data: {
-                    status: 'duplicate',
-                    tenant: { id: matchedTenant.id, name: matchedTenant.name },
-                    slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
-                    sender: {
-                      id: matchedUser?.id || null,
-                      name: matchedUser?.fullname || senderNameTh || senderNameEn || 'Unknown',
-                      username: matchedUser?.memberCode || matchedUser?.username || null,
-                      matched: !!matchedUser,
+                if (crossDup) {
+                  log('[ScanAPI] ⚠️ Cross-dup: duplicate from member', crossDup.userMemberCode);
+                  return jsonResponse({
+                    success: false,
+                    error: 'พบรายการฝากซ้ำจากสมาชิกอื่น (Cross Anti-Dup)',
+                    data: {
+                      status: 'duplicate',
+                      tenant: { id: matchedTenant.id, name: matchedTenant.name },
+                      slip: { ref: slip.transRef, amount: slipAmount, date: slip.date },
+                      sender: {
+                        id: matchedUser?.id || null,
+                        name: matchedUser?.fullname || senderNameTh || senderNameEn || 'Unknown',
+                        username: matchedUser?.memberCode || matchedUser?.username || null,
+                        matched: !!matchedUser,
+                      },
                     },
-                  },
-                }, 400);
+                  }, 400);
+                }
               }
             }
           }

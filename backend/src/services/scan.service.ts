@@ -1223,6 +1223,31 @@ export class ScanService {
     }
 
     if (nameMatchedCandidates.length === 1) {
+      // ── ตรวจ "ชื่อตรงเต็ม" ก่อน auto-match (กัน false positive จากชื่อคล้าย นามสกุลต่าง) ──
+      // เงื่อนไข: ชื่อที่สั้นกว่าต้องถูกครอบด้วยชื่อที่ยาวกว่าทั้งหมด (เป็น substring ต่อเนื่อง)
+      // - สลิป "สมชายรักดี" vs user "สมชายรักษา" → LCS "สมชายรัก"=8 < 10 → ไม่ผ่าน → pending ✅
+      // - สลิปย่อนามสกุล "มาลัยว." vs user "มาลัยวงศ์ดี" → strip จุด → "มาลัยว" อยู่ใน "มาลัยวงศ์ดี" → ผ่าน ✅
+      const only = nameMatchedCandidates[0];
+      const stripPunct = (s: string) => String(s || '').replace(/[^\p{L}\p{N}]/gu, '');
+      const s1 = stripPunct(only.bestSlipName);
+      const s2 = stripPunct(only.bestCandidateName);
+      const shorterLen = Math.min(s1.length, s2.length);
+      const lcsLen = this.getLongestCommonSubstring(s1, s2).length;
+      const isStrongFullNameMatch = shorterLen > 0 && lcsLen >= shorterLen;
+
+      if (!isStrongFullNameMatch) {
+        log('[ScanService] ⚠️ RESULT: Single candidate but name NOT a full match — returning null (pending, manual match required)', {
+          fullname: only.user.fullname,
+          memberCode: only.user.memberCode,
+          slipName: only.bestSlipName,
+          candidateName: only.bestCandidateName,
+          lcsLen,
+          requiredLen: shorterLen,
+        });
+        log('[ScanService] 🔍 ===== SENDER MATCHING END (WEAK NAME — PENDING) =====');
+        return null;
+      }
+
       log('[ScanService] ✅ RESULT: Single candidate after name matching', {
         fullname: nameMatchedCandidates[0].user.fullname,
         memberCode: nameMatchedCandidates[0].user.memberCode,

@@ -710,7 +710,7 @@
 
         // Show "scanning" overlay as soon as Telegram signals the user scanned (DC migration starts).
         // This gives instant feedback while we wait for finalization (~2-5 s).
-        if (data.scanned && data.status !== 'done' && data.status !== 'error') {
+        if (data.scanned && data.status !== 'done' && data.status !== 'error' && data.status !== 'needs2fa') {
           showQRScannedOverlay();
           setQRStatus('สแกนสำเร็จ! กำลังเข้าสู่ระบบ...', 'success');
         }
@@ -731,6 +731,15 @@
           hideQRScannedOverlay();
           setQRStatus(data.error ?? 'เกิดข้อผิดพลาด', 'error');
           document.getElementById('qrRefreshBtn').style.display = 'inline-flex';
+        } else if (data.status === 'needs2fa') {
+          // บัญชีเปิด 2FA — หยุด poll แล้วใช้ session ของ QR ต่อในขั้นตอนกรอกรหัส Cloud
+          clearQRPoll();
+          hideQRScannedOverlay();
+          phoneSessionId = qrSessionId; // verify2FA() ใช้ phoneSessionId → ชี้ไป DO เดียวกัน
+          setPhoneStep('step2FA');
+          showPhoneAlert('info', 'บัญชีนี้มีการยืนยันตัวตน 2 ขั้นตอน — กรุณากรอกรหัสผ่าน Cloud ด้านล่าง');
+          setQRStatus('ต้องยืนยัน 2FA (กรอกรหัสด้านล่าง)', '');
+          setTimeout(() => document.getElementById('twoFaInput')?.focus(), 100);
         }
       } catch (_) { /* network error — retry next poll */ }
     }

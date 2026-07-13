@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { jsonResponse } from '../utils/helpers';
 import { ScanAPI } from './scan';
 import { getOrCreateLineMessageSettings } from '../services/line-message-settings.service';
-import { enqueueScanJob, processQueueOnce } from '../services/scan-queue.service';
+import { enqueueScanJob, processScanJob } from '../services/scan-queue.service';
 import {
   callLineReplyAPI,
   callLinePushAPI,
@@ -182,7 +182,7 @@ export async function handleLineWebhook(
     if (tenantRow?.team_id) {
       // Enqueue ด้วย retry mechanism แทน fire-and-forget (แก้ปัญหาสลิปหาย)
       const jobKey = `line-${lineOA.id}-${event.message.id}`;
-      await enqueueScanJob(env, {
+      const { id: jobId } = await enqueueScanJob(env, {
         team_id: tenantRow.team_id,
         tenant_id: lineOA.tenant_id,
         source: 'line',
@@ -193,7 +193,11 @@ export async function handleLineWebhook(
           line_message_id: event.message.id,
         },
       });
-      ctx.waitUntil(processQueueOnce(env, { limit: 20 }));
+      // ประมวลผล "งานของตัวเอง" ใน invocation นี้เลย (1 สลิป = 1 invocation budget เหมือน manual)
+      // → กันปัญหา worker ตายกลางคันจากการทำหลาย job พร้อมกันจนเกิน connection limit
+      // ignoreConcurrency=true เพราะเป็น invocation แยก ไม่ควรถูกบล็อกโดย backlog ที่ cron กำลัง drain
+      // งานที่ค้าง/retry ให้ cron (ทุก 1 นาที) เป็นตัวระบายสำรอง
+      ctx.waitUntil(processScanJob(env, jobId, { ignoreConcurrency: true }));
     } else {
       // fallback: ถ้าหา team_id ไม่ได้ ใช้ direct process เดิม
       ctx.waitUntil(processImageEvent(env, lineOA, settings, event));

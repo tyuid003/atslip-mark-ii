@@ -441,6 +441,68 @@ const UI = {
       .join('');
     
     lucide.createIcons();
+
+    // ── Bouncy entrance animation for newly-arrived items ──
+    // ตรวจว่ามีรายการใหม่เข้ามาเทียบกับการ render ครั้งก่อน แล้วเล่นอนิเมชั่น
+    // เด้งดึ๋ง (spring) ให้รายการใหม่ขยายขึ้น พร้อมดันรายการด้านล่างเลื่อนลงแบบสมูท
+    const prevIds = this._renderedPendingIds || new Set();
+    const currentIds = displayItems.map((i) => String(i.id));
+    const newIds = currentIds.filter((id) => !prevIds.has(id));
+    // เล่นเฉพาะรายการใหม่ที่เข้ามาแบบ incremental เท่านั้น
+    // (ข้ามตอนโหลดครั้งแรก / เปลี่ยนฟิลเตอร์ / สลับ tenant ที่รายการเปลี่ยนยกชุด)
+    if (prevIds.size > 0 && newIds.length > 0 && newIds.length <= 3) {
+      this._animatePendingEntrance(list, newIds);
+    }
+    this._renderedPendingIds = new Set(currentIds);
+  },
+
+  /**
+   * เล่นอนิเมชั่นเด้งดึ๋ง (spring) ให้รายการสแกนที่เพิ่งเข้ามาใหม่
+   * รายการใหม่จะขยายความสูงจาก 0 พร้อม overshoot เล็กน้อย ทำให้รายการ
+   * ที่อยู่ด้านล่างถูกดันเลื่อนลงแบบสมูทและเด้งตามธรรมชาติของ layout flow
+   * @param {HTMLElement} list
+   * @param {string[]} newIds
+   */
+  _animatePendingEntrance(list, newIds) {
+    // เคารพการตั้งค่า reduced-motion ของผู้ใช้ + เช็คว่าเบราว์เซอร์รองรับ WAAPI
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') return;
+
+    newIds.forEach((id) => {
+      const el = list.querySelector(`.pending-item[data-item-id="${CSS.escape(id)}"]`);
+      if (!el) return;
+
+      const targetHeight = el.getBoundingClientRect().height;
+      if (!targetHeight) return;
+
+      const prevOverflow = el.style.overflow;
+      const prevWillChange = el.style.willChange;
+      el.style.overflow = 'hidden';
+      el.style.willChange = 'height, transform, opacity';
+
+      const anim = el.animate(
+        [
+          { height: '0px', opacity: 0, transform: 'scale(0.9) translateY(-8px)' },
+          { height: `${targetHeight}px`, opacity: 1, transform: 'scale(1) translateY(0)' },
+        ],
+        {
+          duration: 520,
+          // spring/overshoot ("back-out") ให้ความรู้สึกเด้งดึ๋ง
+          easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+          fill: 'none',
+        }
+      );
+
+      const cleanup = () => {
+        el.style.overflow = prevOverflow;
+        el.style.willChange = prevWillChange;
+        el.style.height = '';
+        el.style.transform = '';
+        el.style.opacity = '';
+      };
+      anim.onfinish = cleanup;
+      anim.oncancel = cleanup;
+    });
   },
 
   renderNotifications(notifications) {
