@@ -1158,9 +1158,15 @@ export class ScanService {
     }
 
     // Deduplicate candidates
+    // ⚠️ ผูก category ไว้ใน key ด้วย เพื่อไม่ให้ member กับ non-member ถูกยุบรวมเป็นคนเดียว
+    // กรณีที่ memberCode ของ member ดันตรงกับ id ของ non-member (ตัวเลขชนกัน) เดิมจะถูก
+    // dedup รวมเหลือ candidate เดียว → auto-match เข้าคนผิด. แยกตาม category ทำให้ชื่อซ้ำ
+    // ข้ามหมวด (member + non-member) ยังคงเป็น 2 candidates → เข้าเงื่อนไข pending รอจับคู่
     const dedupMap = new Map<string, any>();
     for (const user of allCandidates) {
-      const key = String(user.memberCode || user.id || user.username || user.fullname || JSON.stringify(user));
+      const category = String(user.category || '').toLowerCase();
+      const identity = String(user.memberCode || user.id || user.username || user.fullname || JSON.stringify(user));
+      const key = `${category}::${identity}`;
       if (!dedupMap.has(key)) {
         dedupMap.set(key, user);
       }
