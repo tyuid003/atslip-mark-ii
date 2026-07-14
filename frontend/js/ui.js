@@ -475,15 +475,26 @@ const UI = {
       const targetHeight = el.getBoundingClientRect().height;
       if (!targetHeight) return;
 
-      const prevOverflow = el.style.overflow;
-      const prevWillChange = el.style.willChange;
+      // เก็บค่า inline style เดิมไว้คืนภายหลัง
+      const saved = {
+        overflow: el.style.overflow,
+        minHeight: el.style.minHeight,
+        flexShrink: el.style.flexShrink,
+        willChange: el.style.willChange,
+      };
+
+      // ⚠️ FIX: .pending-item เป็น flex child ในคอลัมน์ ค่าเริ่มต้น min-height:auto
+      // จะกันไม่ให้ความสูงหดต่ำกว่าเนื้อหา ทำให้ animate height:0 ไม่ทำงาน (โผล่แค่ไม่กี่ px)
+      // ต้อง override min-height:0 + flex-shrink:0 ระหว่างเล่นอนิเมชั่น height ถึงจะลื่นเต็มช่วง
       el.style.overflow = 'hidden';
+      el.style.minHeight = '0';
+      el.style.flexShrink = '0';
       el.style.willChange = 'height, transform, opacity';
 
       const anim = el.animate(
         [
-          { height: '0px', opacity: 0, transform: 'scale(0.9) translateY(-8px)' },
-          { height: `${targetHeight}px`, opacity: 1, transform: 'scale(1) translateY(0)' },
+          { height: '0px', opacity: 0, transform: 'translateY(-6px) scale(0.96)' },
+          { height: `${targetHeight}px`, opacity: 1, transform: 'translateY(0) scale(1)' },
         ],
         {
           duration: 520,
@@ -494,8 +505,10 @@ const UI = {
       );
 
       const cleanup = () => {
-        el.style.overflow = prevOverflow;
-        el.style.willChange = prevWillChange;
+        el.style.overflow = saved.overflow;
+        el.style.minHeight = saved.minHeight;
+        el.style.flexShrink = saved.flexShrink;
+        el.style.willChange = saved.willChange;
         el.style.height = '';
         el.style.transform = '';
         el.style.opacity = '';
