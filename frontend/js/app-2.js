@@ -1722,6 +1722,94 @@ async function creditPendingItem(transactionId, btnOrEvent) {
 }
 
 async function withdrawPendingCredit(transactionId) {
+  // แสดง popup ยืนยันก่อน — ต้องคลิกปุ่มยืนยันเท่านั้น (กด Enter ไม่ทำงาน)
+  showWithdrawConfirm(transactionId);
+}
+
+function closeWithdrawConfirm() {
+  const modal = document.getElementById('withdrawConfirmModal');
+  if (!modal) return;
+  if (modal._keyHandler) {
+    document.removeEventListener('keydown', modal._keyHandler, true);
+  }
+  modal.remove();
+}
+
+function showWithdrawConfirm(transactionId) {
+  closeWithdrawConfirm(); // กัน popup ซ้อน
+
+  const item = (typeof allPendingTransactions !== 'undefined' && Array.isArray(allPendingTransactions))
+    ? allPendingTransactions.find(t => String(t.id) === String(transactionId))
+    : null;
+  const amount = item ? Number(item.amount || 0).toLocaleString('th-TH') : '';
+  const userText = item ? (item.matched_username || item.matched_user_id || item.sender_name || '') : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'withdrawConfirmModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px;color:var(--color-error,#dc2626);font-size:1.1rem;">
+          <i data-lucide="alert-triangle"></i>
+          <span>ยืนยันดึงเครดิตกลับ</span>
+        </div>
+        <button class="modal-close" id="withdrawConfirmClose" title="ปิด"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px;font-size:0.95rem;color:var(--color-gray-700,#374151);">
+          ต้องการ<b>ดึงเครดิตกลับ</b>รายการนี้ใช่หรือไม่?
+        </p>
+        ${(amount || userText) ? `<div style="background:var(--color-gray-50,#f9fafb);border:1px solid var(--color-gray-200,#e5e7eb);border-radius:8px;padding:10px 12px;font-size:0.9rem;color:var(--color-gray-600,#4b5563);display:flex;flex-direction:column;gap:4px;">
+          ${userText ? `<div>ผู้ใช้: <b style="color:var(--color-gray-800,#1f2937);">${userText}</b></div>` : ''}
+          ${amount ? `<div>ยอด: <b style="color:var(--color-gray-800,#1f2937);">${amount} บาท</b></div>` : ''}
+        </div>` : ''}
+        <p style="margin:12px 0 0;font-size:0.78rem;color:var(--color-gray-400,#9ca3af);">
+          * ต้องคลิกปุ่ม "ดึงเครดิตกลับ" เท่านั้น (กด Enter ไม่ได้)
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="withdrawConfirmCancel">ยกเลิก</button>
+        <button class="btn btn-danger" id="withdrawConfirmOk">ดึงเครดิตกลับ</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  const cancel = () => closeWithdrawConfirm();
+  modal.querySelector('#withdrawConfirmClose')?.addEventListener('click', cancel);
+  modal.querySelector('#withdrawConfirmCancel')?.addEventListener('click', cancel);
+  // คลิกพื้นหลัง (นอก modal) เพื่อปิด
+  modal.addEventListener('click', (e) => { if (e.target === modal) cancel(); });
+
+  const okBtn = modal.querySelector('#withdrawConfirmOk');
+  okBtn?.addEventListener('click', (e) => {
+    // ⛔ รับเฉพาะการคลิกจริงด้วยเมาส์/นิ้วเท่านั้น
+    // การกด Enter/Space บนปุ่มที่โฟกัสจะยิง click ที่มี e.detail === 0 → ไม่ทำงาน
+    if (!e.detail || e.detail < 1) return;
+    closeWithdrawConfirm();
+    _doWithdrawPendingCredit(transactionId);
+  });
+
+  // ⛔ บล็อกปุ่ม Enter ทั้งหมดขณะเปิด popup (ห้ามยืนยันด้วย Enter) — Escape ใช้ปิดได้
+  const keyHandler = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancel();
+    }
+  };
+  modal._keyHandler = keyHandler;
+  document.addEventListener('keydown', keyHandler, true);
+
+  // โฟกัสปุ่ม "ยกเลิก" (ปลอดภัยกว่า) — และปุ่มยืนยันไม่ถูกโฟกัส จึงกด Enter ยืนยันไม่ได้
+  modal.querySelector('#withdrawConfirmCancel')?.focus();
+}
+
+async function _doWithdrawPendingCredit(transactionId) {
   try {
     await api.withdrawPendingCredit(transactionId, {
       remark: 'Manual withdraw from pending list',
