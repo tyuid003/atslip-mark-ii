@@ -10,7 +10,7 @@ import { AdminLoginAPI } from './api/admin-login';
 import { BankRefreshService } from './services/bank-refresh.service';
 import { ScanAPI } from './api/scan';
 import { BankAccountsAPI } from './api/bank-accounts';
-import { handleUserSearch, handleGenMemberCode } from './api/user-search';
+import { handleUserSearch, handleGenMemberCode, handleUpdateUser, handleCreateMember, handleListBanks } from './api/user-search';
 import { handleMatchPendingTransaction } from './api/match-pending';
 import {
   handleCreditPendingTransaction,
@@ -530,6 +530,23 @@ export default {
     // GET /api/users/gen-membercode?tenant_id=&user_id= - gen/fetch memberCode สำหรับ non-member
     if (method === 'GET' && pathname === '/api/users/gen-membercode') {
       return await handleGenMemberCode(env, request);
+    }
+
+    // GET /api/users/banks?tenant_id= - รายการธนาคารสำหรับฟอร์มสมัครสมาชิก (V2)
+    if (method === 'GET' && pathname === '/api/users/banks') {
+      return await handleListBanks(env, request);
+    }
+
+    // POST /api/users/create - สมัครสมาชิกใหม่ผ่าน admin bearer (V2)
+    if (method === 'POST' && pathname === '/api/users/create') {
+      return await handleCreateMember(env, request);
+    }
+
+    // PUT /api/users/update/:id - อัปเดตข้อมูลลูกค้า (เช่น เปลี่ยนรหัสผ่าน) ผ่าน admin bearer ในฐานข้อมูล
+    const updateUserMatch = pathname.match(/^\/api\/users\/update\/([^\/]+)$/);
+    if (method === 'PUT' && updateUserMatch) {
+      const userId = decodeURIComponent(updateUserMatch[1]);
+      return await handleUpdateUser(env, userId, request);
     }
 
     // ============================================================
