@@ -1464,7 +1464,7 @@ function showDuplicatePopup(dupData, imgDataUrl) {
         <div class="dup-slip-details">
           <div class="dup-slip-row">
             <span class="dup-slip-label">สถานะ</span>
-            <span class="dup-slip-val">${statusHtml}</span>
+            <span class="dup-slip-val" id="dupStatusVal">${statusHtml}</span>
           </div>
           <div class="dup-slip-row">
             <span class="dup-slip-label">ยอดเงิน</span>
@@ -1527,6 +1527,16 @@ function _refreshDupActionBtn(newStatus) {
   if (window.lucide) lucide.createIcons();
 }
 
+// อัพเดททั้ง status badge + ปุ่ม action (ใช้หลังเติม/ดึงเครดิต โดยไม่ปิด popup)
+function _setDupStatus(newStatus) {
+  const el = document.getElementById('dupStatusVal');
+  if (el) {
+    const statusLabels = { credited: 'เติมแล้ว', duplicate: 'ยอดซ้ำ', matched: 'จับคู่แล้ว', pending: 'รอดำเนินการ' };
+    el.innerHTML = `<span class="dup-status-badge dup-status-${newStatus}">${statusLabels[newStatus] || newStatus}</span>`;
+  }
+  _refreshDupActionBtn(newStatus);
+}
+
 function closeDuplicatePopup() {
   const el = document.getElementById('dupSlipModal');
   if (el) el.remove();
@@ -1559,6 +1569,7 @@ window._dupCreditItem = async function (btnEl) {
     addNotification(response?.data?.status === 'duplicate' ? '⚠️ รายการซ้ำในระบบแอดมิน' : '✅ เติมเครดิตสำเร็จ');
     await loadPendingTransactions();
     _refreshScanLogIfVisible();
+    // เติมเครดิตสำเร็จ = จบงาน → ปิด popup
     closeDuplicatePopup();
   } catch (err) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + err.message);
@@ -1585,7 +1596,8 @@ window._dupWithdrawItem = async function (btnEl) {
     addNotification('✅ ดึงเครดิตกลับสำเร็จ');
     await loadPendingTransactions();
     _refreshScanLogIfVisible();
-    closeDuplicatePopup();
+    // ไม่ปิด popup — กลับเป็น matched ให้จับคู่ใหม่/เติมใหม่ได้
+    _setDupStatus('matched');
   } catch (err) {
     addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + err.message);
     btnEl.dataset.loading = '0';
@@ -1785,16 +1797,17 @@ function showWithdrawConfirm(transactionId) {
 
   const okBtn = modal.querySelector('#withdrawConfirmOk');
   okBtn?.addEventListener('click', (e) => {
-    // ⛔ รับเฉพาะการคลิกจริงด้วยเมาส์/นิ้วเท่านั้น
-    // การกด Enter/Space บนปุ่มที่โฟกัสจะยิง click ที่มี e.detail === 0 → ไม่ทำงาน
-    if (!e.detail || e.detail < 1) return;
+    // ยืนยันเมื่อคลิก/แตะจริงเท่านั้น การกดคีย์บอร์ดถูกบล็อกไว้แล้วใน keyHandler ด้านล่าง
+    // (ไม่ใช้ e.detail เป็นเงื่อนไข เพราะบนอุปกรณ์ทัชสกรีน tap จริงอาจได้ e.detail === 0)
+    e.preventDefault();
     closeWithdrawConfirm();
     _doWithdrawPendingCredit(transactionId);
   });
 
-  // ⛔ บล็อกปุ่ม Enter ทั้งหมดขณะเปิด popup (ห้ามยืนยันด้วย Enter) — Escape ใช้ปิดได้
+  // ⛔ บล็อก Enter และ Space ขณะเปิด popup — คีย์บอร์ดยืนยันไม่ได้ ต้องคลิก/แตะเท่านั้น
+  //    (Space/Enter คือวิธีเดียวที่คีย์บอร์ดใช้ activate ปุ่มที่โฟกัส) — Escape ใช้ปิดได้
   const keyHandler = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
       e.preventDefault();
       e.stopPropagation();
     } else if (e.key === 'Escape') {
