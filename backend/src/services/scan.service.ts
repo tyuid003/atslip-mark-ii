@@ -755,6 +755,56 @@ export class ScanService {
   }
 
   /**
+   * ตรวจว่าเลขบัญชีจากสลิป (ถูก mask ด้วย x/X ตามธนาคาร) ตรงกับเลขบัญชีเต็มของลูกค้าหรือไม่
+   *
+   * วิธีหลัก (positional regex): mask รักษาตำแหน่ง+จำนวนหลักไว้ครบ → แปลง x→\d คงเลขจริง
+   *   anchor หัวท้าย แล้วเทสต์กับเลขเต็ม (ใช้เมื่อความยาว mask == ความยาวเลขลูกค้า)
+   *   เช่น "xxx-x-x5587-x" → ^\d{5}5587\d$  , "462-4-xxx278" → ^4624\d{3}278$
+   * วิธีสำรอง (substring): ถ้าความยาวไม่ตรง (ธนาคารคนละแบบ) ใช้ช่วงเลขจริงต่อเนื่องที่ยาวสุด
+   *   (>= 4 หลัก) เป็น substring; ถ้ามีหลายช่วงต้องเจอครบและเรียงตามลำดับ
+   */
+  static matchSlipAccount(
+    maskedSlipAccount: string,
+    fullCandidateAccount: string,
+    minVisibleDigits = 3
+  ): { matched: boolean; method: 'regex' | 'substring' | 'none'; visibleDigits: number } {
+    const cand = String(fullCandidateAccount || '').replace(/[^0-9]/g, '');
+    // คงเฉพาะหลัก + สัญลักษณ์ mask (ตัด dash/ช่องว่าง/อักษรอื่น) — x/X = หลักที่ถูกซ่อน
+    const norm = String(maskedSlipAccount || '').replace(/[^0-9xX]/g, '');
+    const visibleDigits = (norm.match(/[0-9]/g) || []).length;
+
+    if (!cand || visibleDigits < minVisibleDigits) {
+      return { matched: false, method: 'none', visibleDigits };
+    }
+
+    // ── วิธีหลัก: positional regex (ความยาวตรงกัน + มีการ mask) ──
+    if (norm.length === cand.length && /[xX]/.test(norm)) {
+      const pattern = '^' + norm.replace(/[xX]/g, '\\d') + '$';
+      try {
+        return { matched: new RegExp(pattern).test(cand), method: 'regex', visibleDigits };
+      } catch {
+        // ตกไปใช้ substring ด้านล่าง
+      }
+    }
+
+    // ── วิธีสำรอง: ช่วงเลขจริงต่อเนื่อง เป็น substring (เรียงตามลำดับถ้ามีหลายช่วง) ──
+    const runs = norm.split(/[xX]+/).filter((r) => r.length > 0);
+    const longestRun = runs.reduce((a, b) => (b.length > a.length ? b : a), '');
+    if (longestRun.length >= Math.max(minVisibleDigits, 4)) {
+      let idx = 0;
+      let ok = true;
+      for (const r of runs) {
+        const found = cand.indexOf(r, idx);
+        if (found < 0) { ok = false; break; }
+        idx = found + r.length;
+      }
+      if (ok) return { matched: true, method: 'substring', visibleDigits };
+    }
+
+    return { matched: false, method: 'none', visibleDigits };
+  }
+
+  /**
    * Match receiver (บัญชีรับ) กับ tenant
    * ลำดับการ match:
    * 1. ชื่อธนาคาร
@@ -1228,11 +1278,18 @@ export class ScanService {
       return null;
     }
 
+    // เตรียมข้อมูลเลขบัญชีจากสลิปสำหรับใช้ยืนยัน/ตัดสิน
+    const senderAccountMasked = String(senderAccount || '');
+    const slipVisibleDigits = (senderAccountMasked.match(/[0-9]/g) || []).length;
+    const hasSlipAccount = slipVisibleDigits >= minAccountDigits;
+    const candAcctOf = (u: any) => String(u.bankAccount || u.bank_account || u.accountNumber || '');
+    const acctMatches = (u: any) =>
+      hasSlipAccount && this.matchSlipAccount(senderAccountMasked, candAcctOf(u), minAccountDigits).matched;
+
     if (nameMatchedCandidates.length === 1) {
-      // ── ตรวจ "ชื่อตรงเต็ม" ก่อน auto-match (กัน false positive จากชื่อคล้าย นามสกุลต่าง) ──
-      // เงื่อนไข: ชื่อที่สั้นกว่าต้องถูกครอบด้วยชื่อที่ยาวกว่าทั้งหมด (เป็น substring ต่อเนื่อง)
-      // - สลิป "สมชายรักดี" vs user "สมชายรักษา" → LCS "สมชายรัก"=8 < 10 → ไม่ผ่าน → pending ✅
-      // - สลิปย่อนามสกุล "มาลัยว." vs user "มาลัยวงศ์ดี" → strip จุด → "มาลัยว" อยู่ใน "มาลัยวงศ์ดี" → ผ่าน ✅
+      // ── ตรวจ "ชื่อตรงเต็ม" หรือ "เลขบัญชีตรง" ก่อน auto-match ──
+      // เงื่อนไข strong name: ชื่อที่สั้นกว่าต้องถูกครอบด้วยชื่อที่ยาวกว่าทั้งหมด (substring ต่อเนื่อง)
+      // ถ้าชื่อไม่เต็มแต่เลขบัญชีจากสลิปตรง → ยืนยันด้วยบัญชีได้
       const only = nameMatchedCandidates[0];
       const stripPunct = (s: string) => String(s || '').replace(/[^\p{L}\p{N}]/gu, '');
       const s1 = stripPunct(only.bestSlipName);
@@ -1240,77 +1297,67 @@ export class ScanService {
       const shorterLen = Math.min(s1.length, s2.length);
       const lcsLen = this.getLongestCommonSubstring(s1, s2).length;
       const isStrongFullNameMatch = shorterLen > 0 && lcsLen >= shorterLen;
+      const accountConfirmed = acctMatches(only.user);
 
-      if (!isStrongFullNameMatch) {
-        log('[ScanService] ⚠️ RESULT: Single candidate but name NOT a full match — returning null (pending, manual match required)', {
+      if (isStrongFullNameMatch || accountConfirmed) {
+        log('[ScanService] ✅ RESULT: Single candidate matched', {
           fullname: only.user.fullname,
           memberCode: only.user.memberCode,
-          slipName: only.bestSlipName,
-          candidateName: only.bestCandidateName,
-          lcsLen,
-          requiredLen: shorterLen,
+          category: only.user.category,
+          reason: isStrongFullNameMatch ? 'strong-full-name' : 'account-confirmed',
+          accountConfirmed,
         });
-        log('[ScanService] 🔍 ===== SENDER MATCHING END (WEAK NAME — PENDING) =====');
-        return null;
+        log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
+        return only.user;
       }
 
-      log('[ScanService] ✅ RESULT: Single candidate after name matching', {
-        fullname: nameMatchedCandidates[0].user.fullname,
-        memberCode: nameMatchedCandidates[0].user.memberCode,
-        category: nameMatchedCandidates[0].user.category,
-        bestNameScore: nameMatchedCandidates[0].bestNameScore,
+      log('[ScanService] ⚠️ RESULT: Single candidate but name NOT full match and account not confirmed — pending', {
+        fullname: only.user.fullname,
+        memberCode: only.user.memberCode,
+        slipName: only.bestSlipName,
+        candidateName: only.bestCandidateName,
+        lcsLen,
+        requiredLen: shorterLen,
+        hasSlipAccount,
       });
-      log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
-      return nameMatchedCandidates[0].user;
+      log('[ScanService] 🔍 ===== SENDER MATCHING END (WEAK NAME — PENDING) =====');
+      return null;
     }
 
-    // ขั้นที่ 3: ถ้าเจอชื่อซ้ำ ให้เช็คเลขบัญชีตำแหน่งไหนก็ได้ขั้นต่ำ 3 หลัก
-    log('[ScanService] 🔎 STEP 3: Account scoring for duplicate names (any-position substring, >= 3 digits)...');
-    const senderAccountClean = String(senderAccount || '').replace(/[^0-9]/g, '');
-
-    if (senderAccountClean.length >= minAccountDigits) {
-      const accountScored = nameMatchedCandidates.map((x) => {
-        const candidateAccount = String(x.user.bankAccount || x.user.bank_account || '').replace(/[^0-9]/g, '');
-        const { length: bestAccountScore, chunk: bestAccountChunk } = this.getLongestCommonSubstring(senderAccountClean, candidateAccount);
-
-        return {
-          ...x,
-          candidateAccount,
-          bestAccountScore,
-          bestAccountChunk,
-        };
+    // ── ขั้นที่ 3: ชื่อซ้ำ ≥ 2 คน → ใช้เลขบัญชีจากสลิปตัดให้เหลือคนเดียว ──
+    // ต่างจากเดิมที่ชื่อชนแล้ว pending เสมอ: ถ้าเลขบัญชีจากสลิปตรงกับลูกค้า "คนเดียว" → auto-match คนนั้น
+    log('[ScanService] 🔎 STEP 3: Account disambiguation for duplicate names...');
+    if (hasSlipAccount) {
+      const accScored = nameMatchedCandidates.map((x) => {
+        const res = this.matchSlipAccount(senderAccountMasked, candAcctOf(x.user), minAccountDigits);
+        return { cand: x, acctMatched: res.matched, acctMethod: res.method };
       });
-
-      const accountMatchedCandidates = accountScored.filter((x) => x.bestAccountScore >= minAccountDigits);
-      log('[ScanService] 📊 Account score results:', accountScored.map((x) => ({
-        fullname: x.user.fullname,
-        memberCode: x.user.memberCode,
-        bestNameScore: x.bestNameScore,
-        bestAccountScore: x.bestAccountScore,
-        bestAccountChunk: x.bestAccountChunk,
-        accountMatched: x.bestAccountScore >= minAccountDigits,
+      const accountMatched = accScored.filter((x) => x.acctMatched);
+      log('[ScanService] 📊 Account disambiguation results:', accScored.map((x) => ({
+        fullname: x.cand.user.fullname,
+        memberCode: x.cand.user.memberCode,
+        candidateAccount: candAcctOf(x.cand.user),
+        slipAccount: senderAccountMasked,
+        acctMatched: x.acctMatched,
+        method: x.acctMethod,
       })));
 
-      // ชื่อชนกัน → ไม่ auto-match แม้บัญชีจะตรงเพียงคนเดียว เพราะอาจผิดพลาดได้
-      if (accountMatchedCandidates.length >= 1) {
-        log('[ScanService] ⚠️ RESULT: Multiple account matches — returning null (pending, manual match required)', {
-          totalCandidates: accountMatchedCandidates.length,
-          candidates: accountMatchedCandidates.map((x) => ({
-            fullname: x.user.fullname,
-            memberCode: x.user.memberCode,
-            bestNameScore: x.bestNameScore,
-            bestAccountScore: x.bestAccountScore,
-          })),
+      if (accountMatched.length === 1) {
+        log('[ScanService] ✅ RESULT: Disambiguated by account — unique match', {
+          fullname: accountMatched[0].cand.user.fullname,
+          memberCode: accountMatched[0].cand.user.memberCode,
+          method: accountMatched[0].acctMethod,
         });
-        log('[ScanService] 🔍 ===== SENDER MATCHING END (AMBIGUOUS — PENDING) =====');
-        return null;
+        log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED BY ACCOUNT) =====');
+        return accountMatched[0].cand.user;
       }
+      log('[ScanService] ⚠️ Account did not resolve to a unique candidate', { matches: accountMatched.length });
     } else {
-      log('[ScanService] ⏭️ Skipped account scoring: sender account missing or < 3 digits');
+      log('[ScanService] ⏭️ No usable slip account for disambiguation (missing or < 3 digits)');
     }
 
-    // ถ้ายังมีหลาย candidates หลังจากผ่าน account scoring → pending (ให้ manual match)
-    log('[ScanService] ⚠️ RESULT: Multiple name matches, no decisive account match — returning null (pending)', {
+    // ยังกำกวม → pending (ให้ manual match)
+    log('[ScanService] ⚠️ RESULT: Multiple name matches, not resolved by account — pending', {
       totalCandidates: nameMatchedCandidates.length,
       candidates: nameMatchedCandidates.map((x) => ({
         fullname: x.user.fullname,
