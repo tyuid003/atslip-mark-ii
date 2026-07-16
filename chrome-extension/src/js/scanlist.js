@@ -21,7 +21,36 @@ const ScanList = {
       else if (action === 'withdraw') this.withdraw(id, btn);
       else if (action === 'delete') this.remove(id);
       else if (action === 'search') MatchModal.open(id, item.dataset.tenantId);
+      else if (action === 'copy-user') this.copyUser(btn);
     });
+  },
+
+  // คลิกชื่อผู้ใช้ที่จับคู่ → คัดลอกข้อความเต็ม (เช่น "ภาณุพงศ์ จุลเศียร (zta70fd1003805)")
+  copyUser(el) {
+    const text = (el.textContent || '').trim();
+    if (!text) return;
+    const done = () => App.toast('คัดลอกแล้ว: ' + text, 'success');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => this._fallbackCopy(text, done));
+    } else {
+      this._fallbackCopy(text, done);
+    }
+  },
+
+  _fallbackCopy(text, done) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      done && done();
+    } catch (_) {
+      App.toast('คัดลอกไม่สำเร็จ', 'error');
+    }
   },
 
   startPolling() {
@@ -119,7 +148,7 @@ const ScanList = {
         <div class="pending-item-top">
           <span class="status-badge status-${status.color}">${status.label}</span>
           <div class="matched-user-info">
-            ${matchedUserText ? `<span class="matched-user-text" title="${this.esc(matchedUserText)}">${this.esc(matchedUserText)}</span>` : ''}
+            ${matchedUserText ? `<span class="matched-user-text" data-action="copy-user" title="คลิกเพื่อคัดลอก">${this.esc(matchedUserText)}</span>` : ''}
             <button class="icon-btn" data-action="search" title="ค้นหาและจับคู่ผู้ใช้">
               <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </button>

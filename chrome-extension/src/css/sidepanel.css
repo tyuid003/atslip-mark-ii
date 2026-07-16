@@ -207,7 +207,9 @@ body {
 }
 .pending-item-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
 .matched-user-info { display: flex; align-items: center; gap: 4px; }
-.matched-user-text { font-size: 11px; color: var(--c-text-dim); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.matched-user-text { font-size: 11px; color: var(--c-text-dim); text-align: right; white-space: normal; overflow-wrap: anywhere; word-break: break-word; cursor: pointer; border-radius: 4px; padding: 1px 3px; transition: background .15s ease, color .15s ease; }
+.matched-user-text:hover { background: var(--c-surface-2); color: var(--c-primary); }
+.matched-user-text:active { opacity: .7; }
 
 .status-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .status-yellow { background: #fef3c7; color: #b45309; }
