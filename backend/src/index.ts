@@ -733,9 +733,9 @@ export default {
         .catch((err) => console.error('[Scheduled] scan_jobs cleanup error:', err))
     );
 
-    // Auto-retention: ลบ pending_transactions เก่ากว่า 7 วัน (เก็บสลิปย้อนหลังล่าสุด 7 วัน)
+    // Auto-retention: ลบ pending_transactions เก่ากว่า 3 วัน (เก็บสลิปย้อนหลังล่าสุด 3 วัน)
     ctx.waitUntil(
-      cleanupOldPendingTransactions(env, { retentionDays: 7, limit: 5000 })
+      cleanupOldPendingTransactions(env, { retentionDays: 3, limit: 5000 })
         .then((r) => { if (r.deleted) console.log('[Scheduled] pending_transactions cleanup deleted:', r.deleted); })
         .catch((err) => console.error('[Scheduled] pending cleanup error:', err))
     );
