@@ -84,6 +84,35 @@ export async function enqueueScanJob(
 }
 
 // ============================================================
+// Retention cleanup — ลบงานเก่าอัตโนมัติกัน scan_jobs บวม
+// ============================================================
+
+/**
+ * cleanupOldScanJobs — ลบงานสถานะปลายทาง (success/dead_letter) ที่เก่ากว่า retentionDays
+ * ลบทีละ batch (LIMIT) เพื่อให้เบา เรียกจาก cron ทุกนาที → ค่อย ๆ ระบายจนคงที่
+ * ไม่แตะ queued/processing (งานที่ยังไม่จบ)
+ */
+export async function cleanupOldScanJobs(
+  env: Env,
+  opts: { retentionDays?: number; limit?: number } = {},
+): Promise<{ deleted: number }> {
+  const retentionDays = opts.retentionDays ?? 2;
+  const limit = opts.limit ?? 5000;
+  const cutoff = currentTimestamp() - retentionDays * 86400;
+  const res = await env.DB.prepare(
+    `DELETE FROM scan_jobs
+     WHERE id IN (
+       SELECT id FROM scan_jobs
+       WHERE created_at < ? AND status IN ('success', 'dead_letter')
+       LIMIT ?
+     )`,
+  )
+    .bind(cutoff, limit)
+    .run();
+  return { deleted: res.meta?.changes ?? 0 };
+}
+
+// ============================================================
 // Claim & Process
 // ============================================================
 

@@ -32,7 +32,7 @@ import {
 } from './api/ushop';
 import { handleTelegramWebhook } from './api/telegram-webhook';
 import * as TelegramConnectionsAPI from './api/telegram-connections';
-import { processQueueOnce, processScanJob } from './services/scan-queue.service';
+import { processQueueOnce, processScanJob, cleanupOldScanJobs } from './services/scan-queue.service';
 import * as ReportAPI from './api/report';
 import * as ReportLogsAPI from './api/report-logs';
 import { AntidupSettingsAPI } from './api/antidup-settings';
@@ -724,6 +724,13 @@ export default {
       processQueueOnce(env, { limit: 40 })
         .then((r) => console.log('[Scheduled] Queue worker processed:', r.processed))
         .catch((err) => console.error('[Scheduled] Queue worker error:', err))
+    );
+
+    // Auto-retention: ลบงาน scan_jobs เก่า (success/dead_letter > 2 วัน) กันตารางบวม
+    ctx.waitUntil(
+      cleanupOldScanJobs(env, { retentionDays: 2, limit: 5000 })
+        .then((r) => { if (r.deleted) console.log('[Scheduled] scan_jobs cleanup deleted:', r.deleted); })
+        .catch((err) => console.error('[Scheduled] scan_jobs cleanup error:', err))
     );
   },
 

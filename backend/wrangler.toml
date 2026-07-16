@@ -43,7 +43,7 @@ binding = "SCAN_QUEUE"
 [[queues.consumers]]
 queue = "atslip-scan-queue"
 max_batch_size = 1
-max_concurrency = 10
+max_concurrency = 20
 max_retries = 3
 dead_letter_queue = "atslip-scan-dlq"
 
