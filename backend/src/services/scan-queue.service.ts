@@ -21,7 +21,7 @@ import type { Env, ScanJob } from '../types';
 import { generateId, currentTimestamp } from '../utils/helpers';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
-const PER_TEAM_CONCURRENCY = 10; // จำกัด 10 job processing พร้อมกันต่อทีม
+const PER_TEAM_CONCURRENCY = 25; // จำกัด job processing พร้อมกันต่อทีม (เพิ่มจาก 10 เพื่อระบายคิวช่วงพีค)
 
 // ============================================================
 // Enqueue
@@ -92,7 +92,9 @@ export async function enqueueScanJob(
  * เพื่อไม่ให้ job ที่ค้าง (worker ตายกลางคัน) บล็อกงานใหม่
  */
 async function teamProcessingCount(env: Env, teamId: string): Promise<number> {
-  const freshCutoff = currentTimestamp() - 5 * 60;
+  // นับเฉพาะ job ที่ยัง "สด" (updated ภายใน 2 นาที) — job จริงเสร็จภายใน 90s (withTimeout)
+  // ดังนั้น job ที่ค้างเกิน 2 นาที = orphan (waitUntil ถูก cancel) → เลิกนับ เพื่อไม่ให้บล็อกการ claim งานใหม่
+  const freshCutoff = currentTimestamp() - 2 * 60;
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS c FROM scan_jobs WHERE team_id = ? AND status = 'processing' AND updated_at >= ?`,
   )
@@ -660,8 +662,9 @@ export async function processQueueOnce(
   const now = currentTimestamp();
   const limit = opts.limit ?? 5;
 
-  // Recovery: จัดการ job ที่ค้างสถานะ 'processing' เกิน 5 นาที (worker ตายกลางคัน)
-  const stuckCutoff = now - 5 * 60;
+  // Recovery: จัดการ job ที่ค้างสถานะ 'processing' เกิน 3 นาที (worker ตายกลางคัน / waitUntil ถูก cancel)
+  // 3 นาที ปลอดภัยเพราะ job จริงมี withTimeout 90s อยู่แล้ว
+  const stuckCutoff = now - 3 * 60;
   // 1) ถ้า attempts ครบ max แล้ว → dead_letter (กันวนไม่รู้จบจนคิวตัน)
   await env.DB.prepare(
     `UPDATE scan_jobs
@@ -691,13 +694,20 @@ export async function processQueueOnce(
     .all<{ id: string }>();
 
   const jobIds = (rows.results || []).map((r) => r.id);
-  // ประมวลผลทีละงาน (sequential) — cron เป็นตัวระบายสำรอง
-  // ทำทีละตัวเพื่อให้แต่ละ job มี connection budget พอ (Cloudflare จำกัด ~6 simultaneous connections/invocation)
-  // และให้ teamProcessingCount อัปเดตระหว่างงาน → per-team concurrency ทำงานจริง
+  // ประมวลผลแบบ bounded-parallel — เพิ่ม throughput ของตัวระบายสำรอง (cron/waitUntil)
+  // แต่ละ job เป็นสลิปคนละใบ + มี idempotency_key กันซ้ำ → ทำขนานกันได้อย่างปลอดภัย
+  // จำกัด concurrency ไว้ต่ำ (BATCH) เพื่อไม่ให้เกินงบ ~6 simultaneous connections/invocation ของ Cloudflare
+  const BATCH = 4;
   let processed = 0;
-  for (const id of jobIds) {
-    await processScanJob(env, id);
-    processed += 1;
+  for (let i = 0; i < jobIds.length; i += BATCH) {
+    const batch = jobIds.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map((id) =>
+        processScanJob(env, id)
+          .then(() => { processed += 1; })
+          .catch((err) => console.error('[ScanQueue] batch job failed:', id, err?.message || err)),
+      ),
+    );
   }
   return { processed };
 }

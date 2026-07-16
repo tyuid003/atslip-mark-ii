@@ -7,6 +7,8 @@ export interface Env {
   BANK_KV: KVNamespace;
   PENDING_NOTIFICATIONS: DurableObjectNamespace;
   TELEGRAM_AUTH_DO: DurableObjectNamespace;
+  // Cloudflare Queue สำหรับประมวลผล scan job แบบเชื่อถือได้ (แทน ctx.waitUntil)
+  SCAN_QUEUE: Queue<{ jobId: string }>;
   TELEGRAM_API_ID: string;
   TELEGRAM_API_HASH: string;
   // Optional Telegram secret key สำหรับ encrypt bot_token ก่อนเก็บ DB

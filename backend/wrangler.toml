@@ -34,6 +34,19 @@ class_name = "PendingNotificationsDO"
 name = "TELEGRAM_AUTH_DO"
 class_name = "TelegramAuthDO"
 
+# Cloudflare Queues — ประมวลผล scan job แบบเชื่อถือได้ (retry + DLQ)
+# แทน ctx.waitUntil เดิมที่ถูก Cloudflare ยกเลิกกลางคันช่วงพีค (ต้นเหตุสลิปค้าง)
+[[queues.producers]]
+queue = "atslip-scan-queue"
+binding = "SCAN_QUEUE"
+
+[[queues.consumers]]
+queue = "atslip-scan-queue"
+max_batch_size = 1
+max_concurrency = 10
+max_retries = 3
+dead_letter_queue = "atslip-scan-dlq"
+
 # Migration for Durable Objects (required for first deployment)
 [[migrations]]
 tag = "v1"

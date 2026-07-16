@@ -334,7 +334,7 @@ export async function handleUshopInbound(
       // ถ้าโหลด settings ไม่ได้ ก็ข้ามการตอบกลับทันที
     }
 
-    await enqueueScanJob(env, {
+    const { id: ushopJobId } = await enqueueScanJob(env, {
       team_id: conn.team_id,
       tenant_id: effectiveTenantId,
       source: 'ushop',
@@ -355,7 +355,8 @@ export async function handleUshopInbound(
       },
     });
 
-    ctx.waitUntil(processQueueOnce(env, { limit: 20 }));
+    // ส่งเข้า Cloudflare Queue → ประมวลผลแบบเชื่อถือได้ (cron เป็น safety net)
+    await env.SCAN_QUEUE.send({ jobId: ushopJobId });
 
     return successResponse({ received: true });
   } catch (error: any) {

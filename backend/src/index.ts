@@ -32,7 +32,7 @@ import {
 } from './api/ushop';
 import { handleTelegramWebhook } from './api/telegram-webhook';
 import * as TelegramConnectionsAPI from './api/telegram-connections';
-import { processQueueOnce } from './services/scan-queue.service';
+import { processQueueOnce, processScanJob } from './services/scan-queue.service';
 import * as ReportAPI from './api/report';
 import * as ReportLogsAPI from './api/report-logs';
 import { AntidupSettingsAPI } from './api/antidup-settings';
@@ -721,10 +721,28 @@ export default {
 
     // เก็บงานคิวที่ค้าง (retry / orphan / scheduled jobs)
     ctx.waitUntil(
-      processQueueOnce(env, { limit: 20 })
+      processQueueOnce(env, { limit: 40 })
         .then((r) => console.log('[Scheduled] Queue worker processed:', r.processed))
         .catch((err) => console.error('[Scheduled] Queue worker error:', err))
     );
+  },
+
+  // ============================================================
+  // QUEUE CONSUMER — ประมวลผล scan job แบบเชื่อถือได้ (Cloudflare การันตีเรียก + retry + DLQ)
+  // แทน ctx.waitUntil เดิมที่ถูกยกเลิกกลางคันช่วงพีค → 1 message = 1 job / 1 invocation budget
+  // ============================================================
+  async queue(batch: MessageBatch<{ jobId: string }>, env: Env, _ctx: ExecutionContext): Promise<void> {
+    for (const msg of batch.messages) {
+      const jobId = msg.body?.jobId;
+      if (!jobId) { msg.ack(); continue; }
+      try {
+        await processScanJob(env, jobId, { ignoreConcurrency: true });
+        msg.ack();
+      } catch (err: any) {
+        console.error('[Queue] job errored, will retry:', jobId, err?.message);
+        msg.retry();
+      }
+    }
   },
 };
 

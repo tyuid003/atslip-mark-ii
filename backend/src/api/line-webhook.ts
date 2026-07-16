@@ -193,11 +193,10 @@ export async function handleLineWebhook(
           line_message_id: event.message.id,
         },
       });
-      // ประมวลผล "งานของตัวเอง" ใน invocation นี้เลย (1 สลิป = 1 invocation budget เหมือน manual)
-      // → กันปัญหา worker ตายกลางคันจากการทำหลาย job พร้อมกันจนเกิน connection limit
-      // ignoreConcurrency=true เพราะเป็น invocation แยก ไม่ควรถูกบล็อกโดย backlog ที่ cron กำลัง drain
-      // งานที่ค้าง/retry ให้ cron (ทุก 1 นาที) เป็นตัวระบายสำรอง
-      ctx.waitUntil(processScanJob(env, jobId, { ignoreConcurrency: true }));
+      // ส่งเข้า Cloudflare Queue → consumer ประมวลผลแบบเชื่อถือได้ (retry + DLQ)
+      // แทน ctx.waitUntil เดิมที่ถูกยกเลิกกลางคันช่วงพีค (ต้นเหตุสลิปค้าง)
+      // งานที่ fail/ค้าง ยังมี cron (ทุก 1 นาที) เป็นตัวระบายสำรอง
+      await env.SCAN_QUEUE.send({ jobId });
     } else {
       // fallback: ถ้าหา team_id ไม่ได้ ใช้ direct process เดิม
       ctx.waitUntil(processImageEvent(env, lineOA, settings, event));

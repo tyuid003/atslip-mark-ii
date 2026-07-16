@@ -163,7 +163,9 @@ async function handleIncomingPhoto(env: Env, conn: TeamTelegramConnection, messa
       return;
     }
 
-    await processScanJob(env, jobId);
+    // ส่งเข้า Cloudflare Queue → consumer ประมวลผลแบบเชื่อถือได้ (retry + DLQ)
+    // แทน processScanJob ตรง ๆ ที่รันใน waitUntil (ถูกยกเลิกกลางคันช่วงพีค = ต้นเหตุสลิปค้าง)
+    await env.SCAN_QUEUE.send({ jobId });
   } catch (err: any) {
     console.error('[TelegramWebhook] handleIncomingPhoto error:', err?.message);
     try {
