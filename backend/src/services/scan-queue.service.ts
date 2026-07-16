@@ -112,6 +112,32 @@ export async function cleanupOldScanJobs(
   return { deleted: res.meta?.changes ?? 0 };
 }
 
+/**
+ * cleanupOldPendingTransactions — ลบสลิปเก่ากว่า retentionDays (default 7)
+ * ลบทีละ batch (LIMIT) เรียกจาก cron → รักษาให้ตารางเหลือแค่ช่วงล่าสุด
+ * ใช้ index idx_pending_created (created_at) → เบา
+ * NOTE: retention กระทบการเช็คสลิปซ้ำ (slip_ref) เฉพาะสลิปที่เก่ากว่า window เท่านั้น
+ */
+export async function cleanupOldPendingTransactions(
+  env: Env,
+  opts: { retentionDays?: number; limit?: number } = {},
+): Promise<{ deleted: number }> {
+  const retentionDays = opts.retentionDays ?? 7;
+  const limit = opts.limit ?? 5000;
+  const cutoff = currentTimestamp() - retentionDays * 86400;
+  const res = await env.DB.prepare(
+    `DELETE FROM pending_transactions
+     WHERE id IN (
+       SELECT id FROM pending_transactions
+       WHERE created_at < ?
+       LIMIT ?
+     )`,
+  )
+    .bind(cutoff, limit)
+    .run();
+  return { deleted: res.meta?.changes ?? 0 };
+}
+
 // ============================================================
 // Claim & Process
 // ============================================================

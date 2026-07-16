@@ -32,7 +32,7 @@ import {
 } from './api/ushop';
 import { handleTelegramWebhook } from './api/telegram-webhook';
 import * as TelegramConnectionsAPI from './api/telegram-connections';
-import { processQueueOnce, processScanJob, cleanupOldScanJobs } from './services/scan-queue.service';
+import { processQueueOnce, processScanJob, cleanupOldScanJobs, cleanupOldPendingTransactions } from './services/scan-queue.service';
 import * as ReportAPI from './api/report';
 import * as ReportLogsAPI from './api/report-logs';
 import { AntidupSettingsAPI } from './api/antidup-settings';
@@ -731,6 +731,13 @@ export default {
       cleanupOldScanJobs(env, { retentionDays: 2, limit: 5000 })
         .then((r) => { if (r.deleted) console.log('[Scheduled] scan_jobs cleanup deleted:', r.deleted); })
         .catch((err) => console.error('[Scheduled] scan_jobs cleanup error:', err))
+    );
+
+    // Auto-retention: ลบ pending_transactions เก่ากว่า 7 วัน (เก็บสลิปย้อนหลังล่าสุด 7 วัน)
+    ctx.waitUntil(
+      cleanupOldPendingTransactions(env, { retentionDays: 7, limit: 5000 })
+        .then((r) => { if (r.deleted) console.log('[Scheduled] pending_transactions cleanup deleted:', r.deleted); })
+        .catch((err) => console.error('[Scheduled] pending cleanup error:', err))
     );
   },
 
