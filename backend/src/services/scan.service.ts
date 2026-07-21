@@ -735,6 +735,20 @@ export class ScanService {
   }
 
   /**
+   * ตรวจว่า "นามสกุล" ในชื่อจากสลิปถูกย่อเหลืออักษรเดียว หรือไม่มีนามสกุล
+   * (ธนาคารไทยมักโชว์ "ชื่อจริง + อักษรแรกของนามสกุล" เช่น "สมชาย ก")
+   * เคสนี้ยืนยันตัวตนด้วยชื่ออย่างเดียวไม่ได้ → ต้องใช้เลขบัญชีช่วยตัดสิน
+   */
+  static hasTruncatedSurname(rawName?: string): boolean {
+    const cleaned = this.removeTitlePrefix(String(rawName || '')).trim();
+    if (!cleaned) return true;
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    if (tokens.length < 2) return true; // มีแต่ชื่อจริง ไม่มีนามสกุล
+    const last = tokens[tokens.length - 1].replace(/[.\u200b]/g, '');
+    return last.length <= 1; // นามสกุลเหลืออักษรเดียว = ย่อ
+  }
+
+  /**
    * หา longest common substring (ตำแหน่งใดก็ได้)
    */
   static getLongestCommonSubstring(a: string, b: string): { length: number; chunk: string } {
@@ -1296,7 +1310,13 @@ export class ScanService {
       const s2 = stripPunct(only.bestCandidateName);
       const shorterLen = Math.min(s1.length, s2.length);
       const lcsLen = this.getLongestCommonSubstring(s1, s2).length;
-      const isStrongFullNameMatch = shorterLen > 0 && lcsLen >= shorterLen;
+      // ── กันเข้าผิดคนกรณี "ชื่อจริงเหมือน + นามสกุลตัวแรกเหมือน" ──
+      // ถ้าสลิปโชว์นามสกุลแค่อักษรเดียว (หรือไม่มีนามสกุล) จะยืนยันด้วยชื่ออย่างเดียวไม่ได้
+      // ต้องมีชื่อใดชื่อหนึ่ง (TH/EN) ที่นามสกุลครบถึงจะถือว่า strong-full-name
+      const slipHasFullSurname =
+        (!!senderNameTh && !this.hasTruncatedSurname(senderNameTh)) ||
+        (!!senderNameEn && !this.hasTruncatedSurname(senderNameEn));
+      const isStrongFullNameMatch = slipHasFullSurname && shorterLen > 0 && lcsLen >= shorterLen;
       const accountConfirmed = acctMatches(only.user);
 
       if (isStrongFullNameMatch || accountConfirmed) {
@@ -1318,6 +1338,7 @@ export class ScanService {
         candidateName: only.bestCandidateName,
         lcsLen,
         requiredLen: shorterLen,
+        slipHasFullSurname,
         hasSlipAccount,
       });
       log('[ScanService] 🔍 ===== SENDER MATCHING END (WEAK NAME — PENDING) =====');
