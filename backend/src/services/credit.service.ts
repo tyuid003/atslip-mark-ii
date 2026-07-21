@@ -672,6 +672,78 @@ export class CreditService {
   }
 
   /**
+   * Anti-Dup check สำหรับ v1 (ใช้กับเส้น manual credit)
+   * เทียบยอด + เวลาในลิสต์ฝากของ user ภายในหน้าต่างเวลา (ดีฟอลต์ 60 วินาที) — mirror จาก scan.ts (auto)
+   * คืน { isDuplicate, deposit } — ถ้าเช็คไม่ได้จะถือว่าไม่ซ้ำ (fail-open เหมือน auto flow)
+   */
+  static async checkManualDuplicateV1(
+    adminApiUrl: string,
+    sessionToken: string,
+    memberCodeOrUserId: string,
+    slipAmount: number,
+    slipDate: string,
+    windowMs: number = 60 * 1000,
+    logger?: (...args: any[]) => void
+  ): Promise<{ isDuplicate: boolean; deposit?: any }> {
+    const log = logger || console.log;
+    try {
+      // 1) หา numeric userId จาก memberCode
+      const user = await this.searchUserByKeyword(adminApiUrl, sessionToken, String(memberCodeOrUserId), log);
+      const userId = user?.id;
+      if (!userId) {
+        log('[CreditService] ⚠️ Anti-dup(manual): resolve userId ไม่ได้ — ข้ามการเช็ค');
+        return { isDuplicate: false };
+      }
+
+      const slipTime = this.normalizeTimeMs(slipDate);
+      // 2) ดึงลิสต์ฝากล่าสุดของ user
+      const resp = await fetch(
+        `${adminApiUrl}/api/user-transactions/list?page=1&limit=20&sortCol=transfer_at&sortAsc=desc&userId=${encodeURIComponent(userId)}`,
+        { headers: { Authorization: `Bearer ${sessionToken}`, Accept: 'application/json' } },
+      );
+      if (!resp.ok) {
+        log('[CreditService] ⚠️ Anti-dup(manual): ดึงลิสต์ฝากไม่สำเร็จ', resp.status, '— ข้าม');
+        return { isDuplicate: false };
+      }
+      const data = await resp.json() as { list?: any[] };
+      const deposits = (data.list || []).filter((t: any) => t.typeName === 'ฝาก');
+
+      for (const dep of deposits) {
+        const sameAmount =
+          typeof dep.creditAmount === 'number' && typeof slipAmount === 'number'
+            ? Math.abs(dep.creditAmount - slipAmount) < 0.01
+            : dep.creditAmount === slipAmount;
+        if (!sameAmount) continue;
+        if (dep.transferAt && slipTime) {
+          const depTime = this.normalizeTimeMs(dep.transferAt);
+          if (depTime !== null && Math.abs(depTime - slipTime) <= windowMs) {
+            log('[CreditService] ⚠️ Anti-dup(manual): พบรายการฝากซ้ำ', { amount: slipAmount, transferAt: dep.transferAt });
+            return { isDuplicate: true, deposit: dep };
+          }
+        }
+      }
+      return { isDuplicate: false };
+    } catch (err: any) {
+      log('[CreditService] ⚠️ Anti-dup(manual) error (non-blocking):', err?.message || err);
+      return { isDuplicate: false };
+    }
+  }
+
+  /** normalize เวลา → UTC unix ms (ถ้าไม่มี timezone ถือเป็นเวลาไทย UTC+7) */
+  private static normalizeTimeMs(timeStr: string | null | undefined): number | null {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    const trimmed = timeStr.trim();
+    if (!trimmed) return null;
+    if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+      const ms = new Date(trimmed).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    }
+    const isoLike = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+    const ms = new Date(`${isoLike}+07:00`).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  /**
    * ตรวจสอบว่า tenant มีการเปิดใช้งาน auto-deposit หรือไม่
    */
   static async isAutoDepositEnabled(env: Env, tenantId: string): Promise<boolean> {

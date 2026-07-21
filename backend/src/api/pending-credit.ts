@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { successResponse, errorResponse, getAdminAuthHeaders } from '../utils/helpers';
 import { CreditService } from '../services/credit.service';
+import { AntidupSettingsAPI } from './antidup-settings';
 
 function normalizeAccount(value: string | null | undefined): string {
   return String(value || '').replace(/[^0-9]/g, '');
@@ -188,6 +189,54 @@ export async function handleCreditPendingTransaction(
       transRef: transaction.slip_ref,
       date: new Date().toISOString(),
     };
+
+    // ── Anti-Dup check (v1 เท่านั้น — v2 เช็คใน submitCreditV2 อยู่แล้ว) ──
+    // เส้น manual credit เดิม "ไม่ได้" เช็ค Anti-Dup ทำให้เติมซ้ำได้แม้เปิดตรวจสอบรายการซ้ำ
+    try {
+      const tenantRow = await env.DB.prepare(
+        `SELECT admin_api_url, COALESCE(api_version, 'v1') as api_version, team_id
+         FROM tenants WHERE id = ? AND status = 'active' LIMIT 1`
+      )
+        .bind(transaction.tenant_id)
+        .first<{ admin_api_url: string; api_version: string; team_id: string }>();
+
+      const isV1 = tenantRow && String(tenantRow.api_version || 'v1') !== 'v2';
+      if (isV1 && tenantRow?.team_id) {
+        const antidupEnabled = await AntidupSettingsAPI.isEnabled(
+          env, tenantRow.team_id, resolvedToAccountId
+        );
+        if (antidupEnabled) {
+          const sessionRow = await env.DB.prepare(
+            `SELECT session_token FROM admin_sessions WHERE tenant_id = ? AND expires_at > ? LIMIT 1`
+          )
+            .bind(transaction.tenant_id, Math.floor(Date.now() / 1000))
+            .first<{ session_token: string }>();
+
+          if (sessionRow?.session_token) {
+            const slipAmount = Number(slipData?.amount?.amount ?? transaction.amount ?? 0);
+            const slipDate = String(slipData?.date || new Date().toISOString());
+            const dup = await CreditService.checkManualDuplicateV1(
+              tenantRow.admin_api_url,
+              sessionRow.session_token,
+              String(transaction.matched_user_id),
+              slipAmount,
+              slipDate,
+              60 * 1000,
+              console.log
+            );
+            if (dup.isDuplicate) {
+              const nowDup = Math.floor(Date.now() / 1000);
+              await env.DB.prepare(
+                `UPDATE pending_transactions SET status = 'duplicate', updated_at = ? WHERE id = ?`
+              ).bind(nowDup, transactionId).run();
+              return errorResponse('พบรายการฝากซ้ำในระบบ (Anti-Dup) — ไม่เติมเครดิตซ้ำ', 409);
+            }
+          }
+        }
+      }
+    } catch (antidupErr: any) {
+      console.warn('[PendingCredit] Anti-dup check error (non-blocking):', antidupErr?.message || antidupErr);
+    }
 
     const creditResult = await CreditService.submitCredit(
       env,
