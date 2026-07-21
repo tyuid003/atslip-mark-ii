@@ -121,6 +121,13 @@ class API {
     });
   }
 
+  async verifyTotp(tenantId, data) {
+    return this.request(`/api/tenants/${tenantId}/totp-verify`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async toggleAutoDeposit(id, enabled) {
     return this.request(`/api/tenants/${id}/auto-deposit`, {
       method: 'PATCH',

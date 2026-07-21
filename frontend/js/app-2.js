@@ -351,6 +351,8 @@ async function openEditTenantModal(tenantId) {
     document.getElementById('adminPassword').value = tenant.admin_password;
     const versionEl = document.getElementById('tenantApiVersion');
     if (versionEl) versionEl.value = tenant.api_version || 'v1';
+    const totpEl = document.getElementById('tenantTotpEnabled');
+    if (totpEl) totpEl.checked = Number(tenant.totp_enabled) === 1;
 
     document.getElementById('tenantModal').style.display = 'flex';
     lucide.createIcons();
@@ -370,6 +372,7 @@ async function saveTenant() {
   const admin_username = document.getElementById('adminUsername').value;
   const admin_password = document.getElementById('adminPassword').value;
   const api_version = (document.getElementById('tenantApiVersion')?.value) || 'v1';
+  const totp_enabled = document.getElementById('tenantTotpEnabled')?.checked ? 1 : 0;
 
   if (!name || !admin_api_url || !admin_username || !admin_password) {
     addNotification('⚠️ กรุณากรอกข้อมูลให้ครบถ้วน');
@@ -382,6 +385,7 @@ async function saveTenant() {
     admin_username,
     admin_password,
     api_version,
+    totp_enabled,
   };
 
   try {
@@ -449,6 +453,7 @@ function scrollTenants(direction) {
 
 let currentLoginTenant = null;
 let currentCaptchaKey = null;
+let currentTotpAuth = null; // { admin_id, pre_auth_token } ระหว่างขั้นตอนยืนยัน Google Authenticator
 
 async function connectAdmin(tenantId) {
   let tenant;
@@ -506,6 +511,98 @@ function closeAdminLoginModal() {
   modal.style.display = 'none';
   currentLoginTenant = null;
   currentCaptchaKey = null;
+  currentTotpAuth = null;
+  // reset UI ให้กลับไปหน้า captcha สำหรับครั้งถัดไป
+  const totpSection = document.getElementById('totpSection');
+  const captchaSection = document.getElementById('captchaSection');
+  if (totpSection) totpSection.style.display = 'none';
+  if (captchaSection) captchaSection.style.display = '';
+  const totpInput = document.getElementById('totpInput');
+  if (totpInput) totpInput.value = '';
+}
+
+// แสดงขั้นตอนกรอกรหัส Google Authenticator (fallback เมื่อ auto ไม่สำเร็จ / ยังไม่มี secret)
+function showTotpStep(data) {
+  currentTotpAuth = { admin_id: data.admin_id, pre_auth_token: data.pre_auth_token };
+
+  const captchaSection = document.getElementById('captchaSection');
+  const totpSection = document.getElementById('totpSection');
+  const setupWrap = document.getElementById('totpSetupWrap');
+  const secretBox = document.getElementById('totpSecretBox');
+  if (captchaSection) captchaSection.style.display = 'none';
+  if (totpSection) totpSection.style.display = '';
+
+  // ครั้งแรก: มี qr_code (otpauth URI) → แสดง secret ให้เพิ่มในแอปเอง
+  const secret = extractTotpSecret(data.qr_code);
+  if (data.first_time && secret) {
+    if (setupWrap) setupWrap.style.display = '';
+    if (secretBox) secretBox.textContent = secret;
+  } else {
+    if (setupWrap) setupWrap.style.display = 'none';
+  }
+
+  const totpInput = document.getElementById('totpInput');
+  if (totpInput) { totpInput.value = ''; setTimeout(() => totpInput.focus(), 50); }
+  addNotification('🔐 ร้านนี้เปิด Google Authenticator — กรุณากรอกรหัส 6 หลัก');
+}
+
+function extractTotpSecret(otpauth) {
+  try {
+    const m = String(otpauth || '').match(/[?&]secret=([^&]+)/i);
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch { return ''; }
+}
+
+async function submitTotp() {
+  if (!currentLoginTenant || !currentTotpAuth) {
+    addNotification('❌ ข้อมูลไม่ครบถ้วน');
+    return;
+  }
+  const code = (document.getElementById('totpInput').value || '').trim();
+  if (!/^\d{6}$/.test(code)) {
+    addNotification('❌ กรุณากรอกรหัส 6 หลัก');
+    return;
+  }
+
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i data-lucide="loader" class="spin-icon"></i> กำลังยืนยัน...';
+  lucide.createIcons();
+
+  const tenantId = currentLoginTenant.id;
+  try {
+    const response = await api.verifyTotp(tenantId, {
+      admin_id: currentTotpAuth.admin_id,
+      pre_auth_token: currentTotpAuth.pre_auth_token,
+      totp_code: code,
+    });
+    if (response.success) {
+      await onAdminLoginSuccess(tenantId, response);
+    } else {
+      throw new Error(response.error || 'ยืนยันรหัสล้มเหลว');
+    }
+  } catch (error) {
+    addNotification('❌ ยืนยัน Google Authenticator ล้มเหลว: ' + error.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i data-lucide="log-in"></i> เข้าสู่ระบบ';
+    lucide.createIcons();
+  }
+}
+
+// จัดการหลังเชื่อมต่อสำเร็จ (ใช้ร่วมกันทั้งเส้น login ปกติและ TOTP)
+async function onAdminLoginSuccess(tenantId, response) {
+  addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data?.account_count || 0} บัญชี`);
+  closeAdminLoginModal();
+  try {
+    await api.refreshBankAccounts(tenantId);
+    addNotification('✅ รีเฟรชรายชื่อบัญชีสำเร็จ');
+  } catch (refreshError) {
+    console.warn('Auto-refresh failed:', refreshError);
+  }
+  sessionStorage.removeItem('tenants_cache');
+  tenantCache = null;
+  await loadTenants();
 }
 
 async function loadCaptcha(tenant) {
@@ -560,6 +657,11 @@ async function submitAdminLogin() {
     return;
   }
 
+  // อยู่ในขั้นตอนกรอกรหัส Google Authenticator
+  if (currentTotpAuth) {
+    return submitTotp();
+  }
+
   const isV2 = (currentLoginTenant.api_version || 'v1') === 'v2';
 
   if (!isV2) {
@@ -584,23 +686,15 @@ async function submitAdminLogin() {
       captcha_key: currentCaptchaKey,
       captcha_code: document.getElementById('captchaInput').value.trim(),
     });
-    
+
+    // ต้องยืนยัน Google Authenticator (v1 ที่เปิด TOTP และ auto ไม่สำเร็จ/ยังไม่มี secret)
+    if (response && response.need_totp) {
+      showTotpStep(response.data || {});
+      return;
+    }
+
     if (response.success) {
-      addNotification(`✅ เชื่อมต่อสำเร็จ! พบบัญชีธนาคาร ${response.data.account_count || 0} บัญชี`);
-      closeAdminLoginModal();
-      
-      // รีเฟรชบัญชีทันทีเพื่ออัพเดทสถานะการเชื่อมต่อ
-      try {
-        await api.refreshBankAccounts(currentLoginTenant.id);
-        addNotification(`✅ รีเฟรชรายชื่อบัญชีสำเร็จ`);
-      } catch (refreshError) {
-        console.warn('Auto-refresh failed:', refreshError);
-      }
-      
-      // Clear cache และโหลดรายการ tenant ใหม่
-      sessionStorage.removeItem('tenants_cache');
-      tenantCache = null;
-      await loadTenants();
+      await onAdminLoginSuccess(currentLoginTenant.id, response);
     } else {
       throw new Error(response.error || 'เข้าสู่ระบบล้มเหลว');
     }

@@ -571,6 +571,14 @@
             </select>
             <p class="form-help">เลือก v1 ถ้าเว็บใช้ระบบ Admin เก่า, v2 ถ้าใช้ระบบ Admin ใหม่</p>
           </div>
+
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="tenantTotpEnabled" style="width:auto;">
+              <span>เปิดใช้งาน Google Authenticator (เฉพาะ v1)</span>
+            </label>
+            <p class="form-help">ติ๊กถ้าเว็บนี้เปิด 2FA ด้วย Google Authenticator — ATslip จะยืนยันรหัสให้อัตโนมัติ (ครั้งแรกอาจต้องกรอกเอง)</p>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -842,6 +850,26 @@
           >
         </div>
         </div>
+
+        <!-- Google Authenticator (TOTP) — แสดงเมื่อ backend ขอรหัส -->
+        <div id="totpSection" style="display:none;">
+          <div id="totpSetupWrap" style="display:none;" class="form-group">
+            <label class="form-label">ตั้งค่าครั้งแรก: เพิ่มบัญชีใน Google Authenticator ด้วยคีย์นี้</label>
+            <div id="totpSecretBox" class="totp-secret-box" style="font-family:monospace;word-break:break-all;background:var(--color-gray-50);border:1px solid var(--color-gray-200);border-radius:8px;padding:10px;font-size:0.95rem;letter-spacing:1px;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">รหัส Google Authenticator (6 หลัก)</label>
+            <input
+              type="text"
+              id="totpInput"
+              class="form-input"
+              placeholder="กรอกรหัส 6 หลัก"
+              inputmode="numeric"
+              maxlength="6"
+              autocomplete="one-time-code"
+            >
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeAdminLoginModal()">
@@ -1014,7 +1042,7 @@
   <!-- Scripts -->
   <script src="js/config.js?v=2.1"></script>
   <script src="js/auth.js?v=1.0"></script>
-  <script src="js/api.js?v=1.13"></script>
+  <script src="js/api.js?v=1.14"></script>
   <script src="js/ui.js?v=1.9"></script>
   <script src="js/reply-message.js?v=1.2"></script>
   <script src="js/telegram-connect.js?v=1.7"></script>

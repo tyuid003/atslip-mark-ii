@@ -15,6 +15,7 @@ export async function createTenant(
     admin_password: string;
     easyslip_token?: string;
     api_version?: string;
+    totp_enabled?: number | boolean;
   }
 ) {
   // หา team_id จาก slug
@@ -35,8 +36,8 @@ export async function createTenant(
   await env.DB.prepare(
     `INSERT INTO tenants (
       id, team_id, name, admin_api_url, admin_username, admin_password,
-      easyslip_token, api_version, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      easyslip_token, api_version, totp_enabled, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -47,6 +48,7 @@ export async function createTenant(
       data.admin_password,
       data.easyslip_token || null,
       data.api_version || 'v1',
+      data.totp_enabled ? 1 : 0,
       'active',
       now,
       now
@@ -67,6 +69,7 @@ export async function getTenantById(env: Env, id: string): Promise<TenantWithSta
       t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
       t.admin_username, t.admin_password, t.easyslip_token,
       COALESCE(t.api_version, 'v1') as api_version,
+      COALESCE(t.totp_enabled, 0) as totp_enabled,
       COUNT(DISTINCT lo.id) as line_oa_count,
       COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
     FROM tenants t
@@ -126,6 +129,7 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
         t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
         t.admin_username, t.admin_password,
         COALESCE(t.api_version, 'v1') as api_version,
+        COALESCE(t.totp_enabled, 0) as totp_enabled,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
         COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t
@@ -139,6 +143,7 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
         t.auto_deposit_enabled, t.status, t.created_at, t.updated_at,
         t.admin_username, t.admin_password,
         COALESCE(t.api_version, 'v1') as api_version,
+        COALESCE(t.totp_enabled, 0) as totp_enabled,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
         COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t
@@ -199,6 +204,7 @@ export async function updateTenant(
     easyslip_token?: string;
     api_version?: string;
     status?: string;
+    totp_enabled?: number | boolean;
   }
 ) {
   const fields: string[] = [];
@@ -231,6 +237,10 @@ export async function updateTenant(
   if (updates.status) {
     fields.push('status = ?');
     values.push(updates.status);
+  }
+  if (updates.totp_enabled !== undefined) {
+    fields.push('totp_enabled = ?');
+    values.push(updates.totp_enabled ? 1 : 0);
   }
 
   fields.push('updated_at = ?');

@@ -382,6 +382,15 @@ export default {
       return await AdminLoginAPI.handleLogin(env, request, tenantId);
     }
 
+    // POST /api/tenants/:id/totp-verify - ยืนยันรหัส Google Authenticator แบบกรอกเอง
+    const totpVerifyMatch = pathname.match(
+      /^\/api\/tenants\/([^\/]+)\/totp-verify$/
+    );
+    if (method === 'POST' && totpVerifyMatch) {
+      const tenantId = decodeURIComponent(totpVerifyMatch[1]);
+      return await AdminLoginAPI.handleTotpVerify(env, request, tenantId);
+    }
+
     // POST /api/tenants/:id/refresh-accounts - รีเฟรชบัญชีธนาคาร
     const refreshAccountsMatch = pathname.match(
       /^\/api\/tenants\/([^\/]+)\/refresh-accounts$/
