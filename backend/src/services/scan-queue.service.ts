@@ -453,6 +453,7 @@ import {
   fetchLineImage,
   callLinePushAPI,
   isDuplicateScanResult,
+  isConfirmedDuplicate,
   buildFlexMessage,
   buildUshopLogCard,
 } from '../utils/line-utils';
@@ -499,7 +500,8 @@ async function processLineScanJob(env: Env, job: ScanJob): Promise<{ pendingTxId
   const userId = payload.line_user_id;
 
   if (!resp.ok && isDuplicateScanResult(resp, json)) {
-    if (settings.enable_duplicate_flex === 1) {
+    // แจ้งซ้ำเฉพาะเมื่อรายการเดิมเติมเครดิตแล้ว (หรือ anti-dup จริง) — ถ้ายัง pending ไม่แจ้ง
+    if (isConfirmedDuplicate(json) && settings.enable_duplicate_flex === 1) {
       await callLinePushAPI(lineOA.channel_access_token, userId, [buildFlexMessage(settings, 'duplicate', data)]);
     }
   } else if (status === 'credited' && settings.enable_success_flex === 1) {
@@ -617,7 +619,7 @@ async function processUshopScanJob(env: Env, job: ScanJob): Promise<{ pendingTxI
   };
 
   if (!resp.ok && isDuplicateScanResult(resp, json)) {
-    if (settings.enable_duplicate_flex === 1) pushFlex('duplicate');
+    if (isConfirmedDuplicate(json) && settings.enable_duplicate_flex === 1) pushFlex('duplicate');
   } else if (status === 'credited' && settings.enable_success_flex === 1) {
     pushFlex('credited');
   } else if (status === 'duplicate' && settings.enable_duplicate_flex === 1) {

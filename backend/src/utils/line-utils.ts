@@ -52,6 +52,18 @@ export function isDuplicateScanResult(scanResponse: Response, scanPayload: any):
   );
 }
 
+/**
+ * สลิปซ้ำที่ "ควรแจ้งลูกค้าว่าซ้ำ" หรือไม่
+ * - ถ้าเป็นสลิปซ้ำแบบ slip_ref (มี current_status) จะแจ้งว่าซ้ำเฉพาะเมื่อรายการเดิม "เติมเครดิตแล้ว"
+ *   เพราะถ้ารายการเดิมยัง "รอจับคู่/จับคู่แล้วแต่ยังไม่เติม" การบอกลูกค้าว่า "รายการซ้ำ" จะทำให้เข้าใจผิด
+ *   ว่าฝากสำเร็จแล้ว ทั้งที่ยังไม่ได้เติมเครดิต
+ * - ถ้าไม่มี current_status (เช่น anti-dup ที่ตรวจเจอฝากซ้ำในระบบแอดมินจริง) → ถือว่าซ้ำจริง แจ้งได้
+ */
+export function isConfirmedDuplicate(scanPayload: any): boolean {
+  const cur = scanPayload?.data?.current_status;
+  return !cur || cur === 'credited';
+}
+
 function formatDisplayDate(rawDate: string | undefined): string {
   if (!rawDate) return '-';
   const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(rawDate);

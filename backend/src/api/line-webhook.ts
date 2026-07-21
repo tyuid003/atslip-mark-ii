@@ -8,6 +8,7 @@ import {
   callLinePushAPI,
   fetchLineImage,
   isDuplicateScanResult,
+  isConfirmedDuplicate,
   buildFlexMessage,
 } from '../utils/line-utils';
 
@@ -79,11 +80,15 @@ async function processImageEvent(
   const scanPayload = (await scanResponse.json()) as any;
 
   if (!scanResponse.ok || !scanPayload?.success) {
-    if (isDuplicateScanResult(scanResponse, scanPayload) && settings.enable_duplicate_flex === 1) {
-      await callLinePushAPI(lineOA.channel_access_token, userId, [
-        buildFlexMessage(settings, 'duplicate', scanPayload?.data || {}),
-      ]);
-      return;
+    if (isDuplicateScanResult(scanResponse, scanPayload)) {
+      // แจ้ง "รายการซ้ำ" เฉพาะเมื่อรายการเดิมเติมเครดิตแล้ว (หรือ anti-dup จริง)
+      // ถ้ารายการเดิมยัง "รอจับคู่/ยังไม่เติม" → ไม่ส่ง flex ซ้ำ กันลูกค้าเข้าใจผิดว่าฝากสำเร็จ
+      if (isConfirmedDuplicate(scanPayload) && settings.enable_duplicate_flex === 1) {
+        await callLinePushAPI(lineOA.channel_access_token, userId, [
+          buildFlexMessage(settings, 'duplicate', scanPayload?.data || {}),
+        ]);
+      }
+      return; // สลิปซ้ำ: ไม่ตอบ failed reply ไม่ว่ากรณีใด
     }
 
     if (settings.enable_failed_reply === 1) {
