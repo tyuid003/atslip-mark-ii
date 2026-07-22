@@ -364,8 +364,8 @@
     }
 
     async function testWebhook(siteId) {
-      const msg = prompt('ข้อความทดสอบ (เว้นว่างใช้ตัวอย่าง):\n22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ');
-      if (msg === null) return; // cancel
+      const msg = prompt('ข้อความทดสอบ (Enter เว้นว่าง = ใช้ตัวอย่าง):');
+      if (msg === null) return;
       try {
         toast('กำลังยิง...', '');
         const r = await api(`/sites/${siteId}/test-webhook`, {
@@ -373,17 +373,35 @@
           body: JSON.stringify({ message: msg || undefined }),
         });
         const d = r.data;
-        const ok = d.ok;
-        const lines = [
-          `HTTP: ${d.http_status} ${ok ? '✅' : '❌'}`,
-          `URL: ${d.url_fired}`,
-          `ข้อความ: ${d.message_sent}`,
-          `Response: ${d.response_body || '(ไม่มี body)'}`,
-        ];
-        alert(lines.join('\n\n'));
-        if (ok) toast('ยิงสำเร็จ ' + d.http_status, 'ok');
+        showTestResult(d);
+        if (d.ok) toast('ยิงสำเร็จ ' + d.http_status, 'ok');
         else toast('ยิงไม่สำเร็จ ' + d.http_status, 'err');
       } catch (e) { toast(e.message, 'err'); }
+    }
+
+    function showTestResult(d) {
+      let el = document.getElementById('testResultModal');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'testResultModal';
+        el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999;padding:16px;';
+        document.body.appendChild(el);
+      }
+      const ok = d.ok;
+      el.innerHTML = `
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:20px;">
+          <h3 style="margin-bottom:12px;">🧪 ผลทดสอบ Webhook</h3>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span class="status-pill ${ok ? 'status-sent' : 'status-failed'}">HTTP ${d.http_status} ${ok ? '✅' : '❌'}</span>
+          </div>
+          <div style="margin-bottom:6px;"><label>URL ที่ยิงออกไป</label>
+            <textarea readonly style="min-height:52px;word-break:break-all;font-size:.76rem;">${esc(d.url_fired)}</textarea></div>
+          <div style="margin-bottom:6px;"><label>ข้อความที่ส่ง</label>
+            <input readonly value="${esc(d.message_sent)}"></div>
+          <div style="margin-bottom:12px;"><label>Response จาก server</label>
+            <textarea readonly style="min-height:80px;font-size:.76rem;">${esc(d.response_body || '(ไม่มี body)')}</textarea></div>
+          <button class="btn" onclick="document.getElementById('testResultModal').remove()">ปิด</button>
+        </div>`;
     }
 
     load();

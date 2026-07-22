@@ -193,7 +193,15 @@ async function fireWebhook(
   const extraHeaders = safeParseJson(site.webhook_headers, {});
 
   // replace {message} ใน URL ด้วย (รองรับ GET ?body={message}&...)
-  const webhookUrl = site.webhook_url.split('{message}').join(encodeURIComponent(message));
+  // ใช้ new URL() แทน encodeURIComponent เพื่อไม่ให้ encode /, @, :, , ใน query string
+  // (MacroDroid และ browser ส่ง chars เหล่านี้แบบ raw ใน query string)
+  let webhookUrl: string;
+  try {
+    const rawUrlStr = site.webhook_url.split('{message}').join(message);
+    webhookUrl = new URL(rawUrlStr).href;
+  } catch {
+    webhookUrl = site.webhook_url.split('{message}').join(encodeURIComponent(message));
+  }
 
   const headers: Record<string, string> = {};
   // GET/HEAD ไม่ส่ง Content-Type (บาง server reject request)
@@ -536,9 +544,17 @@ async function handleTestWebhook(request: Request, env: Env, slug: string, siteI
   const bodyTemplate = site.webhook_body_template || '{"message":"{message}"}';
   const extraHeaders = safeParseJson(site.webhook_headers, {});
 
-  const webhookUrl = rawUrl
-    ? site.webhook_url
-    : site.webhook_url.split('{message}').join(encodeURIComponent(testMessage));
+  let webhookUrl: string;
+  if (rawUrl) {
+    webhookUrl = site.webhook_url;
+  } else {
+    try {
+      const rawUrlStr = site.webhook_url.split('{message}').join(testMessage);
+      webhookUrl = new URL(rawUrlStr).href;
+    } catch {
+      webhookUrl = site.webhook_url.split('{message}').join(encodeURIComponent(testMessage));
+    }
+  }
 
   const headers: Record<string, string> = {};
   if (!['GET', 'HEAD'].includes(method)) headers['Content-Type'] = contentType;
