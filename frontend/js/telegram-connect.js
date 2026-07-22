@@ -53,12 +53,12 @@
     window.openApiKeysModal();
   };
 
-  // SMS-Hook sub-project — เปิดหน้า /{teamslug} (ลบ function นี้ + เมนูใน index.html เพื่อถอดออก)
+  // SMS-Hook sub-project — เปิดหน้า /sms-hook.html?team={slug} (ลบ function นี้ + เมนูใน index.html เพื่อถอดออก)
   window.kebabOpenSmsHook = function () {
     _closeKebab();
     const slug = window.currentTeamSlug || (typeof window.getTeamFromURL === 'function' ? window.getTeamFromURL() : '');
     if (!slug) { alert('ยังไม่ได้เลือกทีม'); return; }
-    window.open('/' + encodeURIComponent(slug), '_blank');
+    window.open('/sms-hook.html?team=' + encodeURIComponent(slug), '_blank');
   };
 
   function _closeKebab() {
