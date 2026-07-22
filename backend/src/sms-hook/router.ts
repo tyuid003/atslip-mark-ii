@@ -81,9 +81,14 @@ async function ensureTables(env: Env): Promise<void> {
       status TEXT,
       http_status INTEGER,
       response_body TEXT,
+      resolved_url TEXT,
       created_at INTEGER NOT NULL
     )`
   ).run();
+  // migration: เพิ่ม resolved_url ถ้ายังไม่มี (table เก่า)
+  try {
+    await env.DB.prepare(`ALTER TABLE smshook_logs ADD COLUMN resolved_url TEXT`).run();
+  } catch { /* คอลัมน์มีอยู่แล้ว */ }
   await env.DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_smshook_logs_site ON smshook_logs(site_id, created_at)`
   ).run();
@@ -306,33 +311,39 @@ async function processSlipEvent(env: Env, site: any, messageId: string): Promise
     }
   }
 
-  // 4) แปลงเป็นข้อความ SMS + ยิง webhook
+  // 4) แปลงเป็นข้อความ SMS
   const bankCodeMap = safeParseJson(site.bank_code_map, {});
   const message = buildSmsMessage(slip, bankCodeMap, site.mock_total || '1,000.00');
   log('SMS message:', message);
 
   if (!site.webhook_url) {
-    await recordLog(env, site, slipRef, message, 'failed', 0, 'no webhook_url configured');
+    await recordLog(env, site, slipRef, message, 'failed', 0, 'no webhook_url configured', null);
     return;
   }
 
-  const res = await fireWebhook(site, message);
-  await recordLog(
-    env, site, slipRef, message,
-    res.ok ? 'sent' : 'failed', res.httpStatus, res.body
-  );
+  // คำนวณ resolved URL (เอาไว้ browser ยิงเอง)
+  let resolvedUrl: string;
+  try {
+    resolvedUrl = new URL(site.webhook_url.split('{message}').join(message)).href;
+  } catch {
+    resolvedUrl = site.webhook_url.split('{message}').join(encodeURIComponent(message));
+  }
+
+  // เก็บเป็น pending_browser ให้ browser ยิงเอง (หลีก Cloudflare IP block)
+  await recordLog(env, site, slipRef, message, 'pending_browser', 0, '', resolvedUrl);
+  log('Stored pending_browser, waiting for browser relay', { resolvedUrl: resolvedUrl.slice(0, 80) });
 }
 
 async function recordLog(
   env: Env, site: any, slipRef: string | null, message: string | null,
-  status: string, httpStatus: number, responseBody: string
+  status: string, httpStatus: number, responseBody: string, resolvedUrl: string | null = null
 ): Promise<void> {
   try {
     await env.DB.prepare(
-      `INSERT INTO smshook_logs (id, site_id, team_id, slip_ref, message, status, http_status, response_body, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO smshook_logs (id, site_id, team_id, slip_ref, message, status, http_status, response_body, resolved_url, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      generateId(), site.id, site.team_id, slipRef, message, status, httpStatus, responseBody, currentTimestamp()
+      generateId(), site.id, site.team_id, slipRef, message, status, httpStatus, responseBody, resolvedUrl, currentTimestamp()
     ).run();
   } catch {
     // unique(site_id, slip_ref) ชนกัน = ซ้ำ → เพิกเฉย
@@ -585,6 +596,33 @@ async function handleTestWebhook(request: Request, env: Env, slug: string, siteI
   });
 }
 
+async function handlePendingDeliveries(env: Env, slug: string, siteId: string): Promise<Response> {
+  const team = await getTeamBySlug(env, slug);
+  if (!team) return errorResponse('Team not found', 404);
+  const rows = await env.DB.prepare(
+    `SELECT id, slip_ref, message, resolved_url, created_at
+     FROM smshook_logs WHERE site_id = ? AND status = 'pending_browser'
+     ORDER BY created_at ASC LIMIT 20`
+  ).bind(siteId).all<any>();
+  return successResponse({ pending: rows.results || [] });
+}
+
+async function handleAck(request: Request, env: Env, slug: string, siteId: string, logId: string): Promise<Response> {
+  const team = await getTeamBySlug(env, slug);
+  if (!team) return errorResponse('Team not found', 404);
+  const body = await request.json().catch(() => ({})) as any;
+  const ok: boolean = !!body.ok;
+  await env.DB.prepare(
+    `UPDATE smshook_logs SET status = ?, http_status = ?, response_body = ? WHERE id = ? AND site_id = ?`
+  ).bind(
+    ok ? 'sent' : 'failed',
+    body.http_status || 0,
+    String(body.response_body || '').slice(0, 200),
+    logId, siteId
+  ).run();
+  return successResponse({ id: logId, ok });
+}
+
 // ──────────────────────────────────────────────────────────────
 // ROUTER — entry point (mount ครั้งเดียวใน index.ts)
 // คืน null ถ้า path ไม่ใช่ของ sub-project นี้ (ให้ router หลักทำงานต่อ)
@@ -655,6 +693,14 @@ export async function handleSmsHookRoute(
     // /sites/:siteId/test-webhook  — ยิง webhook ด้วยข้อความที่กำหนดเอง (ไม่บันทึก log)
     if (sub === 'test-webhook' && method === 'POST') {
       return handleTestWebhook(request, env, slug, siteId);
+    }
+    // /sites/:siteId/pending-deliveries  — คืน log ที่รอ browser ยิง
+    if (sub === 'pending-deliveries' && method === 'GET') {
+      return handlePendingDeliveries(env, slug, siteId);
+    }
+    // /sites/:siteId/logs/:logId/ack  — browser แจ้งว่ายิงแล้ว
+    if (sub === 'logs' && parts[4] && parts[5] === 'ack' && method === 'POST') {
+      return handleAck(request, env, slug, siteId, parts[4]);
     }
   }
 

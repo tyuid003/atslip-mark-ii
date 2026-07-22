@@ -239,7 +239,13 @@
         </div>
 
         <div class="sub-section">
-          <h4>📜 ประวัติล่าสุด</h4>
+          <h4>📜 ประวัติล่าสุด <span id="relay-status-${s.id}" style="font-size:.75rem;color:var(--muted);margin-left:6px;"></span></h4>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:.84rem;cursor:pointer;color:var(--text);margin:0;">
+              <input type="checkbox" id="relay-toggle-${s.id}" style="width:auto;" onchange="toggleRelay('${s.id}', this.checked)">
+              <span>🔄 Auto Relay (browser ยิง webhook แทน)</span>
+            </label>
+          </div>
           <div id="logs-${s.id}"><div class="empty">…</div></div>
         </div>
 
@@ -361,6 +367,64 @@
 
     function copy(text) {
       navigator.clipboard.writeText(text).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => toast('คัดลอกไม่สำเร็จ', 'err'));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Auto Relay — browser ยิง webhook แทน Worker (หลีก IP block)
+    // ──────────────────────────────────────────────────────────
+    const relayIntervals = {};
+
+    function toggleRelay(siteId, enabled) {
+      if (enabled) {
+        startRelay(siteId);
+        toast('เปิด Auto Relay แล้ว', 'ok');
+      } else {
+        stopRelay(siteId);
+        toast('ปิด Auto Relay', '');
+      }
+    }
+
+    function startRelay(siteId) {
+      if (relayIntervals[siteId]) return;
+      relayIntervals[siteId] = setInterval(() => relayTick(siteId), 4000);
+      relayTick(siteId); // ยิงทันทีรอบแรก
+    }
+
+    function stopRelay(siteId) {
+      clearInterval(relayIntervals[siteId]);
+      delete relayIntervals[siteId];
+      const el = document.getElementById('relay-status-' + siteId);
+      if (el) el.textContent = '';
+    }
+
+    async function relayTick(siteId) {
+      const el = document.getElementById('relay-status-' + siteId);
+      try {
+        const r = await api('/sites/' + siteId + '/pending-deliveries');
+        const pending = r.data.pending || [];
+        if (el) el.textContent = pending.length ? `⏳ ${pending.length} รอยิง` : '✅ ว่าง';
+
+        for (const item of pending) {
+          if (!item.resolved_url) { await ackLog(siteId, item.id, false, 0, 'no resolved_url'); continue; }
+          try {
+            // ยิงจาก browser ด้วย no-cors (ส่งจาก IP จริงของผู้ใช้ ไม่ถูก block)
+            await fetch(item.resolved_url, { mode: 'no-cors' });
+            await ackLog(siteId, item.id, true, 0, 'browser-relay');
+          } catch (e) {
+            await ackLog(siteId, item.id, false, 0, String(e));
+          }
+        }
+        if (pending.length > 0) loadLogs(siteId);
+      } catch (e) {
+        if (el) el.textContent = '❌ ' + e.message;
+      }
+    }
+
+    async function ackLog(siteId, logId, ok, httpStatus, responseBody) {
+      await api('/sites/' + siteId + '/logs/' + logId + '/ack', {
+        method: 'POST',
+        body: JSON.stringify({ ok, http_status: httpStatus, response_body: responseBody }),
+      }).catch(() => {});
     }
 
     async function testWebhook(siteId) {
