@@ -78,6 +78,9 @@ import {
   handleMasterBan,
 } from './api/master';
 
+// SMS-HOOK sub-project (isolated — ลบ import นี้ + block ที่ mount + โฟลเดอร์ ./sms-hook/ เพื่อถอดออก)
+import { handleSmsHookRoute } from './sms-hook/router';
+
 // ============================================================
 // MAIN ROUTER
 // ============================================================
@@ -93,6 +96,12 @@ export default {
     if (method === 'OPTIONS') {
       return handleOptions();
     }
+
+    // ============================================================
+    // SMS-HOOK SUB-PROJECT (isolated — ลบ block นี้ + โฟลเดอร์ ./sms-hook/ เพื่อถอดออก)
+    // ============================================================
+    const smsHookResp = await handleSmsHookRoute(request, env, ctx);
+    if (smsHookResp) return smsHookResp;
 
     // ============================================================
     // TELEGRAM AUTH ROUTES

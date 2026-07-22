@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMS-Hook — เชื่อมต่อระบบยิงฝากผ่าน SMS</title>
+  <style>
+    /* ============================================================
+       SMS-HOOK SUB-PROJECT — self-contained page (ลบไฟล์นี้เพื่อถอดออก)
+       ============================================================ */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --card: #1e293b; --card2: #273449; --line: #334155;
+      --text: #e2e8f0; --muted: #94a3b8; --primary: #3b82f6; --primary2: #2563eb;
+      --green: #22c55e; --red: #ef4444; --amber: #f59e0b; --radius: 12px;
+    }
+    body {
+      font-family: 'Segoe UI', 'Sarabun', system-ui, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px 16px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    header.page {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+    }
+    header.page h1 { font-size: 1.4rem; }
+    header.page .sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+    .badge { background: var(--card2); padding: 4px 10px; border-radius: 999px; font-size: .8rem; color: var(--muted); }
+    .btn {
+      background: var(--primary); color: #fff; border: none; border-radius: 8px;
+      padding: 9px 16px; font-size: .9rem; cursor: pointer; font-weight: 600;
+      transition: .15s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover { background: var(--primary2); }
+    .btn.secondary { background: var(--card2); color: var(--text); }
+    .btn.secondary:hover { background: var(--line); }
+    .btn.danger { background: var(--red); }
+    .btn.small { padding: 6px 12px; font-size: .82rem; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; margin-bottom: 16px;
+    }
+    .card h3 { font-size: 1.05rem; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .site-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .grid.one { grid-template-columns: 1fr; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    input, select, textarea {
+      width: 100%; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+      border-radius: 8px; padding: 9px 11px; font-size: .88rem; font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 64px; font-family: 'Consolas', monospace; font-size: .82rem; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    .field { margin-bottom: 4px; }
+    .hint { font-size: .74rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+    .row-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .copy-box {
+      display: flex; align-items: center; gap: 8px; background: var(--card2);
+      border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 4px;
+    }
+    .copy-box code { font-size: .8rem; color: var(--green); word-break: break-all; flex: 1; }
+    .sub-section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+    .sub-section h4 { font-size: .92rem; margin-bottom: 10px; color: var(--text); }
+    .bank-row, .log-row {
+      display: flex; align-items: center; gap: 10px; background: var(--card2);
+      border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: .84rem;
+    }
+    .bank-row .b-bank { font-weight: 700; color: var(--amber); min-width: 56px; }
+    .bank-row .b-acc { flex: 1; }
+    .log-row { flex-direction: column; align-items: stretch; gap: 2px; }
+    .log-row .l-top { display: flex; justify-content: space-between; gap: 8px; }
+    .log-row .l-msg { font-family: 'Consolas', monospace; font-size: .78rem; color: var(--text); word-break: break-all; }
+    .status-pill { padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; }
+    .status-sent { background: rgba(34,197,94,.18); color: var(--green); }
+    .status-failed { background: rgba(239,68,68,.18); color: var(--red); }
+    .status-scan_failed { background: rgba(245,158,11,.18); color: var(--amber); }
+    .empty { color: var(--muted); font-size: .86rem; text-align: center; padding: 20px; }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--card2); border: 1px solid var(--line); color: var(--text);
+      padding: 12px 20px; border-radius: 10px; font-size: .88rem; opacity: 0;
+      transition: .2s; pointer-events: none; z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+    .toast.ok { border-color: var(--green); }
+    .toast.err { border-color: var(--red); }
+    .flex-inline { display: flex; gap: 8px; }
+    .flex-inline > * { flex: 1; }
+    .add-bank-form { display: grid; grid-template-columns: 90px 1fr 1fr auto; gap: 8px; align-items: end; }
+    @media (max-width: 640px) { .add-bank-form { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="page">
+      <div>
+        <h1>🔗 SMS-Hook</h1>
+        <div class="sub">ยิงฝากผ่าน SMS — สแกนสลิปจาก LINE แล้วแปลงเป็นข้อความส่งเข้าระบบปลายทาง</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span class="badge" id="teamBadge">…</span>
+        <button class="btn" onclick="openNewSite()">+ เพิ่มเว็บ</button>
+      </div>
+    </header>
+
+    <div id="sitesContainer"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ============================================================
+    // SMS-HOOK page logic (self-contained)
+    // ============================================================
+    const WEBHOOK_BASE = 'https://api.atslip.biz';
+    const SLUG = decodeURIComponent(location.pathname.replace(/^\/+/, '').split('/')[0] || '');
+    let sites = [];
+
+    function toast(msg, type = '') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + type;
+      setTimeout(() => { t.className = 'toast ' + type; }, 2600);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(`/api/smshook/${SLUG}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+
+    async function load() {
+      if (!SLUG) { document.getElementById('sitesContainer').innerHTML = '<div class="empty">ไม่พบ team slug ใน URL</div>'; return; }
+      try {
+        const r = await api('/sites');
+        document.getElementById('teamBadge').textContent = 'ทีม: ' + (r.data.team?.name || SLUG);
+        sites = r.data.sites || [];
+        render();
+      } catch (e) {
+        document.getElementById('sitesContainer').innerHTML =
+          `<div class="card"><div class="empty">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}<br>ตรวจสอบว่า team slug "<b>${esc(SLUG)}</b>" ถูกต้อง</div></div>`;
+      }
+    }
+
+    function render() {
+      const c = document.getElementById('sitesContainer');
+      if (!sites.length) {
+        c.innerHTML = '<div class="card"><div class="empty">ยังไม่มีเว็บ — กด “+ เพิ่มเว็บ” เพื่อเริ่มต้น</div></div>';
+        return;
+      }
+      c.innerHTML = sites.map(siteCard).join('');
+      sites.forEach(s => { loadBanks(s.id); loadLogs(s.id); });
+    }
+
+    function siteCard(s) {
+      const lineUrl = `${WEBHOOK_BASE}/api/smshook/line/${s.id}`;
+      const headers = JSON.stringify(s.webhook_headers || {}, null, 2);
+      const bankMap = JSON.stringify(s.bank_code_map || {}, null, 2);
+      return `
+      <div class="card" data-site="${s.id}">
+        <div class="site-head">
+          <h3>🌐 <input value="${esc(s.name)}" data-f="name" style="font-size:1rem;font-weight:700;max-width:260px;"></h3>
+          <label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:.85rem;margin:0;">
+            <input type="checkbox" data-f="enabled" ${Number(s.enabled) === 1 ? 'checked' : ''} style="width:auto;"> เปิดใช้งาน
+          </label>
+        </div>
+
+        <div class="sub-section">
+          <h4>📲 LINE OA (รับรูปสลิป)</h4>
+          <div class="grid">
+            <div class="field"><label>Channel ID</label><input data-f="line_channel_id" value="${esc(s.line_channel_id)}"></div>
+            <div class="field"><label>Channel Secret</label><input data-f="line_channel_secret" value="${esc(s.line_channel_secret)}"></div>
+          </div>
+          <div class="field" style="margin-top:12px;"><label>Channel Access Token</label>
+            <textarea data-f="line_channel_access_token" style="min-height:52px;">${esc(s.line_channel_access_token)}</textarea>
+          </div>
+          <label style="margin-top:12px;">Webhook URL (นำไปใส่ใน LINE Developers Console)</label>
+          <div class="copy-box"><code>${esc(lineUrl)}</code><button class="btn secondary small" onclick="copy('${esc(lineUrl)}')">คัดลอก</button></div>
+        </div>
+
+        <div class="sub-section">
+          <h4>🎯 Webhook ปลายทาง (ยิงข้อความ SMS เข้า)</h4>
+          <div class="field"><label>Webhook URL</label><input data-f="webhook_url" value="${esc(s.webhook_url)}" placeholder="https://example.com/hook/deposit"></div>
+          <div class="grid" style="margin-top:12px;">
+            <div class="field"><label>Method</label>
+              <select data-f="webhook_method">
+                ${['POST','PUT','GET'].map(m => `<option ${s.webhook_method===m?'selected':''}>${m}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field"><label>Content-Type</label>
+              <select data-f="webhook_content_type">
+                ${['application/json','application/x-www-form-urlencoded','text/plain'].map(ct => `<option ${s.webhook_content_type===ct?'selected':''}>${ct}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:12px;"><label>Body Template — ใช้ <code>{message}</code> เป็นตำแหน่งข้อความ SMS</label>
+            <textarea data-f="webhook_body_template">${esc(s.webhook_body_template)}</textarea>
+            <div class="hint">JSON: <code>{"message":"{message}"}</code> · form: <code>message={message}</code> · text: <code>{message}</code></div>
+          </div>
+          <div class="field" style="margin-top:12px;"><label>Custom Headers (JSON) — เช่น auth token</label>
+            <textarea data-f="webhook_headers">${esc(headers)}</textarea>
+            <div class="hint">เช่น <code>{"Authorization":"Bearer xxxx"}</code></div>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h4>⚙️ การแปลงข้อความ</h4>
+          <div class="grid">
+            <div class="field"><label>ยอดคงเหลือ (MOCK) — “ใช้ได้{X}บ”</label><input data-f="mock_total" value="${esc(s.mock_total)}" placeholder="1,000.00"></div>
+          </div>
+          <div class="field" style="margin-top:12px;"><label>แมปโค้ดธนาคารผู้โอน (JSON) — slip short → โค้ดปลายทาง</label>
+            <textarea data-f="bank_code_map">${esc(bankMap)}</textarea>
+            <div class="hint">ถ้าเว้นว่าง { } จะใช้ชื่อย่อจากสลิปตรงๆ · เช่น <code>{"BAY":"KKR","KBANK":"KBK"}</code></div>
+          </div>
+          <div class="hint" style="margin-top:8px;">รูปแบบข้อความที่จะยิง: <code>dd/mm@hh:mm {amount} จาก{bank}/x{ผู้โอน}เข้าx{ผู้รับ} ใช้ได้{total}บ</code></div>
+        </div>
+
+        <div class="sub-section">
+          <h4>🏦 บัญชีธนาคารในเว็บ</h4>
+          <div id="banks-${s.id}"><div class="empty">…</div></div>
+          <div class="add-bank-form" style="margin-top:10px;">
+            <div><label>ธนาคาร</label><input id="nb-short-${s.id}" placeholder="SCB"></div>
+            <div><label>เลขบัญชี</label><input id="nb-acc-${s.id}" placeholder="1234567890"></div>
+            <div><label>ชื่อบัญชี</label><input id="nb-name-${s.id}" placeholder="ชื่อบัญชี (ไม่บังคับ)"></div>
+            <button class="btn small" onclick="addBank('${s.id}')">+ เพิ่ม</button>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h4>📜 ประวัติล่าสุด</h4>
+          <div id="logs-${s.id}"><div class="empty">…</div></div>
+        </div>
+
+        <div class="row-actions">
+          <button class="btn" onclick="saveSite('${s.id}')">💾 บันทึก</button>
+          <button class="btn danger small" onclick="deleteSite('${s.id}')">ลบเว็บนี้</button>
+        </div>
+      </div>`;
+    }
+
+    function collectSite(siteId) {
+      const el = document.querySelector(`[data-site="${siteId}"]`);
+      const get = f => el.querySelector(`[data-f="${f}"]`);
+      const body = {
+        name: get('name').value.trim(),
+        enabled: get('enabled').checked ? 1 : 0,
+        line_channel_id: get('line_channel_id').value.trim(),
+        line_channel_secret: get('line_channel_secret').value.trim(),
+        line_channel_access_token: get('line_channel_access_token').value.trim(),
+        webhook_url: get('webhook_url').value.trim(),
+        webhook_method: get('webhook_method').value,
+        webhook_content_type: get('webhook_content_type').value,
+        webhook_body_template: get('webhook_body_template').value,
+        mock_total: get('mock_total').value.trim() || '1,000.00',
+      };
+      try { body.webhook_headers = JSON.parse(get('webhook_headers').value || '{}'); }
+      catch { throw new Error('Custom Headers ไม่ใช่ JSON ที่ถูกต้อง'); }
+      try { body.bank_code_map = JSON.parse(get('bank_code_map').value || '{}'); }
+      catch { throw new Error('แมปโค้ดธนาคาร ไม่ใช่ JSON ที่ถูกต้อง'); }
+      return body;
+    }
+
+    async function saveSite(siteId) {
+      try {
+        const body = collectSite(siteId);
+        await api(`/sites/${siteId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        toast('บันทึกแล้ว', 'ok');
+        const idx = sites.findIndex(s => s.id === siteId);
+        if (idx >= 0) sites[idx] = { ...sites[idx], ...body };
+      } catch (e) { toast(e.message, 'err'); }
+    }
+
+    async function openNewSite() {
+      const name = prompt('ชื่อเว็บใหม่:');
+      if (!name || !name.trim()) return;
+      try {
+        await api('/sites', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+        toast('เพิ่มเว็บแล้ว', 'ok');
+        await load();
+      } catch (e) { toast(e.message, 'err'); }
+    }
+
+    async function deleteSite(siteId) {
+      if (!confirm('ลบเว็บนี้และข้อมูลทั้งหมด?')) return;
+      try {
+        await api(`/sites/${siteId}`, { method: 'DELETE' });
+        toast('ลบแล้ว', 'ok');
+        await load();
+      } catch (e) { toast(e.message, 'err'); }
+    }
+
+    async function loadBanks(siteId) {
+      try {
+        const r = await api(`/sites/${siteId}/banks`);
+        const banks = r.data.banks || [];
+        const box = document.getElementById(`banks-${siteId}`);
+        if (!box) return;
+        box.innerHTML = banks.length ? banks.map(b => `
+          <div class="bank-row">
+            <span class="b-bank">${esc(b.bank_short)}</span>
+            <span class="b-acc">${esc(b.account_number)}${b.account_name ? ' · ' + esc(b.account_name) : ''}</span>
+            <button class="btn danger small" onclick="delBank('${siteId}','${b.id}')">ลบ</button>
+          </div>`).join('') : '<div class="empty">ยังไม่มีบัญชี</div>';
+      } catch (e) { /* ignore */ }
+    }
+
+    async function addBank(siteId) {
+      const short = document.getElementById(`nb-short-${siteId}`).value.trim();
+      const acc = document.getElementById(`nb-acc-${siteId}`).value.trim();
+      const name = document.getElementById(`nb-name-${siteId}`).value.trim();
+      if (!short || !acc) { toast('กรอกธนาคารและเลขบัญชี', 'err'); return; }
+      try {
+        await api(`/sites/${siteId}/banks`, { method: 'POST', body: JSON.stringify({ bank_short: short, account_number: acc, account_name: name }) });
+        document.getElementById(`nb-short-${siteId}`).value = '';
+        document.getElementById(`nb-acc-${siteId}`).value = '';
+        document.getElementById(`nb-name-${siteId}`).value = '';
+        loadBanks(siteId);
+        toast('เพิ่มบัญชีแล้ว', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+    }
+
+    async function delBank(siteId, bankId) {
+      try {
+        await api(`/sites/${siteId}/banks/${bankId}`, { method: 'DELETE' });
+        loadBanks(siteId);
+        toast('ลบบัญชีแล้ว', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+    }
+
+    async function loadLogs(siteId) {
+      try {
+        const r = await api(`/sites/${siteId}/logs`);
+        const logs = r.data.logs || [];
+        const box = document.getElementById(`logs-${siteId}`);
+        if (!box) return;
+        box.innerHTML = logs.length ? logs.map(l => {
+          const dt = new Date((l.created_at || 0) * 1000).toLocaleString('th-TH');
+          return `<div class="log-row">
+            <div class="l-top">
+              <span class="status-pill status-${esc(l.status)}">${esc(l.status)}${l.http_status ? ' ' + l.http_status : ''}</span>
+              <span style="color:var(--muted);font-size:.74rem;">${esc(dt)}</span>
+            </div>
+            ${l.message ? `<div class="l-msg">${esc(l.message)}</div>` : ''}
+          </div>`;
+        }).join('') : '<div class="empty">ยังไม่มีประวัติ</div>';
+      } catch (e) { /* ignore */ }
+    }
+
+    function copy(text) {
+      navigator.clipboard.writeText(text).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => toast('คัดลอกไม่สำเร็จ', 'err'));
+    }
+
+    load();
+  </script>
+</body>
+</html>
