@@ -240,12 +240,13 @@
 
         <div class="sub-section">
           <h4>📜 ประวัติล่าสุด <span id="relay-status-${s.id}" style="font-size:.75rem;color:var(--muted);margin-left:6px;"></span></h4>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
             <label style="display:flex;align-items:center;gap:6px;font-size:.84rem;cursor:pointer;color:var(--text);margin:0;">
-              <input type="checkbox" id="relay-toggle-${s.id}" style="width:auto;" onchange="toggleRelay('${s.id}', this.checked)">
+              <input type="checkbox" id="relay-toggle-${s.id}" style="width:auto;" onchange="toggleRelay('${s.id}', this.checked)" checked>
               <span>🔄 Auto Relay (browser ยิง webhook แทน)</span>
             </label>
           </div>
+          <div id="relay-log-${s.id}" style="max-height:80px;overflow-y:auto;margin-bottom:8px;font-family:monospace;"></div>
           <div id="logs-${s.id}"><div class="empty">…</div></div>
         </div>
 
@@ -409,12 +410,18 @@
         if (el) el.textContent = pending.length ? `⏳ ${pending.length} รอยิง` : '✅ ว่าง';
 
         for (const item of pending) {
-          if (!item.resolved_url) { await ackLog(siteId, item.id, false, 0, 'no resolved_url'); continue; }
+          const logBox = document.getElementById('relay-log-' + siteId);
+          if (!item.resolved_url) {
+            if (logBox) logBox.innerHTML = `<div style="color:var(--red);font-size:.78rem;">❌ no resolved_url: ${esc(item.id)}</div>` + (logBox.innerHTML || '');
+            await ackLog(siteId, item.id, false, 0, 'no resolved_url'); continue;
+          }
+          if (logBox) logBox.innerHTML = `<div style="color:var(--amber);font-size:.76rem;word-break:break-all;margin-bottom:4px;">🔗 ยิง: ${esc(item.resolved_url.substring(0, 120))}...</div>` + (logBox.innerHTML || '');
           try {
-            // ยิงจาก browser ด้วย no-cors (ส่งจาก IP จริงของผู้ใช้ ไม่ถูก block)
-            await fetch(item.resolved_url, { mode: 'no-cors' });
+            await fetch(item.resolved_url, { mode: 'no-cors', cache: 'no-store' });
+            if (logBox) logBox.innerHTML = `<div style="color:var(--green);font-size:.76rem;">✅ Sent: ${esc(item.message || '').substring(0, 60)}</div>` + (logBox.innerHTML || '');
             await ackLog(siteId, item.id, true, 0, 'browser-relay');
           } catch (e) {
+            if (logBox) logBox.innerHTML = `<div style="color:var(--red);font-size:.76rem;">❌ Error: ${esc(String(e))}</div>` + (logBox.innerHTML || '');
             await ackLog(siteId, item.id, false, 0, String(e));
           }
         }
@@ -438,7 +445,14 @@
 
       const msg = prompt('ข้อความทดสอบ (Enter เว้นว่าง = ใช้ตัวอย่าง):');
       if (msg === null) return;
-      const testMessage = msg || '22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ';
+      const testMessage = msg || (() => {
+        const now = new Date();
+        const dd = String(now.getDate()).padStart(2,'0');
+        const mm = String(now.getMonth()+1).padStart(2,'0');
+        const hh = String(now.getHours()).padStart(2,'0');
+        const mn = String(now.getMinutes()).padStart(2,'0');
+        return `${dd}/${mm}@${hh}:${mn} 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ`;
+      })();
 
       let resolvedUrl;
       try {
@@ -511,6 +525,10 @@
             <button class="btn secondary" onclick="document.getElementById('testResultModal').remove()">ปิด</button>
           </div>
         </div>`;
+    }
+
+      // auto-start relay for all sites
+      sites.forEach(s => startRelay(s.id));
     }
 
     load();
