@@ -113,7 +113,7 @@
     // ============================================================
     // SMS-HOOK page logic (self-contained)
     // ============================================================
-    const WEBHOOK_BASE = 'https://api.atslip.biz';
+    const WEBHOOK_BASE = 'https://app.atslip.biz';
     // อ่าน team slug จาก ?team= (primary) หรือ pathname (fallback)
     const SLUG = new URLSearchParams(location.search).get('team')
       || decodeURIComponent(location.pathname.replace(/^\/+/, '').split('/')[0] || '');
