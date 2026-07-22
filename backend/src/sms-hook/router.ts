@@ -515,6 +515,60 @@ async function handleListLogs(env: Env, slug: string, siteId: string): Promise<R
   return successResponse({ logs: rows.results || [] });
 }
 
+async function handleTestWebhook(request: Request, env: Env, slug: string, siteId: string): Promise<Response> {
+  const team = await getTeamBySlug(env, slug);
+  if (!team) return errorResponse('Team not found', 404);
+  const site = await env.DB.prepare(`SELECT * FROM smshook_sites WHERE id = ? AND team_id = ? LIMIT 1`)
+    .bind(siteId, team.id).first<any>();
+  if (!site) return errorResponse('Site not found', 404);
+
+  const body = await request.json().catch(() => ({})) as any;
+  // testMessage = ข้อความที่จะยิง (ถ้าไม่ส่งมาใช้ตัวอย่าง)
+  const testMessage: string = body.message || '22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ';
+  const rawUrl: boolean = !!body.raw_url; // true = ไม่ replace {message} ใน URL
+
+  if (!site.webhook_url) {
+    return errorResponse('ยังไม่ได้ตั้ง Webhook URL', 400);
+  }
+
+  const method = (site.webhook_method || 'POST').toUpperCase();
+  const contentType = site.webhook_content_type || 'application/json';
+  const bodyTemplate = site.webhook_body_template || '{"message":"{message}"}';
+  const extraHeaders = safeParseJson(site.webhook_headers, {});
+
+  const webhookUrl = rawUrl
+    ? site.webhook_url
+    : site.webhook_url.split('{message}').join(encodeURIComponent(testMessage));
+
+  const headers: Record<string, string> = {};
+  if (!['GET', 'HEAD'].includes(method)) headers['Content-Type'] = contentType;
+  for (const [k, v] of Object.entries(extraHeaders)) {
+    if (typeof v === 'string') headers[k] = v;
+  }
+  const reqBody = ['GET', 'HEAD'].includes(method) ? undefined : buildBody(bodyTemplate, testMessage, contentType);
+
+  let httpStatus = 0;
+  let responseBody = '';
+  let ok = false;
+  try {
+    const resp = await fetch(webhookUrl, { method, headers, body: reqBody });
+    httpStatus = resp.status;
+    responseBody = (await resp.text().catch(() => '')).slice(0, 1000);
+    ok = resp.ok;
+  } catch (err: any) {
+    responseBody = String(err?.message || err).slice(0, 500);
+  }
+
+  return successResponse({
+    ok,
+    http_status: httpStatus,
+    response_body: responseBody,
+    url_fired: webhookUrl,
+    method,
+    message_sent: testMessage,
+  });
+}
+
 // ──────────────────────────────────────────────────────────────
 // ROUTER — entry point (mount ครั้งเดียวใน index.ts)
 // คืน null ถ้า path ไม่ใช่ของ sub-project นี้ (ให้ router หลักทำงานต่อ)
@@ -581,6 +635,10 @@ export async function handleSmsHookRoute(
     // /sites/:siteId/logs
     if (sub === 'logs' && method === 'GET') {
       return handleListLogs(env, slug, siteId);
+    }
+    // /sites/:siteId/test-webhook  — ยิง webhook ด้วยข้อความที่กำหนดเอง (ไม่บันทึก log)
+    if (sub === 'test-webhook' && method === 'POST') {
+      return handleTestWebhook(request, env, slug, siteId);
     }
   }
 

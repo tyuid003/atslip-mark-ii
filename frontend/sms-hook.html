@@ -245,6 +245,7 @@
 
         <div class="row-actions">
           <button class="btn" onclick="saveSite('${s.id}')">💾 บันทึก</button>
+          <button class="btn secondary" onclick="testWebhook('${s.id}')">🧪 ทดสอบยิง</button>
           <button class="btn danger small" onclick="deleteSite('${s.id}')">ลบเว็บนี้</button>
         </div>
       </div>`;
@@ -360,6 +361,29 @@
 
     function copy(text) {
       navigator.clipboard.writeText(text).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => toast('คัดลอกไม่สำเร็จ', 'err'));
+    }
+
+    async function testWebhook(siteId) {
+      const msg = prompt('ข้อความทดสอบ (เว้นว่างใช้ตัวอย่าง):\n22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ');
+      if (msg === null) return; // cancel
+      try {
+        toast('กำลังยิง...', '');
+        const r = await api(`/sites/${siteId}/test-webhook`, {
+          method: 'POST',
+          body: JSON.stringify({ message: msg || undefined }),
+        });
+        const d = r.data;
+        const ok = d.ok;
+        const lines = [
+          `HTTP: ${d.http_status} ${ok ? '✅' : '❌'}`,
+          `URL: ${d.url_fired}`,
+          `ข้อความ: ${d.message_sent}`,
+          `Response: ${d.response_body || '(ไม่มี body)'}`,
+        ];
+        alert(lines.join('\n\n'));
+        if (ok) toast('ยิงสำเร็จ ' + d.http_status, 'ok');
+        else toast('ยิงไม่สำเร็จ ' + d.http_status, 'err');
+      } catch (e) { toast(e.message, 'err'); }
     }
 
     load();
