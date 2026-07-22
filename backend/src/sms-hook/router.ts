@@ -192,7 +192,14 @@ async function fireWebhook(
   const bodyTemplate = site.webhook_body_template || '{"message":"{message}"}';
   const extraHeaders = safeParseJson(site.webhook_headers, {});
 
-  const headers: Record<string, string> = { 'Content-Type': contentType };
+  // replace {message} ใน URL ด้วย (รองรับ GET ?body={message}&...)
+  const webhookUrl = site.webhook_url.split('{message}').join(encodeURIComponent(message));
+
+  const headers: Record<string, string> = {};
+  // GET/HEAD ไม่ส่ง Content-Type (บาง server reject request)
+  if (!['GET', 'HEAD'].includes(method)) {
+    headers['Content-Type'] = contentType;
+  }
   for (const [k, v] of Object.entries(extraHeaders)) {
     if (typeof v === 'string') headers[k] = v;
   }
@@ -200,7 +207,7 @@ async function fireWebhook(
   const body = ['GET', 'HEAD'].includes(method) ? undefined : buildBody(bodyTemplate, message, contentType);
 
   try {
-    const resp = await fetch(site.webhook_url, { method, headers, body });
+    const resp = await fetch(webhookUrl, { method, headers, body });
     const text = await resp.text().catch(() => '');
     return { ok: resp.ok, httpStatus: resp.status, body: text.slice(0, 500) };
   } catch (err: any) {

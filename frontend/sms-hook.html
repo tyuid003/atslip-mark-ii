@@ -204,9 +204,10 @@
               </select>
             </div>
           </div>
-          <div class="field" style="margin-top:12px;"><label>Body Template — ใช้ <code>{message}</code> เป็นตำแหน่งข้อความ SMS</label>
+          <div class="field"><label>Body Template — ใช้ <code>{message}</code> เป็นตำแหน่งข้อความ SMS<br>
+            <small style="color:var(--green)">GET: ใส่ <code>{message}</code> ใน URL โดยตรง เช่น <code>?body={message}</code> — ไม่ต้องกรอก template</small></label>
             <textarea data-f="webhook_body_template">${esc(s.webhook_body_template)}</textarea>
-            <div class="hint">JSON: <code>{"message":"{message}"}</code> · form: <code>message={message}</code> · text: <code>{message}</code></div>
+            <div class="hint">POST JSON: <code>{"message":"{message}"}</code> · form: <code>message={message}</code> · GET: ใส่ {message} ใน URL ด้านบนได้เลย</div>
           </div>
           <div class="field" style="margin-top:12px;"><label>Custom Headers (JSON) — เช่น auth token</label>
             <textarea data-f="webhook_headers">${esc(headers)}</textarea>
