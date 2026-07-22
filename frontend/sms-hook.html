@@ -354,12 +354,16 @@
         if (!box) return;
         box.innerHTML = logs.length ? logs.map(l => {
           const dt = new Date((l.created_at || 0) * 1000).toLocaleString('th-TH');
+          const urlHint = (l.status === 'pending_browser' && l.resolved_url)
+            ? `<div style="font-size:.72rem;color:var(--amber);word-break:break-all;margin-top:2px;">🔗 ${esc(l.resolved_url)}</div>`
+            : '';
           return `<div class="log-row">
             <div class="l-top">
               <span class="status-pill status-${esc(l.status)}">${esc(l.status)}${l.http_status ? ' ' + l.http_status : ''}</span>
               <span style="color:var(--muted);font-size:.74rem;">${esc(dt)}</span>
             </div>
             ${l.message ? `<div class="l-msg">${esc(l.message)}</div>` : ''}
+            ${urlHint}
           </div>`;
         }).join('') : '<div class="empty">ยังไม่มีประวัติ</div>';
       } catch (e) { /* ignore */ }
@@ -428,7 +432,6 @@
     }
 
     async function testWebhook(siteId) {
-      // อ่าน webhook_url จาก form (ค่าที่กรอกล่าสุด ไม่ต้องบันทึกก่อน)
       const el = document.querySelector(`[data-site="${siteId}"]`);
       const urlTemplate = el ? el.querySelector('[data-f="webhook_url"]')?.value?.trim() : '';
       if (!urlTemplate) { toast('กรอก Webhook URL ก่อน', 'err'); return; }
@@ -437,7 +440,6 @@
       if (msg === null) return;
       const testMessage = msg || '22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ';
 
-      // สร้าง URL เหมือน logic ใน backend
       let resolvedUrl;
       try {
         resolvedUrl = new URL(urlTemplate.split('{message}').join(testMessage)).href;
@@ -445,29 +447,14 @@
         resolvedUrl = urlTemplate.split('{message}').join(encodeURIComponent(testMessage));
       }
 
-      // ยิงจาก browser โดยตรง (no-cors = ส่งจาก IP จริงของคุณ ไม่ถูก block)
-      toast('กำลังยิงจาก browser...', '');
-      try {
-        await fetch(resolvedUrl, { mode: 'no-cors' });
-        // no-cors: response เป็น opaque (อ่านไม่ได้) แต่ request ถูกส่งแล้วจาก IP จริง
-        showTestResult({
-          ok: true,
-          http_status: '(opaque — ส่งจาก browser แล้ว)',
-          url_fired: resolvedUrl,
-          message_sent: testMessage,
-          response_body: '✅ Request ถูกส่งจาก browser ของคุณ (IP จริง)\nไม่สามารถอ่าน response ได้เนื่องจาก CORS\nแต่ server ได้รับ request แล้ว — ตรวจสอบใน log ของ server ปลายทาง',
-        });
-        toast('ยิงจาก browser แล้ว ✅', 'ok');
-      } catch (e) {
-        showTestResult({
-          ok: false,
-          http_status: 'error',
-          url_fired: resolvedUrl,
-          message_sent: testMessage,
-          response_body: '❌ Network error: ' + e.message,
-        });
-        toast('ยิงไม่สำเร็จ: ' + e.message, 'err');
-      }
+      showTestResult({
+        ok: true,
+        http_status: '(เปิดแท็บใหม่ — ดู response ใน browser)',
+        url_fired: resolvedUrl,
+        message_sent: testMessage,
+        response_body: 'ℹ️ กด "เปิด URL ในแท็บใหม่" เพื่อเห็น response จาก server โดยตรง (ส่งจาก IP จริงของคุณ)',
+        _openBtn: resolvedUrl,
+      });
     }
 
     function showTestResult(d) {
@@ -479,19 +466,25 @@
         document.body.appendChild(el);
       }
       const ok = d.ok;
+      const openBtnHtml = d._openBtn
+        ? `<button class="btn" style="background:var(--green);" onclick="window.open('${esc(d._openBtn)}','_blank')">🌐 เปิด URL ในแท็บใหม่ (เห็น response จริง)</button>`
+        : '';
       el.innerHTML = `
         <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:20px;">
           <h3 style="margin-bottom:12px;">🧪 ผลทดสอบ Webhook</h3>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
             <span class="status-pill ${ok ? 'status-sent' : 'status-failed'}">HTTP ${d.http_status} ${ok ? '✅' : '❌'}</span>
           </div>
-          <div style="margin-bottom:6px;"><label>URL ที่ยิงออกไป</label>
+          <div style="margin-bottom:6px;"><label>URL ที่จะยิง</label>
             <textarea readonly style="min-height:52px;word-break:break-all;font-size:.76rem;">${esc(d.url_fired)}</textarea></div>
-          <div style="margin-bottom:6px;"><label>ข้อความที่ส่ง</label>
+          <div style="margin-bottom:6px;"><label>ข้อความที่ใส่</label>
             <input readonly value="${esc(d.message_sent)}"></div>
-          <div style="margin-bottom:12px;"><label>Response จาก server</label>
-            <textarea readonly style="min-height:80px;font-size:.76rem;">${esc(d.response_body || '(ไม่มี body)')}</textarea></div>
-          <button class="btn" onclick="document.getElementById('testResultModal').remove()">ปิด</button>
+          <div style="margin-bottom:12px;"><label>Response</label>
+            <textarea readonly style="min-height:60px;font-size:.76rem;">${esc(d.response_body || '(ไม่มี body)')}</textarea></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${openBtnHtml}
+            <button class="btn secondary" onclick="document.getElementById('testResultModal').remove()">ปิด</button>
+          </div>
         </div>`;
     }
 

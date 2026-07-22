@@ -528,7 +528,7 @@ async function handleListLogs(env: Env, slug: string, siteId: string): Promise<R
   const team = await getTeamBySlug(env, slug);
   if (!team) return errorResponse('Team not found', 404);
   const rows = await env.DB.prepare(
-    `SELECT id, slip_ref, message, status, http_status, response_body, created_at
+    `SELECT id, slip_ref, message, status, http_status, response_body, resolved_url, created_at
      FROM smshook_logs WHERE site_id = ? ORDER BY created_at DESC LIMIT 50`
   ).bind(siteId).all<any>();
   return successResponse({ logs: rows.results || [] });
