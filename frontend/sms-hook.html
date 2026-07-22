@@ -428,19 +428,46 @@
     }
 
     async function testWebhook(siteId) {
+      // อ่าน webhook_url จาก form (ค่าที่กรอกล่าสุด ไม่ต้องบันทึกก่อน)
+      const el = document.querySelector(`[data-site="${siteId}"]`);
+      const urlTemplate = el ? el.querySelector('[data-f="webhook_url"]')?.value?.trim() : '';
+      if (!urlTemplate) { toast('กรอก Webhook URL ก่อน', 'err'); return; }
+
       const msg = prompt('ข้อความทดสอบ (Enter เว้นว่าง = ใช้ตัวอย่าง):');
       if (msg === null) return;
+      const testMessage = msg || '22/07@13:00 1,700.00 จากBAY/x079229เข้าx542728 ใช้ได้1,000.00บ';
+
+      // สร้าง URL เหมือน logic ใน backend
+      let resolvedUrl;
       try {
-        toast('กำลังยิง...', '');
-        const r = await api(`/sites/${siteId}/test-webhook`, {
-          method: 'POST',
-          body: JSON.stringify({ message: msg || undefined }),
+        resolvedUrl = new URL(urlTemplate.split('{message}').join(testMessage)).href;
+      } catch {
+        resolvedUrl = urlTemplate.split('{message}').join(encodeURIComponent(testMessage));
+      }
+
+      // ยิงจาก browser โดยตรง (no-cors = ส่งจาก IP จริงของคุณ ไม่ถูก block)
+      toast('กำลังยิงจาก browser...', '');
+      try {
+        await fetch(resolvedUrl, { mode: 'no-cors' });
+        // no-cors: response เป็น opaque (อ่านไม่ได้) แต่ request ถูกส่งแล้วจาก IP จริง
+        showTestResult({
+          ok: true,
+          http_status: '(opaque — ส่งจาก browser แล้ว)',
+          url_fired: resolvedUrl,
+          message_sent: testMessage,
+          response_body: '✅ Request ถูกส่งจาก browser ของคุณ (IP จริง)\nไม่สามารถอ่าน response ได้เนื่องจาก CORS\nแต่ server ได้รับ request แล้ว — ตรวจสอบใน log ของ server ปลายทาง',
         });
-        const d = r.data;
-        showTestResult(d);
-        if (d.ok) toast('ยิงสำเร็จ ' + d.http_status, 'ok');
-        else toast('ยิงไม่สำเร็จ ' + d.http_status, 'err');
-      } catch (e) { toast(e.message, 'err'); }
+        toast('ยิงจาก browser แล้ว ✅', 'ok');
+      } catch (e) {
+        showTestResult({
+          ok: false,
+          http_status: 'error',
+          url_fired: resolvedUrl,
+          message_sent: testMessage,
+          response_body: '❌ Network error: ' + e.message,
+        });
+        toast('ยิงไม่สำเร็จ: ' + e.message, 'err');
+      }
     }
 
     function showTestResult(d) {
