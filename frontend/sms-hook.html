@@ -448,13 +448,38 @@
       }
 
       showTestResult({
-        ok: true,
-        http_status: '(เปิดแท็บใหม่ — ดู response ใน browser)',
+        ok: null,
+        http_status: '⏳ กำลังยิง...',
         url_fired: resolvedUrl,
         message_sent: testMessage,
-        response_body: 'ℹ️ กด "เปิด URL ในแท็บใหม่" เพื่อเห็น response จาก server โดยตรง (ส่งจาก IP จริงของคุณ)',
+        response_body: 'กำลังส่ง fetch no-cors...',
         _openBtn: resolvedUrl,
       });
+
+      // ยิงด้วย fetch no-cors (เหมือน Auto Relay จริง)
+      fetch(resolvedUrl, { mode: 'no-cors', cache: 'no-store' })
+        .then(() => {
+          showTestResult({
+            ok: true,
+            http_status: '✅ Sent (no-cors)',
+            url_fired: resolvedUrl,
+            message_sent: testMessage,
+            response_body: 'Request ถูกส่งจาก browser สำเร็จ (เหมือน Auto Relay)\nCORS บล็อกการอ่าน response — ตรวจสอบใน log ของ server ปลายทาง\n\n(ปุ่ม "เปิด URL" = เปิดใน browser tab จะเห็น 404 เป็นเรื่องปกติ เพราะ browser tab ส่ง Accept: text/html แต่ fetch/relay ส่ง Accept: */* ซึ่งทำงานได้)',
+            _openBtn: resolvedUrl,
+          });
+          toast('ยิง no-cors สำเร็จ ✅ ตรวจสอบ server log', 'ok');
+        })
+        .catch(e => {
+          showTestResult({
+            ok: false,
+            http_status: '❌ Error',
+            url_fired: resolvedUrl,
+            message_sent: testMessage,
+            response_body: 'Network error: ' + e.message,
+            _openBtn: resolvedUrl,
+          });
+          toast('ยิงไม่สำเร็จ: ' + e.message, 'err');
+        });
     }
 
     function showTestResult(d) {
