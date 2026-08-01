@@ -178,7 +178,7 @@ async function muSubmitCp() {
   const np = document.getElementById('muCpNew').value;
   const cp = document.getElementById('muCpConfirm').value;
   const st = document.getElementById('muCpStatus');
-  if (!np || np.length < 6) { st.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัว'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
+  if (!np) { st.textContent = 'กรุณากรอกรหัสผ่าน'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
   if (np !== cp) { st.textContent = 'รหัสผ่านไม่ตรงกัน'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
   const btn = document.getElementById('muCpSubmit');
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
@@ -213,7 +213,7 @@ async function muSubmitCreateUser() {
   const role        = document.getElementById('muNewRole').value;
   const st          = document.getElementById('muAddUserStatus');
   if (!username) { st.textContent = 'กรุณากรอก Username'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
-  if (!password || password.length < 6) { st.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัว'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
+  if (!password) { st.textContent = 'กรุณากรอกรหัสผ่าน'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
   const btn = document.getElementById('muCreateUserBtn');
   btn.disabled = true; btn.textContent = 'กำลังสร้าง...';
   try {

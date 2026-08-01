@@ -392,8 +392,8 @@ export async function handleTeamChangePassword(
   if (!inTeam) return errorResponse('User not in team', 404);
 
   const body = await request.json<{ new_password: string }>().catch(() => null);
-  if (!body?.new_password || body.new_password.length < 6)
-    return errorResponse('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+  if (!body?.new_password)
+    return errorResponse('กรุณาระบุ new_password');
 
   const hash = await hashPassword(body.new_password);
   await env.DB

@@ -200,10 +200,6 @@ export async function handleRegisterUser(request: Request, env: Env): Promise<Re
   if (!/^[a-z0-9_]{3,30}$/.test(username)) {
     return errorResponse('username ต้องเป็นตัวอักษร a-z, 0-9, _ และมีความยาว 3-30 ตัว', 400);
   }
-  if (password.length < 8) {
-    return errorResponse('password ต้องมีอย่างน้อย 8 ตัวอักษร', 400);
-  }
-
   // ดึง team
   const team = await env.DB.prepare(
     `SELECT id FROM teams WHERE slug = ? AND status = 'active' LIMIT 1`
@@ -328,10 +324,6 @@ export async function handleChangePassword(request: Request, env: Env): Promise<
   if (!currentPassword || !newPassword) {
     return errorResponse('กรุณากรอก current_password และ new_password', 400);
   }
-  if (newPassword.length < 8) {
-    return errorResponse('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร', 400);
-  }
-
   // ดึง password hash ปัจจุบัน
   const userRow = await env.DB.prepare(
     `SELECT password_hash FROM telegram_users WHERE id = ? LIMIT 1`
@@ -435,10 +427,6 @@ export async function handleBootstrap(request: Request, env: Env): Promise<Respo
   if (!/^[a-z0-9_]{3,30}$/.test(username)) {
     return errorResponse('username ต้องเป็นตัวอักษร a-z, 0-9, _ และมีความยาว 3-30 ตัว', 400);
   }
-  if (password.length < 6) {
-    return errorResponse('password ต้องมีอย่างน้อย 6 ตัวอักษร', 400);
-  }
-
   const usernameExists = await env.DB.prepare(
     `SELECT id FROM telegram_users WHERE username = ? LIMIT 1`
   ).bind(username).first();
@@ -484,9 +472,6 @@ export async function handleMasterCreateUser(request: Request, env: Env): Promis
   }
   if (!/^[a-z0-9_]{3,30}$/.test(username)) {
     return errorResponse('username ต้องเป็นตัวอักษร a-z, 0-9, _ และมีความยาว 3-30 ตัว', 400);
-  }
-  if (password.length < 6) {
-    return errorResponse('password ต้องมีอย่างน้อย 6 ตัวอักษร', 400);
   }
 
   const usernameExists = await env.DB.prepare(

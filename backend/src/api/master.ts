@@ -324,8 +324,8 @@ export async function handleMasterChangePassword(
   if (!(await getMasterUser(env.DB, token))) return errorResponse('Forbidden', 403);
 
   const body = await request.json<{ new_password: string }>().catch(() => null);
-  if (!body?.new_password || body.new_password.length < 6)
-    return errorResponse('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+  if (!body?.new_password)
+    return errorResponse('กรุณาระบุ new_password');
 
   const exists = await env.DB
     .prepare(`SELECT id FROM telegram_users WHERE telegram_id = ? LIMIT 1`)
