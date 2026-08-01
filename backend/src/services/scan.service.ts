@@ -1319,13 +1319,21 @@ export class ScanService {
       const isStrongFullNameMatch = slipHasFullSurname && shorterLen > 0 && lcsLen >= shorterLen;
       const accountConfirmed = acctMatches(only.user);
 
-      if (isStrongFullNameMatch || accountConfirmed) {
+      // V2: เมื่อ API ย่อนามสกุลในสลิปเหลืออักษรเดียว (เช่น "เรณุกา ธ")
+      // และ V2 list ไม่คืน accountNumber → ทั้ง isStrongFullNameMatch และ accountConfirmed = false เสมอ
+      // ถ้าค้นหาแล้วได้ candidate เพียงคนเดียวและชื่อตรง ≥ 5 ตัว → auto-match ได้ปลอดภัย
+      const isV2 = String(apiVersion || 'v1') === 'v2';
+      const isV2SingleMatch = isV2 && only.bestNameScore >= Math.max(minNameChars + 1, 5);
+
+      if (isStrongFullNameMatch || accountConfirmed || isV2SingleMatch) {
         log('[ScanService] ✅ RESULT: Single candidate matched', {
           fullname: only.user.fullname,
           memberCode: only.user.memberCode,
           category: only.user.category,
-          reason: isStrongFullNameMatch ? 'strong-full-name' : 'account-confirmed',
+          reason: isStrongFullNameMatch ? 'strong-full-name' : accountConfirmed ? 'account-confirmed' : 'v2-single-match',
           accountConfirmed,
+          isV2SingleMatch,
+          bestNameScore: only.bestNameScore,
         });
         log('[ScanService] 🔍 ===== SENDER MATCHING END (MATCHED) =====');
         return only.user;
