@@ -5,14 +5,33 @@
 // PATCH /api/master/teams/:slug                — แก้ไขชื่อ / slug
 // DELETE /api/master/teams/:slug               — ลบทีม
 // GET  /api/master/users                       — รายการ user ทั้งหมด + ทีม
-// POST /api/master/users/:tid/add-to-team      — เพิ่ม user เข้าทีม
+// POST /api/master/users/:tid/add-to-team      — เพิ่ม user เข้าทีม (body: { team_slug, role? })
 // POST /api/master/users/:tid/kick             — เตะ user จากทีม (body: { team_slug })
 // POST /api/master/users/:tid/ban              — ban user จากทีม (body: { team_slug, reason? })
+// POST /api/master/users/:tid/change-password  — เปลี่ยนรหัสผ่าน (body: { new_password })
+// DELETE /api/master/users/:tid               — ลบ user
 // ============================================================
 
 import type { Env } from '../types';
 import { jsonResponse, errorResponse } from '../utils/helpers';
 import { nanoid } from 'nanoid';
+
+// ── Password hashing (PBKDF2) ──────────────────────────────
+async function hashPassword(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 },
+    keyMaterial, 256
+  );
+  const hashArr = new Uint8Array(bits);
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashHex = Array.from(hashArr).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `pbkdf2:${saltHex}:${hashHex}`;
+}
 
 function extractToken(req: Request): string | null {
   const auth = req.headers.get('Authorization') ?? '';
@@ -208,16 +227,17 @@ export async function handleMasterListUsers(
   // ดึงทีมของแต่ละ user
   const presenceRows = await env.DB
     .prepare(
-      `SELECT up.user_id, t.id AS team_id, t.name AS team_name, t.slug AS team_slug
+      `SELECT up.user_id, t.id AS team_id, t.name AS team_name, t.slug AS team_slug,
+              COALESCE(up.role, 'member') AS role
        FROM user_presence up
        JOIN teams t ON t.id = up.team_id`
     )
-    .all<{ user_id: string; team_id: string; team_name: string; team_slug: string }>();
+    .all<{ user_id: string; team_id: string; team_name: string; team_slug: string; role: string }>();
 
-  const teamsByUser = new Map<string, { id: string; name: string; slug: string }[]>();
+  const teamsByUser = new Map<string, { id: string; name: string; slug: string; role: string }[]>();
   for (const row of presenceRows.results ?? []) {
     if (!teamsByUser.has(row.user_id)) teamsByUser.set(row.user_id, []);
-    teamsByUser.get(row.user_id)!.push({ id: row.team_id, name: row.team_name, slug: row.team_slug });
+    teamsByUser.get(row.user_id)!.push({ id: row.team_id, name: row.team_name, slug: row.team_slug, role: row.role });
   }
 
   // แนบรูป + ประกอบข้อมูล
@@ -256,7 +276,7 @@ export async function handleMasterAddToTeam(
   if (!token) return errorResponse('Unauthorized', 401);
   if (!(await getMasterUser(env.DB, token))) return errorResponse('Forbidden', 403);
 
-  const body = await request.json<{ team_slug: string }>().catch(() => null);
+  const body = await request.json<{ team_slug: string; role?: string }>().catch(() => null);
   if (!body?.team_slug) return errorResponse('team_slug required');
 
   const team = await env.DB
@@ -278,15 +298,80 @@ export async function handleMasterAddToTeam(
     [tu?.telegram_first_name, tu?.telegram_last_name].filter(Boolean).join(' ') ||
     targetTelegramId;
 
+  const role = body.role === 'admin' ? 'admin' : 'member';
   const now = Math.floor(Date.now() / 1000);
   await env.DB
     .prepare(
-      `INSERT INTO user_presence (user_id, team_id, display_name, photo, last_seen)
-       VALUES (?, ?, ?, NULL, ?)
-       ON CONFLICT(user_id, team_id) DO UPDATE SET last_seen = excluded.last_seen`
+      `INSERT INTO user_presence (user_id, team_id, display_name, photo, last_seen, role)
+       VALUES (?, ?, ?, NULL, ?, ?)
+       ON CONFLICT(user_id, team_id) DO UPDATE SET last_seen = excluded.last_seen, role = excluded.role`
     )
-    .bind(targetTelegramId, team.id, displayName, now)
+    .bind(targetTelegramId, team.id, displayName, now, role)
     .run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ── POST /api/master/users/:tid/change-password ──────────
+
+export async function handleMasterChangePassword(
+  request: Request,
+  env: Env,
+  targetTelegramId: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+  if (!(await getMasterUser(env.DB, token))) return errorResponse('Forbidden', 403);
+
+  const body = await request.json<{ new_password: string }>().catch(() => null);
+  if (!body?.new_password || body.new_password.length < 6)
+    return errorResponse('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+
+  const exists = await env.DB
+    .prepare(`SELECT id FROM telegram_users WHERE telegram_id = ? LIMIT 1`)
+    .bind(targetTelegramId).first();
+  if (!exists) return errorResponse('User not found', 404);
+
+  const hash = await hashPassword(body.new_password);
+  await env.DB
+    .prepare(`UPDATE telegram_users SET password_hash = ?, updated_at = ? WHERE telegram_id = ?`)
+    .bind(hash, Date.now(), targetTelegramId).run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ── DELETE /api/master/users/:tid ─────────────────────────
+
+export async function handleMasterDeleteUser(
+  request: Request,
+  env: Env,
+  targetTelegramId: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+  const actor = await getMasterUser(env.DB, token);
+  if (!actor) return errorResponse('Forbidden', 403);
+
+  if (actor.telegram_id === targetTelegramId)
+    return errorResponse('ไม่สามารถลบตัวเองได้');
+
+  // revoke sessions
+  await env.DB
+    .prepare(
+      `DELETE FROM device_sessions
+       WHERE telegram_user_id = (SELECT id FROM telegram_users WHERE telegram_id = ?)`
+    )
+    .bind(targetTelegramId).run();
+
+  // remove from teams
+  await env.DB
+    .prepare(`DELETE FROM user_presence WHERE user_id = ?`)
+    .bind(targetTelegramId).run();
+
+  // delete user
+  await env.DB
+    .prepare(`DELETE FROM telegram_users WHERE telegram_id = ?`)
+    .bind(targetTelegramId).run();
 
   return jsonResponse({ ok: true });
 }

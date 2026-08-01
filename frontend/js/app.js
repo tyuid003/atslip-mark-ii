@@ -17,6 +17,23 @@ let isShowingToast = false; // สถานะการแสดง toast
 let isUploading = false; // ป้องกันการอัพโหลดซ้อน (legacy, kept for compat)
 const uploadingZones = new Set(); // per-zone upload tracking
 
+// ── Team not found page ───────────────────────────────────
+function showTeamNotFound(slug) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:'Kanit',sans-serif;">
+      <div style="text-align:center;padding:2rem;max-width:400px;">
+        <div style="font-size:4rem;margin-bottom:1rem;">🔍</div>
+        <h1 style="font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:0.5rem;">ไม่พบทีมนี้</h1>
+        <p style="color:#6b7280;font-size:0.9rem;margin-bottom:0.25rem;">
+          ไม่มีทีม <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:0.85rem;">${slug || ''}</code> ในระบบ
+        </p>
+        <p style="color:#9ca3af;font-size:0.8rem;margin-bottom:1.5rem;">กรุณาตรวจสอบ URL หรือติดต่อผู้ดูแลระบบ</p>
+        <a href="/" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;font-weight:600;">กลับหน้าหลัก</a>
+      </div>
+    </div>
+  `;
+}
+
 // Filter & Sort state
 let pendingFilterTenant = null; // Filter by tenant ID
 let pendingFilterStatus = null; // Filter by status
@@ -55,14 +72,16 @@ async function resolveValidTeamSlug(slug) {
 
   try {
     await api.getTeamBySlug(inputSlug);
-    return inputSlug;
+    return inputSlug; // team มีอยู่จริง
   } catch (error) {
     const msg = String(error?.message || '').toLowerCase();
     if (!msg.includes('team not found')) {
+      // network error หรือ error อื่น ให้ผ่านไปก่อน
       return inputSlug;
     }
   }
 
+  // team ไม่มีอยู่จริง — หา close match จาก list
   try {
     const allTeamsResp = await api.getAllTeams();
     const slugs = (allTeamsResp?.data || [])
@@ -70,7 +89,7 @@ async function resolveValidTeamSlug(slug) {
       .filter(Boolean);
 
     if (slugs.length === 0) {
-      return inputSlug;
+      return null; // ไม่มี team ใดเลย
     }
 
     const exact = slugs.find((s) => s === inputSlug);
@@ -79,18 +98,17 @@ async function resolveValidTeamSlug(slug) {
     }
 
     const closeMatches = slugs.filter((s) =>
-      s.startsWith(inputSlug) ||
-      inputSlug.startsWith(s) ||
       levenshteinDistance(s, inputSlug) <= 1
     );
 
     if (closeMatches.length === 1) {
-      return closeMatches[0];
+      return closeMatches[0]; // แนะนำ team ที่สะกดใกล้เคียง
     }
 
-    return inputSlug;
+    // ไม่มี close match — team นี้ไม่มีอยู่จริง
+    return null;
   } catch {
-    return inputSlug;
+    return inputSlug; // network error → ให้ผ่านไป
   }
 }
 
@@ -100,13 +118,20 @@ async function resolveValidTeamSlug(slug) {
 
 async function init() {
   const routeInfo = window.getRouteInfoFromURL();
-  currentTeamSlug = await resolveValidTeamSlug(routeInfo.teamSlug);
+  const requestedSlug = routeInfo.teamSlug;
+  currentTeamSlug = await resolveValidTeamSlug(requestedSlug);
   currentPage = routeInfo.page || 'dashboard';
-  window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
+  window.currentTeamSlug = currentTeamSlug;
   window.currentPage = currentPage;
   window.currentTeamId = null;
 
-  if (currentTeamSlug !== routeInfo.teamSlug) {
+  // team slug มั่วๆ / ไม่มีในระบบ → แสดงหน้า 404
+  if (currentTeamSlug === null) {
+    showTeamNotFound(requestedSlug);
+    return;
+  }
+
+  if (currentTeamSlug !== requestedSlug && requestedSlug) {
     const safePage = currentPage && currentPage !== 'dashboard' ? `/${currentPage}` : '';
     const newHash = `#/${currentTeamSlug}${safePage}`;
     history.replaceState(null, '', `${window.location.pathname}${window.location.search}${newHash}`);

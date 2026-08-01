@@ -90,6 +90,8 @@ import {
   handleMasterAddToTeam,
   handleMasterKick,
   handleMasterBan,
+  handleMasterChangePassword,
+  handleMasterDeleteUser,
 } from './api/master';
 
 // SMS-HOOK sub-project (isolated — ลบ import นี้ + block ที่ mount + โฟลเดอร์ ./sms-hook/ เพื่อถอดออก)
@@ -265,13 +267,19 @@ export default {
     if (method === 'GET' && pathname === '/api/master/users') {
       return await handleMasterListUsers(request, env);
     }
-    const masterUserMatch = pathname.match(/^\/api\/master\/users\/([^\/]+)\/(add-to-team|kick|ban)$/);
+    const masterUserMatch = pathname.match(/^\/api\/master\/users\/([^\/]+)\/(add-to-team|kick|ban|change-password)$/);
     if (method === 'POST' && masterUserMatch) {
       const tid = decodeURIComponent(masterUserMatch[1]);
       const act = masterUserMatch[2];
-      if (act === 'add-to-team') return await handleMasterAddToTeam(request, env, tid);
-      if (act === 'kick')        return await handleMasterKick(request, env, tid);
-      if (act === 'ban')         return await handleMasterBan(request, env, tid);
+      if (act === 'add-to-team')      return await handleMasterAddToTeam(request, env, tid);
+      if (act === 'kick')             return await handleMasterKick(request, env, tid);
+      if (act === 'ban')              return await handleMasterBan(request, env, tid);
+      if (act === 'change-password')  return await handleMasterChangePassword(request, env, tid);
+    }
+    const masterDeleteUserMatch = pathname.match(/^\/api\/master\/users\/([^\/]+)$/);
+    if (method === 'DELETE' && masterDeleteUserMatch) {
+      const tid = decodeURIComponent(masterDeleteUserMatch[1]);
+      return await handleMasterDeleteUser(request, env, tid);
     }
 
     const patchTeamMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/settings$/);

@@ -51,6 +51,22 @@ function levenshteinDistance(a, b) {
   return dp[s.length][t.length];
 }
 
+function showTeamNotFound(slug) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:'Kanit',sans-serif;">
+      <div style="text-align:center;padding:2rem;max-width:400px;">
+        <div style="font-size:4rem;margin-bottom:1rem;">🔍</div>
+        <h1 style="font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:0.5rem;">ไม่พบทีมนี้</h1>
+        <p style="color:#6b7280;font-size:0.9rem;margin-bottom:0.25rem;">
+          ไม่มีทีม <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:0.85rem;">${slug || ''}</code> ในระบบ
+        </p>
+        <p style="color:#9ca3af;font-size:0.8rem;margin-bottom:1.5rem;">กรุณาตรวจสอบ URL หรือติดต่อผู้ดูแลระบบ</p>
+        <a href="/" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;font-weight:600;">กลับหน้าหลัก</a>
+      </div>
+    </div>
+  `;
+}
+
 async function resolveValidTeamSlug(slug) {
   const inputSlug = String(slug || '').trim().toLowerCase();
   if (!inputSlug || inputSlug === 'default') {
@@ -59,42 +75,32 @@ async function resolveValidTeamSlug(slug) {
 
   try {
     await api.getTeamBySlug(inputSlug);
-    return inputSlug;
+    return inputSlug; // team มีอยู่จริง
   } catch (error) {
     const msg = String(error?.message || '').toLowerCase();
     if (!msg.includes('team not found')) {
-      return inputSlug;
+      return inputSlug; // network error → ให้ผ่านไป
     }
   }
 
+  // team ไม่มีอยู่ → หา close match
   try {
     const allTeamsResp = await api.getAllTeams();
     const slugs = (allTeamsResp?.data || [])
       .map((t) => String(t?.slug || '').trim().toLowerCase())
       .filter(Boolean);
 
-    if (slugs.length === 0) {
-      return inputSlug;
-    }
+    if (slugs.length === 0) return null;
 
     const exact = slugs.find((s) => s === inputSlug);
-    if (exact) {
-      return exact;
-    }
+    if (exact) return exact;
 
-    const closeMatches = slugs.filter((s) =>
-      s.startsWith(inputSlug) ||
-      inputSlug.startsWith(s) ||
-      levenshteinDistance(s, inputSlug) <= 1
-    );
+    const closeMatches = slugs.filter((s) => levenshteinDistance(s, inputSlug) <= 1);
+    if (closeMatches.length === 1) return closeMatches[0];
 
-    if (closeMatches.length === 1) {
-      return closeMatches[0];
-    }
-
-    return inputSlug;
+    return null; // ไม่มีในระบบ
   } catch {
-    return inputSlug;
+    return inputSlug; // network error → ให้ผ่านไป
   }
 }
 
@@ -110,13 +116,20 @@ async function init() {
   if (_header) _header.style.visibility = 'hidden';
 
   const routeInfo = window.getRouteInfoFromURL();
-  currentTeamSlug = await resolveValidTeamSlug(routeInfo.teamSlug);
+  const requestedSlug = routeInfo.teamSlug;
+  currentTeamSlug = await resolveValidTeamSlug(requestedSlug);
   currentPage = routeInfo.page || 'dashboard';
-  window.currentTeamSlug = currentTeamSlug; // export เป็น global variable
+  window.currentTeamSlug = currentTeamSlug;
   window.currentPage = currentPage;
   window.currentTeamId = null;
 
-  if (currentTeamSlug !== routeInfo.teamSlug) {
+  // team slug ไม่มีในระบบ → แสดงหน้า 404
+  if (currentTeamSlug === null) {
+    showTeamNotFound(requestedSlug);
+    return;
+  }
+
+  if (currentTeamSlug !== requestedSlug && requestedSlug) {
     const safePage = currentPage && currentPage !== 'dashboard' ? `/${currentPage}` : '';
     const newHash = `#/${currentTeamSlug}${safePage}`;
     history.replaceState(null, '', `${window.location.pathname}${window.location.search}${newHash}`);

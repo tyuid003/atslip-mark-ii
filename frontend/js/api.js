@@ -209,9 +209,11 @@ class API {
   async masterUpdateTeam(slug, data) { return this.request(`/api/master/teams/${slug}`, { method: 'PATCH', body: JSON.stringify(data) }); }
   async masterDeleteTeam(slug) { return this.request(`/api/master/teams/${slug}`, { method: 'DELETE' }); }
   async masterListUsers() { return this.request('/api/master/users'); }
-  async masterAddToTeam(telegramId, teamSlug) { return this.request(`/api/master/users/${telegramId}/add-to-team`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug }) }); }
+  async masterAddToTeam(telegramId, teamSlug, role = 'member') { return this.request(`/api/master/users/${telegramId}/add-to-team`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug, role }) }); }
   async masterKick(telegramId, teamSlug) { return this.request(`/api/master/users/${telegramId}/kick`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug }) }); }
   async masterBan(telegramId, teamSlug, reason = '') { return this.request(`/api/master/users/${telegramId}/ban`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug, reason }) }); }
+  async masterChangePassword(telegramId, newPassword) { return this.request(`/api/master/users/${telegramId}/change-password`, { method: 'POST', body: JSON.stringify({ new_password: newPassword }) }); }
+  async masterDeleteUser(telegramId) { return this.request(`/api/master/users/${telegramId}`, { method: 'DELETE' }); }
 
   // ============================================================
   // TEAM API KEYS (multi-provider EasySlip / Slip2Go)
