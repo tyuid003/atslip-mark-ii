@@ -514,3 +514,60 @@ export async function handleAddMember(
 
   return jsonResponse({ ok: true, display_name: displayName });
 }
+
+// ── POST /api/teams/:slug/members/:tid/delete-account ──────
+// ลบ account ผู้ใช้ออกจากระบบทั้งหมด (admin of team หรือ master เท่านั้น)
+
+export async function handleDeleteTeamUser(
+  request: Request,
+  env: Env,
+  slug: string,
+  targetTelegramId: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+
+  const actor = await getSessionUser(env.DB, token);
+  if (!actor) return errorResponse('Unauthorized', 401);
+
+  if (actor.telegram_id === targetTelegramId)
+    return errorResponse('ไม่สามารถลบตัวเองได้', 400);
+
+  const team = await getTeamBySlug(env.DB, slug);
+  if (!team) return errorResponse('Team not found', 404);
+
+  // ต้องเป็น admin ของทีม หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้นที่สามารถลบผู้ใช้ได้', 403);
+    }
+  }
+
+  // ตรวจว่า target อยู่ในทีมนี้
+  const inTeam = await hasMembership(env.DB, team.id, targetTelegramId);
+  if (!inTeam) return errorResponse('User not in team', 404);
+
+  // ลบ sessions
+  await env.DB
+    .prepare(
+      `DELETE FROM device_sessions
+       WHERE telegram_user_id = (SELECT id FROM telegram_users WHERE telegram_id = ?)`
+    )
+    .bind(targetTelegramId).run();
+
+  // ลบออกจากทุกทีม
+  await env.DB
+    .prepare(`DELETE FROM user_presence WHERE user_id = ?`)
+    .bind(targetTelegramId).run();
+
+  // ลบ account
+  await env.DB
+    .prepare(`DELETE FROM telegram_users WHERE telegram_id = ?`)
+    .bind(targetTelegramId).run();
+
+  return jsonResponse({ ok: true });
+}

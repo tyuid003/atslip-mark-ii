@@ -229,6 +229,7 @@ class API {
   async masterBan(telegramId, teamSlug, reason = '') { return this.request(`/api/master/users/${telegramId}/ban`, { method: 'POST', body: JSON.stringify({ team_slug: teamSlug, reason }) }); }
   async masterChangePassword(telegramId, newPassword) { return this.request(`/api/master/users/${telegramId}/change-password`, { method: 'POST', body: JSON.stringify({ new_password: newPassword }) }); }
   async masterDeleteUser(telegramId) { return this.request(`/api/master/users/${telegramId}`, { method: 'DELETE' }); }
+  async deleteTeamUser(slug, telegramId) { return this.request(`/api/teams/${slug}/members/${telegramId}/delete-account`, { method: 'POST' }); }
 
   // ============================================================
   // TEAM API KEYS (multi-provider EasySlip / Slip2Go)

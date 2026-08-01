@@ -69,6 +69,7 @@ import {
   handleTeamChangePassword,
   handleSearchAvailableUsers,
   handleAddMember,
+  handleDeleteTeamUser,
 } from './api/members';
 
 import {
@@ -244,7 +245,7 @@ export default {
     if (method === 'GET' && availUsersMatch) {
       return await handleSearchAvailableUsers(request, env, decodeURIComponent(availUsersMatch[1]));
     }
-    const memberActionMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/(kick|ban|unban|change-password)$/);
+    const memberActionMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/(kick|ban|change-password|delete-account)$/);
     if (method === 'POST' && memberActionMatch) {
       const slug = decodeURIComponent(memberActionMatch[1]);
       const tid  = decodeURIComponent(memberActionMatch[2]);
@@ -252,6 +253,7 @@ export default {
       if (act === 'kick')            return await handleKickMember(request, env, slug, tid);
       if (act === 'ban')             return await handleBanMember(request, env, slug, tid);
       if (act === 'change-password') return await handleTeamChangePassword(request, env, slug, tid);
+      if (act === 'delete-account')  return await handleDeleteTeamUser(request, env, slug, tid);
     }
     if (method === 'DELETE' && pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)) {
       const m = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)!;

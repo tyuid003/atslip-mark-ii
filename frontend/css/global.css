@@ -1020,6 +1020,8 @@ body {
 .mu-drop-item:hover { background: #f9fafb; }
 .mu-drop-warn { color: #f97316; }
 .mu-drop-warn:hover { background: #fff7ed; }
+.mu-drop-danger { color: #dc2626; }
+.mu-drop-danger:hover { background: #fef2f2; }
 .mu-drop-divider { height: 1px; background: #f3f4f6; margin: 3px 0; }
 
 /* ── Add user search panel ──────────────────────────────── */
