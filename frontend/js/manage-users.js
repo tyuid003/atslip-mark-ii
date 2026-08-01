@@ -74,6 +74,9 @@ function renderMemberSection(members, slug) {
   }
 
   const myTelegramId = window.atslipAuth?.user?.telegram_id;
+  // ตรวจว่า caller เป็น admin ในทีมนี้หรือ master
+  const myMember = members.find(m => String(m.telegram_id) === String(myTelegramId));
+  const iAmAdmin = window.atslipAuth?.user?.is_master || myMember?.role === 'admin';
 
   return members.map(m => {
     const isMe = String(m.telegram_id) === String(myTelegramId);
@@ -86,24 +89,36 @@ function renderMemberSection(members, slug) {
          <div class="mu-tg-name">${escHtml(m.telegram_name)}</div>`
       : `<div class="mu-name">${escHtml(m.display_name)}</div>`;
 
+    const roleBadge  = m.role === 'admin'
+      ? '<span class="mu-badge-role mu-badge-admin">Admin</span>'
+      : '<span class="mu-badge-role mu-badge-member">Member</span>';
     const bannedBadge = m.is_banned ? '<span class="mu-badge-banned">ระงับ</span>' : '';
-    const meBadge = isMe ? '<span class="mu-badge-me">ฉัน</span>' : '';
+    const meBadge     = isMe ? '<span class="mu-badge-me">ฉัน</span>' : '';
 
-    const actionBtns = isMe ? '' : `
-      <div class="mu-actions">
-        ${m.is_banned
-          ? `<button class="mu-btn mu-btn-unban" onclick="memberUnban('${escHtml(slug)}','${m.telegram_id}')">ยกเลิกระงับ</button>`
-          : `<button class="mu-btn mu-btn-ban" onclick="memberBan('${escHtml(slug)}','${m.telegram_id}')">ระงับ</button>`
-        }
-        <button class="mu-btn mu-btn-kick" onclick="memberKick('${escHtml(slug)}','${m.telegram_id}')">เตะ</button>
-      </div>`;
+    // Admin-only action buttons
+    let actionBtns = '';
+    if (!isMe && iAmAdmin) {
+      const roleToggleBtn = m.role === 'admin'
+        ? `<button class="mu-btn mu-btn-role" onclick="memberSetRole('${escHtml(slug)}','${m.telegram_id}','member')">ลด→Member</button>`
+        : `<button class="mu-btn mu-btn-role" onclick="memberSetRole('${escHtml(slug)}','${m.telegram_id}','admin')">เลื่อน→Admin</button>`;
+      const banBtn = m.is_banned
+        ? `<button class="mu-btn mu-btn-unban" onclick="memberUnban('${escHtml(slug)}','${m.telegram_id}')">ยกเลิกระงับ</button>`
+        : `<button class="mu-btn mu-btn-ban" onclick="memberBan('${escHtml(slug)}','${m.telegram_id}')">ระงับ</button>`;
+
+      actionBtns = `
+        <div class="mu-actions">
+          ${roleToggleBtn}
+          ${banBtn}
+          <button class="mu-btn mu-btn-kick" onclick="memberKick('${escHtml(slug)}','${m.telegram_id}')">เตะ</button>
+        </div>`;
+    }
 
     return `
       <div class="mu-row" data-tid="${m.telegram_id}">
         <div class="mu-avatar-wrap">${avatarHtml}</div>
         <div class="mu-info">
           ${nameHtml}
-          <div class="mu-badges">${meBadge}${bannedBadge}</div>
+          <div class="mu-badges">${meBadge}${roleBadge}${bannedBadge}</div>
         </div>
         ${actionBtns}
       </div>`;
@@ -141,6 +156,17 @@ async function joinReject(slug, requestId) {
 
 function escHtml(str) {
   return String(str || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+async function memberSetRole(slug, telegramId, newRole) {
+  const label = newRole === 'admin' ? 'เลื่อนเป็น Admin' : 'ลดเป็น Member';
+  if (!confirm(`${label} ผู้ใช้นี้?`)) return;
+  try {
+    await api.setMemberRole(slug, telegramId, newRole);
+    await openManageUsersModal(); // reload
+  } catch (e) {
+    alert('เกิดข้อผิดพลาด: ' + (e?.message || e));
+  }
 }
 
 async function memberKick(slug, telegramId) {

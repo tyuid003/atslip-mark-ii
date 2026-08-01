@@ -65,7 +65,21 @@ import {
   handleKickMember,
   handleBanMember,
   handleUnbanMember,
+  handleSetMemberRole,
 } from './api/members';
+
+import {
+  handleLogin as handleUserLogin,
+  handleRegisterUser,
+  handleGetMe as handleUserGetMe,
+  handleUpdateDisplayName as handleUserUpdateDisplayName,
+  handleChangePassword,
+  handleUpdatePhoto,
+  handleLogout as handleUserLogout,
+  handleGetPhoto as handleUserGetPhoto,
+  handleBootstrap,
+  handleMasterCreateUser,
+} from './api/user-auth';
 
 import {
   handleMasterListTeams,
@@ -107,26 +121,46 @@ export default {
     // TELEGRAM AUTH ROUTES
     // ============================================================
 
-    // POST /api/auth/register — ลงทะเบียน / login หลังยืนยัน Telegram
-    if (method === 'POST' && pathname === '/api/auth/register') {
-      return await handleAuthRegister(request, env);
+    // POST /api/auth/login — เข้าสู่ระบบด้วย username/password
+    if (method === 'POST' && pathname === '/api/auth/login') {
+      return await handleUserLogin(request, env);
+    }
+    // POST /api/auth/register-user — Admin สร้าง user ใหม่
+    if (method === 'POST' && pathname === '/api/auth/register-user') {
+      return await handleRegisterUser(request, env);
     }
     // GET /api/auth/me — ดูข้อมูลผู้ใช้ปัจจุบัน
     if (method === 'GET' && pathname === '/api/auth/me') {
-      return await handleGetMe(request, env);
+      return await handleUserGetMe(request, env);
     }
     // PATCH /api/auth/me/display-name — เปลี่ยนชื่อที่แสดง
     if (method === 'PATCH' && pathname === '/api/auth/me/display-name') {
-      return await handleUpdateDisplayName(request, env);
+      return await handleUserUpdateDisplayName(request, env);
+    }
+    // PATCH /api/auth/me/password — เปลี่ยนรหัสผ่าน
+    if (method === 'PATCH' && pathname === '/api/auth/me/password') {
+      return await handleChangePassword(request, env);
+    }
+    // PATCH /api/auth/me/photo — อัพโหลด/เปลี่ยนรูปโปรไฟล์
+    if (method === 'PATCH' && pathname === '/api/auth/me/photo') {
+      return await handleUpdatePhoto(request, env);
     }
     // POST /api/auth/logout — ออกจากระบบ
     if (method === 'POST' && pathname === '/api/auth/logout') {
-      return await handleAuthLogout(request, env);
+      return await handleUserLogout(request, env);
     }
-    // GET /api/auth/photo/:telegram_id — ดึงรูปโปรไฟล์
-    const photoMatch = pathname.match(/^\/api\/auth\/photo\/(\d+)$/);
+    // GET /api/auth/photo/:user_id — ดึงรูปโปรไฟล์
+    const photoMatch = pathname.match(/^\/api\/auth\/photo\/([^/]+)$/);
     if (method === 'GET' && photoMatch) {
-      return await handleGetPhoto(env, photoMatch[1]);
+      return await handleUserGetPhoto(env, photoMatch[1]);
+    }
+    // POST /api/setup/bootstrap — สร้าง master admin คนแรก
+    if (method === 'POST' && pathname === '/api/setup/bootstrap') {
+      return await handleBootstrap(request, env);
+    }
+    // POST /api/master/create-user — Master สร้าง user ใหม่
+    if (method === 'POST' && pathname === '/api/master/create-user') {
+      return await handleMasterCreateUser(request, env);
     }
 
     // ============================================================
@@ -208,6 +242,13 @@ export default {
     if (method === 'DELETE' && pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)) {
       const m = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)!;
       return await handleUnbanMember(request, env, decodeURIComponent(m[1]), decodeURIComponent(m[2]));
+    }
+    // PATCH /api/teams/:slug/members/:tid/role — เปลี่ยน role
+    const memberRoleMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/role$/);
+    if (method === 'PATCH' && memberRoleMatch) {
+      const slug = decodeURIComponent(memberRoleMatch[1]);
+      const tid  = decodeURIComponent(memberRoleMatch[2]);
+      return await handleSetMemberRole(request, env, slug, tid);
     }
 
     // MASTER ADMIN ROUTES

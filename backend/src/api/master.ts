@@ -181,7 +181,7 @@ export async function handleMasterListUsers(
   // ดึง user ทั้งหมดที่เคย register
   const users = await env.DB
     .prepare(
-      `SELECT tu.telegram_id, tu.display_name,
+      `SELECT tu.telegram_id, tu.display_name, tu.username,
               tu.telegram_first_name, tu.telegram_last_name,
               tu.photo_kv_key, tu.is_master,
               ds.last_seen
@@ -197,6 +197,7 @@ export async function handleMasterListUsers(
     .all<{
       telegram_id: string;
       display_name: string | null;
+      username: string | null;
       telegram_first_name: string | null;
       telegram_last_name: string | null;
       photo_kv_key: string | null;
@@ -232,6 +233,7 @@ export async function handleMasterListUsers(
         telegram_id: u.telegram_id,
         display_name: u.display_name || telegramName || u.telegram_id,
         telegram_name: telegramName,
+        username: u.username ?? null,
         photo,
         is_master: u.is_master === 1,
         last_seen: u.last_seen,

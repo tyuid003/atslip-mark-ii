@@ -967,11 +967,14 @@ body {
 .mu-info { flex: 1; min-width: 0; }
 .mu-name { font-weight: 600; font-size: 0.9rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mu-tg-name { font-size: 0.75rem; color: #9ca3af; margin-top: 1px; }
-.mu-badges { display: flex; gap: 4px; margin-top: 3px; }
+.mu-badges { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; }
 .mu-badge-banned { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; border-radius: 4px; font-size: 0.7rem; padding: 1px 6px; font-weight: 600; }
 .mu-badge-me { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 4px; font-size: 0.7rem; padding: 1px 6px; font-weight: 600; }
-.mu-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.mu-btn { border: none; border-radius: 6px; padding: 5px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.mu-badge-role { border-radius: 4px; font-size: 0.7rem; padding: 1px 6px; font-weight: 600; }
+.mu-badge-admin { background: #faf5ff; color: #7c3aed; border: 1px solid #c4b5fd; }
+.mu-badge-member { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+.mu-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.mu-btn { border: none; border-radius: 6px; padding: 5px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer; font-family: inherit; }
 .mu-btn-kick { background: #fef2f2; color: #ef4444; }
 .mu-btn-kick:hover { background: #fee2e2; }
 .mu-btn-ban { background: #fff7ed; color: #f97316; }
@@ -982,6 +985,8 @@ body {
 .mu-btn-approve:hover { background: #dbeafe; }
 .mu-btn-reject { background: #fef2f2; color: #ef4444; }
 .mu-btn-reject:hover { background: #fee2e2; }
+.mu-btn-role { background: #faf5ff; color: #7c3aed; }
+.mu-btn-role:hover { background: #ede9fe; }
 .mu-section-title {
   font-size: 0.72rem;
   font-weight: 700;

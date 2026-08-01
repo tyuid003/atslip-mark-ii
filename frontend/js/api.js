@@ -188,6 +188,18 @@ class API {
   async unbanMember(slug, telegramId) {
     return this.request(`/api/teams/${slug}/members/${telegramId}/ban`, { method: 'DELETE' });
   }
+  async setMemberRole(slug, telegramId, role) {
+    return this.request(`/api/teams/${slug}/members/${telegramId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+  async registerUser(data) {
+    return this.request('/api/auth/register-user', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 
   // ============================================================
   // MASTER ADMIN

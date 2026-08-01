@@ -4,12 +4,23 @@
 // ============================================================
 // จับ path แบบ segment เดียวที่ไม่มีนามสกุลไฟล์ (คือ team slug)
 // path ที่มีนามสกุล (.html/.js/.css/.ico ฯลฯ) จะปล่อยผ่านไปให้ static asset ตามปกติ
+// เส้นทางที่ต้องปล่อยผ่านให้ static file ทำงานเอง
+const EXCLUDED_PATHS = new Set([
+  '/login', '/master', '/api', '/sms-hook', '/flexmessage-preview',
+]);
+
 export async function onRequest(context) {
   const { request, next, env } = context;
   const url = new URL(request.url);
+  const pathname = url.pathname.replace(/\/$/, '') || '/';
 
   // มีนามสกุลไฟล์ → เป็น static asset ปล่อยผ่าน
-  if (/\.[a-z0-9]+$/i.test(url.pathname)) {
+  if (/\.[a-z0-9]+$/i.test(pathname)) {
+    return next();
+  }
+
+  // เส้นทางที่รู้จักอยู่แล้ว (login, master, api, …) → ปล่อยผ่าน
+  if (EXCLUDED_PATHS.has(pathname)) {
     return next();
   }
 

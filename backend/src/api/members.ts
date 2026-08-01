@@ -1,9 +1,11 @@
 // ============================================================
 // MEMBER MANAGEMENT API
-// GET    /api/teams/:slug/members          — list members
-// POST   /api/teams/:slug/members/:tid/kick  — kick (remove + clear sessions)
-// POST   /api/teams/:slug/members/:tid/ban   — ban (add to team_bans)
-// DELETE /api/teams/:slug/members/:tid/ban   — unban
+// GET    /api/teams/:slug/members              — list members
+// POST   /api/teams/:slug/members/:tid/kick   — kick (remove + clear sessions)
+// POST   /api/teams/:slug/members/:tid/ban    — ban (add to team_bans)
+// DELETE /api/teams/:slug/members/:tid/ban    — unban
+// PATCH  /api/teams/:slug/members/:tid/role   — set role (admin/member)
+// POST   /api/teams/:slug/members/:tid/delete — delete user from system
 // ============================================================
 
 import type { Env } from '../types';
@@ -85,7 +87,7 @@ export async function handleListMembers(
     return errorResponse('Forbidden', 403);
   }
 
-  // ดึงสมาชิก + ชื่อ Telegram จริง + สถานะ banned
+  // ดึงสมาชิก + ชื่อ Telegram จริง + สถานะ banned + role
   const members = await env.DB
     .prepare(
       `SELECT
@@ -95,6 +97,7 @@ export async function handleListMembers(
          tu.telegram_last_name,
          tu.photo_kv_key,
          up.last_seen,
+         up.role,
          CASE WHEN tb.telegram_id IS NOT NULL THEN 1 ELSE 0 END AS is_banned
        FROM user_presence up
        LEFT JOIN telegram_users tu
@@ -113,6 +116,7 @@ export async function handleListMembers(
       photo_kv_key: string | null;
       last_seen: number;
       is_banned: number;
+      role: string | null;
     }>();
 
   // แนบรูปโปรไฟล์จาก KV
@@ -131,6 +135,7 @@ export async function handleListMembers(
         photo,
         last_seen: m.last_seen,
         is_banned: m.is_banned === 1,
+        role: m.role ?? 'member',
       };
     })
   );
@@ -155,9 +160,15 @@ export async function handleKickMember(
   const team = await getTeamBySlug(env.DB, slug);
   if (!team) return errorResponse('Team not found', 404);
 
-  // ต้องเป็นสมาชิกหรือ master
-  if (!actor.is_master && !(await hasMembership(env.DB, team.id, actor.telegram_id))) {
-    return errorResponse('Forbidden', 403);
+  // ต้องเป็น admin ของทีม หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้นที่สามารถเตะสมาชิกได้', 403);
+    }
   }
 
   // ลบออกจาก user_presence
@@ -203,8 +214,14 @@ export async function handleBanMember(
   const team = await getTeamBySlug(env.DB, slug);
   if (!team) return errorResponse('Team not found', 404);
 
-  if (!actor.is_master && !(await hasMembership(env.DB, team.id, actor.telegram_id))) {
-    return errorResponse('Forbidden', 403);
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้นที่สามารถระงับสมาชิกได้', 403);
+    }
   }
 
   const body = await request.json<{ reason?: string }>().catch(() => ({}));
@@ -266,8 +283,14 @@ export async function handleUnbanMember(
   const team = await getTeamBySlug(env.DB, slug);
   if (!team) return errorResponse('Team not found', 404);
 
-  if (!actor.is_master && !(await hasMembership(env.DB, team.id, actor.telegram_id))) {
-    return errorResponse('Forbidden', 403);
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้นที่สามารถยกเลิกการระงับได้', 403);
+    }
   }
 
   await env.DB
@@ -276,4 +299,43 @@ export async function handleUnbanMember(
     .run();
 
   return jsonResponse({ ok: true });
+}
+
+// ── PATCH /api/teams/:slug/members/:tid/role ────────────────
+
+export async function handleSetMemberRole(
+  request: Request,
+  env: Env,
+  slug: string,
+  targetTelegramId: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+
+  const actor = await getSessionUser(env.DB, token);
+  if (!actor) return errorResponse('Unauthorized', 401);
+
+  const team = await getTeamBySlug(env.DB, slug);
+  if (!team) return errorResponse('Team not found', 404);
+
+  // เฉพาะ admin หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้นที่สามารถเปลี่ยน role ได้', 403);
+    }
+  }
+
+  const body = await request.json<{ role?: string }>().catch(() => ({}));
+  const newRole = body.role === 'admin' ? 'admin' : 'member';
+
+  await env.DB
+    .prepare(`UPDATE user_presence SET role = ? WHERE team_id = ? AND user_id = ?`)
+    .bind(newRole, team.id, targetTelegramId)
+    .run();
+
+  return jsonResponse({ ok: true, role: newRole });
 }

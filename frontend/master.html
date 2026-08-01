@@ -60,12 +60,18 @@
     }
     .ma-login-card h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
     .ma-login-card p { font-size: 0.85rem; color: #6b7280; margin-bottom: 1.5rem; }
+    .ma-login-field { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.9rem; font-family: inherit; margin-bottom: 10px; }
+    .ma-login-field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
     .ma-login-btn {
       background: #2563eb; color: #fff; border: none;
       border-radius: 8px; padding: 10px 24px; font-size: 0.9rem; font-weight: 600;
       cursor: pointer; width: 100%;
     }
     .ma-login-btn:hover { background: #1d4ed8; }
+    .ma-login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    }
+    .ma-login-btn:hover { background: #1d4ed8; }
+    .ma-login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     #loginError { color: #ef4444; font-size: 0.82rem; margin-top: 10px; display: none; }
 
     /* ── Buttons ───────────────────────────────────────── */
@@ -218,11 +224,15 @@
 
 <!-- Login screen -->
 <div id="loginScreen" style="display:none;">
-  <div class="ma-login-card">
-    <div style="font-size:2.5rem;margin-bottom:0.75rem;">🛡️</div>
+  <div เข้าสู่ระบบด้วย Username และ Password</p>
+    <input type="text" id="loginUsername" class="ma-login-field" placeholder="Username" autocomplete="username" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()">
+    <input type="password" id="loginPassword" class="ma-login-field" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="ma-login-btn" id="loginBrem;margin-bottom:0.75rem;">🛡️</div>
     <h2>Master Admin</h2>
-    <p>ล็อกอินด้วยบัญชี Telegram ที่มีสิทธิ์ Master</p>
-    <button class="ma-login-btn" onclick="doLogin()">
+    <p>เข้าสู่ระบบด้วย Username และ Password</p>
+    <input type="text" id="loginUsername" class="ma-login-field" placeholder="Username" autocomplete="username" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()">
+    <input type="password" id="loginPassword" class="ma-login-field" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="ma-login-btn" id="loginBtn" onclick="doLogin()">
       <i data-lucide="log-in" style="vertical-align:middle;margin-right:6px;"></i>เข้าสู่ระบบ
     </button>
     <div id="loginError"></div>
@@ -258,9 +268,109 @@
         <input type="text" class="ma-input" id="newTeamName" placeholder="ชื่อทีม" style="flex:2;">
         <input type="text" class="ma-input" id="newTeamSlug" placeholder="slug (a-z, 0-9, -)">
         <button class="ma-btn ma-btn-primary" onclick="createTeam()">สร้าง</button>
-        <button class="ma-btn ma-btn-gray" onclick="toggleCreateTeamForm()">ยกเลิก</button>
+        <CREATE USER SECTION -->
+    <div class="ma-section">
+      <div class="ma-section-header">
+        <div class="ma-section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          สร้างผู้ใช้ใหม่
+        </div>
+        <button class="ma-btn ma-btn-primary" onclick="toggleCreateUserForm()">+ สร้างผู้ใช้</button>
+      </div>
+      <div id="createUserForm" style="display:none;padding:14px 18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Username *</label>
+            <input type="text" class="ma-input" id="cuUsername" placeholder="a-z, 0-9, _" autocapitalize="none">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Password *</label>
+            <input type="password" class="ma-input" id="cuPassword" placeholder="อย่างน้อย 6 ตัว">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">ชื่อที่แสดง</label>
+            <input type="text" class="ma-input" id="cuDisplayName" placeholder="ไม่บังคับ">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">ทีม (slug)</label>
+            <select class="ma-input" id="cuTeamSlug">
+              <option value="">— ไม่กำหนดทีม —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Role</label>
+            <select class="ma-input" id="cuRole">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:18px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="cuIsMaster"> สิทธิ์ Master
+            </label>
+          </div>
+        </div>
+        <div id="cuStatus" style="font-size:0.8rem;margin-bottom:8px;display:none;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="ma-btn ma-btn-primary" onclick="createUser()">สร้างผู้ใช้</button>
+          <button class="ma-btn ma-btn-gray" onclick="toggleCreateUserForm()">ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- button class="ma-btn ma-btn-gray" onclick="toggleCreateTeamForm()">ยกเลิก</button>
       </div>
       <div id="teamsList" class="ma-loading">กำลังโหลด...</div>
+    </div>
+
+    <!-- CREATE USER SECTION -->
+    <div class="ma-section">
+      <div class="ma-section-header">
+        <div class="ma-section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          สร้างผู้ใช้ใหม่
+        </div>
+        <button class="ma-btn ma-btn-primary" onclick="toggleCreateUserForm()">+ สร้างผู้ใช้</button>
+      </div>
+      <div id="createUserForm" style="display:none;padding:14px 18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Username *</label>
+            <input type="text" class="ma-input" id="cuUsername" placeholder="a-z, 0-9, _" autocapitalize="none">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Password *</label>
+            <input type="password" class="ma-input" id="cuPassword" placeholder="อย่างน้อย 6 ตัว">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">ชื่อที่แสดง</label>
+            <input type="text" class="ma-input" id="cuDisplayName" placeholder="ไม่บังคับ">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">ทีม (slug)</label>
+            <select class="ma-input" id="cuTeamSlug">
+              <option value="">— ไม่กำหนดทีม —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px;">Role</label>
+            <select class="ma-input" id="cuRole">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:18px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="cuIsMaster"> สิทธิ์ Master
+            </label>
+          </div>
+        </div>
+        <div id="cuStatus" style="font-size:0.8rem;margin-bottom:8px;display:none;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="ma-btn ma-btn-primary" onclick="createUser()">สร้างผู้ใช้</button>
+          <button class="ma-btn ma-btn-gray" onclick="toggleCreateUserForm()">ยกเลิก</button>
+        </div>
+      </div>
     </div>
 
     <!-- USERS SECTION -->
@@ -304,16 +414,50 @@
       <input type="text" class="ma-input" id="actionModalReason" placeholder="ระบุเหตุผล...">
     </div>
     <div class="ma-modal-footer">
-      <button class="ma-btn ma-btn-gray" onclick="closeActionModal()">ยกเลิก</button>
+async function doLogin() {
+  const username = (document.getElementById('loginUsername')?.value || '').trim().toLowerCase();
+  const password = document.getElementById('loginPassword')?.value || '';
+  if (!username || !password) { showLoginError('กรุณากรอก Username และ Password'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+  try {
+    let deviceToken = localStorage.getItem('atslip_device_token');
+    if (!deviceToken) { deviceToken = crypto.randomUUID(); localStorage.setItem('atslip_device_token', deviceToken); }
+    const res = await fetch(`${BACKEND}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, device_token: deviceToken }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error ?? 'เข้าสู่ระบบล้มเหลว');
+    if (!data.user?.is_master) throw new Error('บัญชีนี้ไม่มีสิทธิ์ Master');
+    localStorage.setItem('atslip_session', data.app_session_token);
+    localStorage.setItem('atslip_user', JSON.stringify(data.user));
+    if (data.user.photo) localStorage.setItem('atslip_photo', data.user.photo);
+    window.location.reload();
+  } catch (e) {
+    showLoginError(e.message || 'เข้าสู่ระบบล้มเหลว');
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in" style="vertical-align:middle;margin-right:6px;"></i>เข้าสู่ระบบ';
+    lucide.createIcons();
+  }
+}
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg; el.style.display = 'block';
+
       <button class="ma-btn" id="actionModalConfirmBtn" onclick="confirmAction()">ยืนยัน</button>
     </div>
   </div>
 </div>
 
 <!-- Ghost mode popup -->
-<div id="ghostPopup" class="ghost-popup-overlay">
-  <div class="ghost-popup">
-    <h3>👻 โหมดล่องหน</h3>
+<div id="ghost
+    document.getElementById('loginScreen').style.display = 'flex';
+    lucide.createIcons();
+    setTimeout(() => document.getElementById('loginUsername')?.focus(), 100);
+    return;
+  }
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('maUserName').textContent = user.display_name || user.user
     <p>เปิดโหมดนี้ คุณจะเยี่ยมชมทีมได้โดยไม่ปรากฏในรายชื่อออนไลน์</p>
     <div class="ghost-switch-row">
       <span>ปิด</span>
@@ -325,8 +469,60 @@
     </div>
     <div id="ghostVisitLink" style="display:none;margin-bottom:1rem;">
       <a id="ghostLink" href="#" target="_blank" class="ma-btn ma-btn-green" style="display:inline-block;text-decoration:none;">เปิดหน้าทีม →</a>
-    </div>
-    <button class="ma-btn ma-btn-gray" onclick="closeGhostPopup()">ปิด</button>
+    </d
+    const res = await api.masterListTeams(); allTeams = res.teams || []; renderTeams(allTeams);
+    // populate team select in create-user form
+    const sel = document.getElementById('cuTeamSlug');
+    if (sel) {
+      sel.innerHTML = '<option value="">— ไม่กำหนดทีม —</option>' +
+        allTeams.map(t => `<option value="${escH(t.slug)}">${escH(t.name)} (${escH(t.slug)})</option>`).join('');
+    }
+  }
+  catch (e) { el.innerHTML = `<div class="ma-error">โหลดล้มเหลว: ${e?.message||e}</div>`; }
+}
+
+function toggleCreateUserForm() {
+  const f = document.getElementById('createUserForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  if (f.style.display === 'block') document.getElementById('cuUsername').focus();
+}
+
+async function createUser() {
+  const username    = (document.getElementById('cuUsername').value || '').trim().toLowerCase();
+  const password    = document.getElementById('cuPassword').value || '';
+  const displayName = (document.getElementById('cuDisplayName').value || '').trim();
+  const teamSlug    = document.getElementById('cuTeamSlug').value || '';
+  const role        = document.getElementById('cuRole').value;
+  const isMaster    = document.getElementById('cuIsMaster').checked;
+  const statusEl    = document.getElementById('cuStatus');
+
+  if (!username || !password) { showCuStatus('error', 'กรุณากรอก Username และ Password'); return; }
+
+  showCuStatus('info', 'กำลังสร้าง...');
+  try {
+    const res = await fetch(`${BACKEND}/api/master/create-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getSession()}` },
+      body: JSON.stringify({ username, password, display_name: displayName || username, team_slug: teamSlug, role, is_master: isMaster }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error ?? 'สร้างไม่สำเร็จ');
+    showCuStatus('success', `สร้าง user "${username}" สำเร็จ!`);
+    document.getElementById('cuUsername').value = '';
+    document.getElementById('cuPassword').value = '';
+    document.getElementById('cuDisplayName').value = '';
+    document.getElementById('cuIsMaster').checked = false;
+    loadUsers();
+  } catch (e) {
+    showCuStatus('error', e.message || 'เกิดข้อผิดพลาด');
+  }
+}
+
+function showCuStatus(type, msg) {
+  const el = document.getElementById('cuStatus');
+  el.textContent = msg;
+  el.style.color = type === 'error' ? '#ef4444' : type === 'success' ? '#16a34a' : '#2563eb';
+  el.style.display = 'block';
   </div>
 </div>
 
@@ -359,16 +555,50 @@ async function checkMasterAuth() {
     return data?.user?.is_master ? data.user : null;
   } catch { return null; }
 }
-function doLogin() { window.location.href = `/login.html?next=${encodeURIComponent('/master.html')}`; }
+async function doLogin() {
+  const username = (document.getElementById('loginUsername')?.value || '').trim().toLowerCase();
+  const password = document.getElementById('loginPassword')?.value || '';
+  if (!username || !password) { showLoginError('กรุณากรอก Username และ Password'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+  try {
+    let deviceToken = localStorage.getItem('atslip_device_token');
+    if (!deviceToken) { deviceToken = crypto.randomUUID(); localStorage.setItem('atslip_device_token', deviceToken); }
+    const res = await fetch(`${BACKEND}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, device_token: deviceToken }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error ?? 'เข้าสู่ระบบล้มเหลว');
+    if (!data.user?.is_master) throw new Error('บัญชีนี้ไม่มีสิทธิ์ Master');
+    localStorage.setItem('atslip_session', data.app_session_token);
+    localStorage.setItem('atslip_user', JSON.stringify(data.user));
+    if (data.user.photo) localStorage.setItem('atslip_photo', data.user.photo);
+    window.location.reload();
+  } catch (e) {
+    showLoginError(e.message || 'เข้าสู่ระบบล้มเหลว');
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in" style="vertical-align:middle;margin-right:6px;"></i>เข้าสู่ระบบ';
+    lucide.createIcons();
+  }
+}
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg; el.style.display = 'block';
+}
 function doLogout() { ['atslip_session','atslip_user','atslip_photo'].forEach(k => localStorage.removeItem(k)); window.location.reload(); }
 
 let allTeams = [], allUsers = [], currentActionType = '', currentActionTid = '', currentActionTeams = [];
 
 async function masterInit() {
   const user = await checkMasterAuth();
-  if (!user) { document.getElementById('loginScreen').style.display = 'flex'; return; }
+  if (!user) {
+    document.getElementById('loginScreen').style.display = 'flex';
+    lucide.createIcons();
+    setTimeout(() => document.getElementById('loginUsername')?.focus(), 100);
+    return;
+  }
   document.getElementById('mainApp').style.display = 'block';
-  document.getElementById('maUserName').textContent = user.display_name || user.telegram_first_name || user.telegram_id;
+  document.getElementById('maUserName').textContent = user.display_name || user.username || user.telegram_id;
   await loadTeams();
   loadUsers();
   document.addEventListener('click', e => {
@@ -380,8 +610,60 @@ async function masterInit() {
 async function loadTeams() {
   const el = document.getElementById('teamsList');
   el.innerHTML = '<div class="ma-loading">กำลังโหลด...</div>';
-  try { const res = await api.masterListTeams(); allTeams = res.teams || []; renderTeams(allTeams); }
+  try {
+    const res = await api.masterListTeams(); allTeams = res.teams || []; renderTeams(allTeams);
+    // populate team select in create-user form
+    const sel = document.getElementById('cuTeamSlug');
+    if (sel) {
+      sel.innerHTML = '<option value="">— ไม่กำหนดทีม —</option>' +
+        allTeams.map(t => `<option value="${escH(t.slug)}">${escH(t.name)} (${escH(t.slug)})</option>`).join('');
+    }
+  }
   catch (e) { el.innerHTML = `<div class="ma-error">โหลดล้มเหลว: ${e?.message||e}</div>`; }
+}
+
+function toggleCreateUserForm() {
+  const f = document.getElementById('createUserForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  if (f.style.display === 'block') document.getElementById('cuUsername').focus();
+}
+
+async function createUser() {
+  const username    = (document.getElementById('cuUsername').value || '').trim().toLowerCase();
+  const password    = document.getElementById('cuPassword').value || '';
+  const displayName = (document.getElementById('cuDisplayName').value || '').trim();
+  const teamSlug    = document.getElementById('cuTeamSlug').value || '';
+  const role        = document.getElementById('cuRole').value;
+  const isMaster    = document.getElementById('cuIsMaster').checked;
+  const statusEl    = document.getElementById('cuStatus');
+
+  if (!username || !password) { showCuStatus('error', 'กรุณากรอก Username และ Password'); return; }
+
+  showCuStatus('info', 'กำลังสร้าง...');
+  try {
+    const res = await fetch(`${BACKEND}/api/master/create-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getSession()}` },
+      body: JSON.stringify({ username, password, display_name: displayName || username, team_slug: teamSlug, role, is_master: isMaster }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error ?? 'สร้างไม่สำเร็จ');
+    showCuStatus('success', `สร้าง user "${username}" สำเร็จ!`);
+    document.getElementById('cuUsername').value = '';
+    document.getElementById('cuPassword').value = '';
+    document.getElementById('cuDisplayName').value = '';
+    document.getElementById('cuIsMaster').checked = false;
+    loadUsers();
+  } catch (e) {
+    showCuStatus('error', e.message || 'เกิดข้อผิดพลาด');
+  }
+}
+
+function showCuStatus(type, msg) {
+  const el = document.getElementById('cuStatus');
+  el.textContent = msg;
+  el.style.color = type === 'error' ? '#ef4444' : type === 'success' ? '#16a34a' : '#2563eb';
+  el.style.display = 'block';
 }
 
 function renderTeams(teams) {
@@ -453,7 +735,7 @@ function renderUsers(users) {
       : `<div class="ma-u-avatar-init">${(u.display_name||'?').charAt(0).toUpperCase()}</div>`;
     const nameHtml = (u.display_name !== u.telegram_name && u.telegram_name)
       ? `<div class="ma-u-name">${escH(u.display_name)}</div><div class="ma-u-tgname">${escH(u.telegram_name)}</div>`
-      : `<div class="ma-u-name">${escH(u.display_name)}</div>`;
+      : `<div class="ma-u-name">${escH(u.display_name)}</div>${u.username ? `<div class="ma-u-tgname">@${escH(u.username)}</div>` : ''}`;
     const masterBadge = u.is_master ? '<span class="ma-master-badge">MASTER</span>' : '';
     const teamsHtml = u.teams.length
       ? u.teams.map(t => `<span class="ma-u-team-chip">${escH(t.name)}<button class="ma-chip-remove" title="นำออก" onclick="event.stopPropagation();removeFromTeam('${escH(u.telegram_id)}','${escH(t.slug)}','${escH(t.name)}')">&#x2715;</button></span>`).join('')

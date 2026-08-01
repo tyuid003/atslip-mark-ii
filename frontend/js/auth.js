@@ -16,7 +16,7 @@
 
   // ── State ─────────────────────────────────────────────────
   window.atslipAuth = {
-    user:    null,   // { telegram_id, telegram_first_name, ... , display_name }
+    user:    null,   // { telegram_id, username, display_name, ... }
     photo:   null,   // base64 data URI
     session: null,   // app_session_token
     ready:   false,  // true after init() resolves
@@ -28,6 +28,13 @@
     try { return JSON.parse(localStorage.getItem(KEY_USER) || 'null'); } catch { return null; }
   }
   function getPhoto()    { return localStorage.getItem(KEY_PHOTO) || null; }
+
+  // expose ให้ saveProfileSettings ใช้ได้
+  window._authGetSession = getSession;
+  window._authGetUser    = getUser;
+  window._authGetPhoto   = getPhoto;
+  window._authKeyUser    = () => KEY_USER;
+  window._authKeyPhoto   = () => KEY_PHOTO;
 
   /** ชื่อที่แสดง: display_name ถ้ามี ไม่งั้นใช้ first_name [last_name] */
   function getDisplayName(user) {
@@ -89,10 +96,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
           </div>
           <h3>กรุณาเข้าสู่ระบบ</h3>
-          <p>คุณต้องเข้าสู่ระบบด้วย Telegram เพื่อใช้งาน ATslip</p>
+          <p>คุณต้องเข้าสู่ระบบเพื่อใช้งาน ATslip</p>
           <a href="${getTeamLoginUrl()}" class="auth-login-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            เข้าสู่ระบบด้วย Telegram
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            เข้าสู่ระบบ
           </a>
         </div>
       `;
@@ -129,13 +136,13 @@
           <div class="profile-dropdown-avatar">${avatarHTML}</div>
           <div>
             <div class="profile-dropdown-name">${escapeHtml(displayName)}</div>
-            <div class="profile-dropdown-sub">@${escapeHtml(user.telegram_username || user.telegram_id)}</div>
+            <div class="profile-dropdown-sub">${escapeHtml(user.username || user.telegram_username || user.telegram_id)}</div>
           </div>
         </div>
         <div class="profile-dropdown-divider"></div>
-        <button class="profile-dropdown-item" onclick="openRenameModal()">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          เปลี่ยนชื่อที่แสดง
+        <button class="profile-dropdown-item" onclick="openProfileSettingsModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+          ตั้งค่าโปรไฟล์
         </button>
         <button class="profile-dropdown-item danger" onclick="confirmLogout()">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -150,7 +157,7 @@
     if (!profileWrap) return;
     profileWrap.innerHTML = `
       <a href="${getTeamLoginUrl()}" class="topbar-login-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
         เข้าสู่ระบบ
       </a>
     `;
@@ -170,90 +177,194 @@
     if (dd) dd.style.display = 'none';
   });
 
-  // ── Rename modal ──────────────────────────────────────────
-  window.openRenameModal = function() {
+  // ── Profile Settings Modal ────────────────────────────────
+  window.openProfileSettingsModal = function() {
     const dd = document.getElementById('profileDropdown');
     if (dd) dd.style.display = 'none';
 
     const user = window.atslipAuth.user;
-    const current = user?.display_name || '';
+    const photo = window.atslipAuth.photo;
+    const currentDisplayName = user?.display_name || '';
+    const avatarSrc = photo || null;
 
-    let modal = document.getElementById('renameModal');
+    let modal = document.getElementById('profileSettingsModal');
     if (!modal) {
       modal = document.createElement('div');
-      modal.id = 'renameModal';
+      modal.id = 'profileSettingsModal';
       modal.className = 'auth-modal-overlay';
-      modal.onclick = (e) => { if (e.target === modal) closeRenameModal(); };
+      modal.onclick = (e) => { if (e.target === modal) closeProfileSettingsModal(); };
       document.body.appendChild(modal);
     }
 
     modal.innerHTML = `
-      <div class="auth-modal">
+      <div class="auth-modal" style="max-width:420px;width:100%">
         <div class="auth-modal-header">
-          <h3>เปลี่ยนชื่อที่แสดง</h3>
-          <button class="auth-modal-close" onclick="closeRenameModal()">
+          <h3>ตั้งค่าโปรไฟล์</h3>
+          <button class="auth-modal-close" onclick="closeProfileSettingsModal()">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div class="auth-modal-body">
-          <p style="font-size:0.82rem;color:var(--color-gray-500);margin-bottom:0.75rem">
-            ชื่อที่แสดงในระบบ — ล้างว่างเพื่อใช้ชื่อ Telegram เดิม
-          </p>
-          <input type="text" id="renameInput" class="auth-modal-input"
-            placeholder="${escapeHtml(atslipGetDisplayName(user))}"
-            value="${escapeHtml(current)}" maxlength="100"
-            onkeydown="if(event.key==='Enter')saveDisplayName()">
+        <div class="auth-modal-body" style="display:flex;flex-direction:column;gap:1.1rem">
+
+          <!-- Avatar upload -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0.6rem">
+            <div id="psAvatarPreview" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:var(--color-gray-200);display:flex;align-items:center;justify-content:center;border:2px solid var(--color-gray-300);cursor:pointer" onclick="document.getElementById('psPhotoInput').click()">
+              ${avatarSrc
+                ? `<img src="${avatarSrc}" style="width:100%;height:100%;object-fit:cover" alt="avatar">`
+                : `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-gray-400)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`}
+            </div>
+            <label style="font-size:0.75rem;color:var(--color-primary);cursor:pointer" onclick="document.getElementById('psPhotoInput').click()">เปลี่ยนรูปโปรไฟล์</label>
+            <input type="file" id="psPhotoInput" accept="image/*" style="display:none" onchange="handleProfilePhotoChange(event)">
+            <div id="psPhotoStatus" style="font-size:0.72rem;color:var(--color-gray-500)"></div>
+          </div>
+
+          <!-- Display name -->
+          <div>
+            <label style="font-size:0.8rem;font-weight:500;color:var(--color-gray-700);display:block;margin-bottom:0.3rem">ชื่อที่แสดง</label>
+            <input type="text" id="psDisplayNameInput" class="auth-modal-input"
+              placeholder="ชื่อที่แสดง"
+              value="${escapeHtml(currentDisplayName)}" maxlength="100"
+              style="width:100%">
+            <p style="font-size:0.72rem;color:var(--color-gray-500);margin-top:0.25rem">ล้างว่างเพื่อใช้ username เดิม</p>
+          </div>
+
+          <!-- Password change -->
+          <div style="border-top:1px solid var(--color-gray-200);padding-top:1rem">
+            <label style="font-size:0.8rem;font-weight:500;color:var(--color-gray-700);display:block;margin-bottom:0.5rem">เปลี่ยนรหัสผ่าน</label>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <input type="password" id="psCurrentPw" class="auth-modal-input" placeholder="รหัสผ่านปัจจุบัน" style="width:100%">
+              <input type="password" id="psNewPw" class="auth-modal-input" placeholder="รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)" style="width:100%">
+              <input type="password" id="psConfirmPw" class="auth-modal-input" placeholder="ยืนยันรหัสผ่านใหม่" style="width:100%">
+            </div>
+          </div>
+
+          <div id="psStatus" style="font-size:0.8rem;display:none"></div>
         </div>
         <div class="auth-modal-footer">
-          <button class="auth-modal-btn-cancel" onclick="closeRenameModal()">ยกเลิก</button>
-          <button class="auth-modal-btn-save" id="renameSaveBtn" onclick="saveDisplayName()">บันทึก</button>
+          <button class="auth-modal-btn-cancel" onclick="closeProfileSettingsModal()">ยกเลิก</button>
+          <button class="auth-modal-btn-save" id="psSaveBtn" onclick="saveProfileSettings()">บันทึก</button>
         </div>
       </div>
     `;
 
     modal.style.display = 'flex';
-    setTimeout(() => document.getElementById('renameInput')?.focus(), 80);
+    setTimeout(() => document.getElementById('psDisplayNameInput')?.focus(), 80);
   };
 
-  window.closeRenameModal = function() {
-    const modal = document.getElementById('renameModal');
+  window.closeProfileSettingsModal = function() {
+    const modal = document.getElementById('profileSettingsModal');
     if (modal) modal.style.display = 'none';
   };
 
-  window.saveDisplayName = async function() {
-    const input = document.getElementById('renameInput');
-    if (!input) return;
-
-    const newName = input.value.trim();
-    const btn = document.getElementById('renameSaveBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
-
+  window.handleProfilePhotoChange = async function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      document.getElementById('psPhotoStatus').textContent = 'รูปภาพใหญ่เกินไป (สูงสุด 2MB)';
+      return;
+    }
+    const status = document.getElementById('psPhotoStatus');
+    status.textContent = 'กำลังโหลด...';
     try {
-      const res  = await fetch(`${BACKEND}/api/auth/me/display-name`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getSession()}`,
-        },
-        body: JSON.stringify({ display_name: newName || null }),
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error ?? 'บันทึกล้มเหลว');
-
-      // Update local state
-      const user = getUser();
-      if (user) {
-        user.display_name = data.display_name;
-        localStorage.setItem(KEY_USER, JSON.stringify(user));
-        window.atslipAuth.user = user;
-        renderTopbarProfile(user, getPhoto());
-      }
-      closeRenameModal();
-    } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
-      alert('ไม่สามารถบันทึกชื่อ: ' + e.message);
+      // Preview
+      const preview = document.getElementById('psAvatarPreview');
+      if (preview) preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover" alt="avatar">`;
+      window._pendingProfilePhoto = dataUrl;
+      status.textContent = 'พร้อมบันทึก';
+    } catch {
+      status.textContent = 'โหลดรูปล้มเหลว';
     }
   };
+
+  window.saveProfileSettings = async function() {
+    const btn = document.getElementById('psSaveBtn');
+    const statusEl = document.getElementById('psStatus');
+    if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+
+    const showStatus = (msg, color) => {
+      statusEl.textContent = msg;
+      statusEl.style.color = color;
+      statusEl.style.display = 'block';
+    };
+
+    try {
+      const session = getSession();
+      const tasks = [];
+
+      // 1. Update display name
+      const newName = (document.getElementById('psDisplayNameInput')?.value || '').trim();
+      const currentUser = getUser();
+      if (newName !== (currentUser?.display_name || '')) {
+        tasks.push(
+          fetch(`${BACKEND}/api/auth/me/display-name`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session}` },
+            body: JSON.stringify({ display_name: newName || null }),
+          }).then(r => r.json()).then(d => {
+            if (!d.ok) throw new Error(d.error ?? 'บันทึกชื่อล้มเหลว');
+            const user = getUser();
+            if (user) { user.display_name = d.display_name; localStorage.setItem(KEY_USER, JSON.stringify(user)); window.atslipAuth.user = user; }
+          })
+        );
+      }
+
+      // 2. Upload photo
+      if (window._pendingProfilePhoto) {
+        tasks.push(
+          fetch(`${BACKEND}/api/auth/me/photo`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session}` },
+            body: JSON.stringify({ photo: window._pendingProfilePhoto }),
+          }).then(r => r.json()).then(d => {
+            if (!d.ok) throw new Error(d.error ?? 'อัพโหลดรูปล้มเหลว');
+            localStorage.setItem(KEY_PHOTO, window._pendingProfilePhoto);
+            window.atslipAuth.photo = window._pendingProfilePhoto;
+            delete window._pendingProfilePhoto;
+          })
+        );
+      }
+
+      // 3. Change password (only if fields filled)
+      const currentPw = document.getElementById('psCurrentPw')?.value || '';
+      const newPw     = document.getElementById('psNewPw')?.value || '';
+      const confirmPw = document.getElementById('psConfirmPw')?.value || '';
+      if (currentPw || newPw || confirmPw) {
+        if (!currentPw) throw new Error('กรุณากรอกรหัสผ่านปัจจุบัน');
+        if (newPw.length < 8) throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+        if (newPw !== confirmPw) throw new Error('รหัสผ่านใหม่ไม่ตรงกัน');
+        tasks.push(
+          fetch(`${BACKEND}/api/auth/me/password`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session}` },
+            body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+          }).then(r => r.json()).then(d => {
+            if (!d.ok) throw new Error(d.error ?? 'เปลี่ยนรหัสผ่านล้มเหลว');
+          })
+        );
+      }
+
+      await Promise.all(tasks);
+
+      // Refresh topbar
+      renderTopbarProfile(window.atslipAuth.user, window.atslipAuth.photo || getPhoto());
+      showStatus('บันทึกสำเร็จ!', 'var(--color-success)');
+      setTimeout(() => closeProfileSettingsModal(), 1200);
+    } catch (e) {
+      showStatus(e.message || 'บันทึกล้มเหลว', 'var(--color-danger)');
+      if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
+    }
+  };
+
+  // ── Rename modal (legacy — kept for backward compat) ──────
+  window.openRenameModal = window.openProfileSettingsModal;
+  window.closeRenameModal = window.closeProfileSettingsModal;
+  window.saveDisplayName = window.saveProfileSettings;
 
   // ── Logout ────────────────────────────────────────────────
   window.confirmLogout = function() {
