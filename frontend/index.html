@@ -1031,16 +1031,41 @@
       <div class="modal-header">
         <h3 class="modal-title"><i data-lucide="users"></i> จัดการผู้ใช้งาน</h3>
         <div style="display:flex;gap:6px;align-items:center;">
-          <button id="muAddUserBtn" class="btn btn-primary" style="font-size:0.78rem;padding:4px 10px;" onclick="muToggleAddUser()">➕ เพิ่มผู้ใช้</button>
+          <button id="muAddUserBtn" class="btn btn-primary" style="font-size:0.78rem;padding:4px 10px;" onclick="muToggleAddUser()">
+            <i data-lucide="user-plus" style="width:13px;height:13px;margin-right:4px;"></i>สร้างผู้ใช้
+          </button>
           <button class="modal-close" onclick="closeManageUsersModal()"><i data-lucide="x"></i></button>
         </div>
       </div>
-      <!-- Add user panel -->
-      <div id="muAddUserPanel" style="display:none;padding:12px 16px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
-        <div style="font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:8px;">เพิ่มผู้ใช้เข้าทีม</div>
-        <input type="text" id="muAddUserSearch" class="mu-search-input" placeholder="ค้นหา username หรือชื่อ..." oninput="muOnSearchInput(this.value)" autocapitalize="none" autocomplete="off">
-        <div id="muAddUserResults" class="mu-search-results"></div>
-        <div id="muAddUserStatus" style="font-size:0.8rem;margin-top:6px;display:none;"></div>
+      <!-- Create user panel -->
+      <div id="muAddUserPanel" style="display:none;padding:14px 16px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+        <div style="font-size:0.82rem;font-weight:700;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i data-lucide="user-plus" style="width:14px;height:14px;"></i> สร้างผู้ใช้ใหม่เข้าทีม</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:#6b7280;display:block;margin-bottom:3px;">Username *</label>
+            <input type="text" id="muNewUsername" class="mu-search-input" placeholder="a-z, 0-9, _" autocapitalize="none" autocomplete="off">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:#6b7280;display:block;margin-bottom:3px;">ชื่อที่แสดง</label>
+            <input type="text" id="muNewDisplayName" class="mu-search-input" placeholder="ไม่บังคับ">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:#6b7280;display:block;margin-bottom:3px;">รหัสผ่าน *</label>
+            <input type="password" id="muNewPassword" class="mu-search-input" placeholder="อย่างน้อย 6 ตัว" autocomplete="new-password">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:#6b7280;display:block;margin-bottom:3px;">สิทธิ์</label>
+            <select id="muNewRole" class="mu-search-input">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div id="muAddUserStatus" style="font-size:0.8rem;margin-bottom:8px;display:none;"></div>
+        <div style="display:flex;gap:8px;">
+          <button id="muCreateUserBtn" class="btn btn-primary" style="font-size:0.8rem;padding:5px 14px;" onclick="muSubmitCreateUser()">สร้างผู้ใช้</button>
+          <button class="btn btn-secondary" style="font-size:0.8rem;padding:5px 14px;" onclick="muToggleAddUser()">ยกเลิก</button>
+        </div>
       </div>
       <div class="modal-body" style="padding: 0;">
         <div id="manageUsersList" style="min-height: 120px;"></div>
@@ -1076,7 +1101,7 @@
   <script src="js/telegram-connect.js?v=1.8"></script>
   <script src="js/app-2.js?v=1.19"></script>
   <script src="js/realtime.js?v=1.6"></script>
-  <script src="js/manage-users.js?v=1.2"></script>
+  <script src="js/manage-users.js?v=1.3"></script>
   <script src="js/team-selector.js?v=1.0"></script>
 
   <script>

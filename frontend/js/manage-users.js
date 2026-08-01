@@ -86,18 +86,32 @@ function renderMemberSection(members, slug) {
       const tid = escHtml(String(m.telegram_id));
       const sl  = escHtml(slug);
       const roleItem = m.role === 'admin'
-        ? `<button class="mu-drop-item" onclick="muSetRole('${sl}','${tid}','member');muCloseMenu('${mid}')">⬇️ ลดเป็น Member</button>`
-        : `<button class="mu-drop-item" onclick="muSetRole('${sl}','${tid}','admin');muCloseMenu('${mid}')">👑 เลื่อนเป็น Admin</button>`;
+        ? `<button class="mu-drop-item" onclick="muSetRole('${sl}','${tid}','member');muCloseMenu('${mid}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+            ลดเป็น Member</button>`
+        : `<button class="mu-drop-item" onclick="muSetRole('${sl}','${tid}','admin');muCloseMenu('${mid}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+            เลื่อนเป็น Admin</button>`;
       const banItem = m.is_banned
-        ? `<button class="mu-drop-item" onclick="muUnban('${sl}','${tid}');muCloseMenu('${mid}')">✅ ยกเลิกระงับ</button>`
-        : `<button class="mu-drop-item mu-drop-warn" onclick="muBan('${sl}','${tid}');muCloseMenu('${mid}')">🚫 ระงับ</button>`;
+        ? `<button class="mu-drop-item" onclick="muUnban('${sl}','${tid}');muCloseMenu('${mid}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            ยกเลิกระงับ</button>`
+        : `<button class="mu-drop-item mu-drop-warn" onclick="muBan('${sl}','${tid}');muCloseMenu('${mid}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            ระงับ</button>`;
       menuHtml = `<div class="mu-menu-wrap">
           <button class="mu-menu-btn" onclick="event.stopPropagation();muToggleMenu('${mid}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg></button>
           <div id="${mid}" class="mu-dropdown">
             ${roleItem}
-            <button class="mu-drop-item" onclick="muOpenChangePassword('${sl}','${tid}');muCloseMenu('${mid}')">🔑 เปลี่ยนรหัสผ่าน</button>
+            <button class="mu-drop-item" onclick="muOpenChangePassword('${sl}','${tid}');muCloseMenu('${mid}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              เปลี่ยนรหัสผ่าน
+            </button>
             <div class="mu-drop-divider"></div>
-            <button class="mu-drop-item mu-drop-warn" onclick="muKick('${sl}','${tid}');muCloseMenu('${mid}')">🚪 เตะออกจากทีม</button>
+            <button class="mu-drop-item mu-drop-warn" onclick="muKick('${sl}','${tid}');muCloseMenu('${mid}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              เตะออกจากทีม
+            </button>
             ${banItem}
           </div>
         </div>`;
@@ -176,48 +190,45 @@ async function muSubmitCp() {
   finally { btn.disabled = false; btn.textContent = 'บันทึก'; }
 }
 
-// ── เพิ่มผู้ใช้เข้าทีม ──────────────────────────────────
+// ── สร้างผู้ใช้ใหม่เข้าทีม ──────────────────────────────
 function muToggleAddUser() {
   const panel = document.getElementById('muAddUserPanel');
   if (!panel) return;
   const isOpen = panel.style.display !== 'none';
   panel.style.display = isOpen ? 'none' : 'block';
   if (!isOpen) {
-    document.getElementById('muAddUserSearch').value = '';
-    document.getElementById('muAddUserResults').innerHTML = '';
-    const st = document.getElementById('muAddUserStatus'); st.style.display = 'none';
-    setTimeout(() => document.getElementById('muAddUserSearch').focus(), 80);
+    document.getElementById('muNewUsername').value = '';
+    document.getElementById('muNewDisplayName').value = '';
+    document.getElementById('muNewPassword').value = '';
+    document.getElementById('muNewRole').value = 'member';
+    const st = document.getElementById('muAddUserStatus'); st.style.display = 'none'; st.textContent = '';
+    setTimeout(() => document.getElementById('muNewUsername').focus(), 80);
   }
 }
-let _muTimer = null;
-function muOnSearchInput(q) {
-  clearTimeout(_muTimer);
-  const el = document.getElementById('muAddUserResults');
-  if (!q || q.length < 2) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div style="padding:8px;color:#9ca3af;font-size:0.8rem;">กำลังค้นหา...</div>';
-  _muTimer = setTimeout(async () => {
-    try {
-      const r = await api.searchAvailableUsers(window.currentTeamSlug, q);
-      const users = r.users || [];
-      if (!users.length) { el.innerHTML = '<div style="padding:8px;color:#9ca3af;font-size:0.8rem;">ไม่พบผู้ใช้</div>'; return; }
-      el.innerHTML = users.map(u => `<div class="mu-search-row" onclick="muAddUser('${escHtml(u.telegram_id)}','${escHtml(u.display_name)}')">
-          <div class="mu-search-av">${escHtml(u.display_name.charAt(0).toUpperCase())}</div>
-          <div><div style="font-weight:600;font-size:0.84rem;">${escHtml(u.display_name)}</div>${u.username ? `<div style="font-size:0.72rem;color:#9ca3af;">@${escHtml(u.username)}</div>` : ''}</div>
-        </div>`).join('');
-    } catch (e) { el.innerHTML = `<div style="padding:8px;color:#ef4444;font-size:0.8rem;">${escHtml(e?.message || 'เกิดข้อผิดพลาด')}</div>`; }
-  }, 350);
-}
-async function muAddUser(telegramId, displayName) {
+async function muSubmitCreateUser() {
   const slug = window.currentTeamSlug;
-  const st = document.getElementById('muAddUserStatus');
+  const username    = (document.getElementById('muNewUsername').value || '').trim().toLowerCase();
+  const displayName = (document.getElementById('muNewDisplayName').value || '').trim();
+  const password    = document.getElementById('muNewPassword').value || '';
+  const role        = document.getElementById('muNewRole').value;
+  const st          = document.getElementById('muAddUserStatus');
+  if (!username) { st.textContent = 'กรุณากรอก Username'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
+  if (!password || password.length < 6) { st.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัว'; st.style.color = '#ef4444'; st.style.display = 'block'; return; }
+  const btn = document.getElementById('muCreateUserBtn');
+  btn.disabled = true; btn.textContent = 'กำลังสร้าง...';
   try {
-    await api.addMember(slug, telegramId);
-    st.textContent = `เพิ่ม ${displayName} สำเร็จ`; st.style.color = '#16a34a'; st.style.display = 'block';
-    document.getElementById('muAddUserSearch').value = '';
-    document.getElementById('muAddUserResults').innerHTML = '';
-    setTimeout(() => { st.style.display = 'none'; }, 1500);
+    await api.registerUser({ username, display_name: displayName || username, password, team_slug: slug, role });
+    st.textContent = `สร้างผู้ใช้ "${username}" สำเร็จ`;
+    st.style.color = '#16a34a'; st.style.display = 'block';
+    document.getElementById('muNewUsername').value = '';
+    document.getElementById('muNewDisplayName').value = '';
+    document.getElementById('muNewPassword').value = '';
+    document.getElementById('muNewRole').value = 'member';
+    setTimeout(() => { st.style.display = 'none'; }, 2000);
     await openManageUsersModal();
-  } catch (e) { st.textContent = e?.message || 'เกิดข้อผิดพลาด'; st.style.color = '#ef4444'; st.style.display = 'block'; }
+  } catch (e) {
+    st.textContent = e?.message || 'เกิดข้อผิดพลาด'; st.style.color = '#ef4444'; st.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'สร้างผู้ใช้'; }
 }
 
 // ── คำขอเข้าร่วม ─────────────────────────────────────────
