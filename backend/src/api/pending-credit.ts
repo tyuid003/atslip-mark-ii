@@ -151,10 +151,12 @@ export async function handleCreditPendingTransaction(
     const scannedByPhoto = body.scanned_by_photo ? String(body.scanned_by_photo).substring(0, 32768) : null;
 
     const transaction = await env.DB.prepare(
-      `SELECT id, tenant_id, slip_ref, amount, sender_account, receiver_account, slip_data,
-              matched_user_id, matched_username, status
-       FROM pending_transactions
-       WHERE id = ?
+      `SELECT pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_account, pt.receiver_account, pt.slip_data,
+              pt.matched_user_id, pt.matched_username, pt.status,
+              t.team_id
+       FROM pending_transactions pt
+       LEFT JOIN tenants t ON t.id = pt.tenant_id
+       WHERE pt.id = ?
        LIMIT 1`
     )
       .bind(transactionId)
@@ -300,6 +302,7 @@ export async function handleCreditPendingTransaction(
         type: 'transaction_updated',
         data: {
           id: transactionId,
+          team_id: transaction.team_id || null,
           status: newStatus,
           matched_user_id: creditResult.resolvedMemberCode || null,
           matched_username: creditResult.resolvedUsername || null,
@@ -407,6 +410,7 @@ export async function handleWithdrawPendingCredit(
           type: 'transaction_updated',
           data: {
             id: transactionId,
+            team_id: transaction.team_id || null,
             status: rollbackStatus,
             scanned_by_id: withdrawScannedById,
             scanned_by_name: withdrawScannedByName,

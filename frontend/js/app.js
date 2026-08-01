@@ -2034,9 +2034,12 @@ function handleRealtimeMessage(message) {
   if (message.type === 'connected') return;
 
   if (message.type === 'new_pending') {
+    // กรองเฉพาะ event ของทีมนี้
+    const data = message.data || {};
+    const myTeamId = window.currentTeamId;
+    if (myTeamId && data.team_id && String(data.team_id) !== String(myTeamId)) return;
     // Reload from API to pick up the new item with full data and team filter
     loadPendingTransactions();
-    const data = message.data || {};
     addNotification(`🔔 สลิปใหม่: ${data.sender_name || ''} ยอด ${data.amount || ''} บาท`);
     return;
   }
@@ -2044,6 +2047,9 @@ function handleRealtimeMessage(message) {
   if (message.type === 'transaction_updated') {
     const update = message.data;
     if (!update || !update.id) return;
+    // กรองเฉพาะ event ของทีมนี้
+    const myTeamId = window.currentTeamId;
+    if (myTeamId && update.team_id && String(update.team_id) !== String(myTeamId)) return;
 
     const idx = allPendingTransactions.findIndex((t) => t.id === update.id);
     if (idx === -1) {
@@ -2079,8 +2085,9 @@ function handleRealtimeMessage(message) {
 // ============================================================
 
 function initializeNotifications() {
-  // โหลด notifications จาก localStorage
-  const saved = localStorage.getItem('atslip_notifications');
+  // โหลด notifications จาก localStorage (แยกตาม team slug)
+  const storageKey = `atslip_notifications:${currentTeamSlug || 'default'}`;
+  const saved = localStorage.getItem(storageKey);
   if (saved) {
     try {
       notifications = JSON.parse(saved);
@@ -2120,9 +2127,10 @@ function addNotification(title) {
     notifications = notifications.slice(0, 99);
   }
 
-  // บันทึกลง localStorage
+  // บันทึกลง localStorage (แยกตาม team slug)
   try {
-    localStorage.setItem('atslip_notifications', JSON.stringify(notifications));
+    const storageKey = `atslip_notifications:${currentTeamSlug || 'default'}`;
+    localStorage.setItem(storageKey, JSON.stringify(notifications));
   } catch (e) {
     console.warn('ไม่สามารถบันทึก notifications ลง localStorage:', e);
   }

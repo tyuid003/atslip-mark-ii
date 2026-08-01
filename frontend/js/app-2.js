@@ -2725,8 +2725,9 @@ function handleRealtimeMessage(message) {
 // ============================================================
 
 function initializeNotifications() {
-  // โหลด notifications จาก localStorage
-  const saved = localStorage.getItem('atslip_notifications');
+  // โหลด notifications จาก localStorage (แยกตาม team slug)
+  const storageKey = `atslip_notifications:${currentTeamSlug || 'default'}`;
+  const saved = localStorage.getItem(storageKey);
   if (saved) {
     try {
       notifications = JSON.parse(saved);
@@ -2766,9 +2767,10 @@ function addNotification(title) {
     notifications = notifications.slice(0, 50);
   }
 
-  // บันทึกลง localStorage
+  // บันทึกลง localStorage (แยกตาม team slug)
   try {
-    localStorage.setItem('atslip_notifications', JSON.stringify(notifications));
+    const storageKey = `atslip_notifications:${currentTeamSlug || 'default'}`;
+    localStorage.setItem(storageKey, JSON.stringify(notifications));
   } catch (e) {
     console.warn('ไม่สามารถบันทึก notifications ลง localStorage:', e);
   }

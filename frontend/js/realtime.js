@@ -178,6 +178,9 @@ class RealtimeClient {
    * @param {object} data 
    */
   onNewPending(data) {
+    // กรองเฉพาะ event ของทีมนี้
+    const myTeamId = window.currentTeamId;
+    if (myTeamId && data.team_id && String(data.team_id) !== String(myTeamId)) return;
 
     // Add to allPendingTransactions array without reloading
     if (typeof allPendingTransactions !== 'undefined') {
@@ -221,6 +224,10 @@ class RealtimeClient {
    * @param {object} data 
    */
   onTransactionUpdated(data) {
+    // กรองเฉพาะ event ของทีมนี้
+    const myTeamId = window.currentTeamId;
+    if (myTeamId && data.team_id && String(data.team_id) !== String(myTeamId)) return;
+
     if (typeof allPendingTransactions !== 'undefined') {
       // Find and update the transaction
       const index = allPendingTransactions.findIndex(item => item.id === data.id);

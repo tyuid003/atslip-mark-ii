@@ -166,11 +166,11 @@ export async function handleMatchPendingTransaction(
 
     console.log(`[Manual Match] Transaction ${transactionId} matched to ${finalMatchedUsername} (${finalMatchedUserId})` + (body.tenant_id ? ` → tenant ${body.tenant_id}` : ''));
 
-    // Return updated transaction (includes tenant_name)
+    // Return updated transaction (includes tenant_name + team_id)
     const updated = await env.DB.prepare(
       `SELECT pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, pt.status, pt.slip_data,
               pt.matched_user_id, pt.matched_username, pt.created_at,
-              t.name as tenant_name
+              t.name as tenant_name, t.team_id
        FROM pending_transactions pt
        LEFT JOIN tenants t ON t.id = pt.tenant_id
        WHERE pt.id = ?`
@@ -189,6 +189,7 @@ export async function handleMatchPendingTransaction(
           type: 'transaction_updated',
           data: {
             id: transactionId,
+            team_id: (updated as any)?.team_id || null,
             status: 'matched',
             matched_user_id: finalMatchedUserId,
             matched_username: finalMatchedUsername,
