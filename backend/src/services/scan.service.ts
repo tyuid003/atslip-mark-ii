@@ -1063,6 +1063,7 @@ export class ScanService {
             team_id: tenant.team_id as string,
             name: tenant.name as string,
             admin_api_url: tenant.admin_api_url as string,
+            api_version: tenant.api_version as string | undefined,
             accountId: matchedAccountId,
           };
         } else {
