@@ -194,6 +194,21 @@ class API {
       body: JSON.stringify({ role }),
     });
   }
+  async teamChangePassword(slug, telegramId, newPassword) {
+    return this.request(`/api/teams/${slug}/members/${telegramId}/change-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+  }
+  async searchAvailableUsers(slug, q) {
+    return this.request(`/api/teams/${slug}/available-users?q=${encodeURIComponent(q)}`);
+  }
+  async addMember(slug, telegramId, role = 'member') {
+    return this.request(`/api/teams/${slug}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ telegram_id: telegramId, role }),
+    });
+  }
   async registerUser(data) {
     return this.request('/api/auth/register-user', {
       method: 'POST',

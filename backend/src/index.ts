@@ -66,6 +66,9 @@ import {
   handleBanMember,
   handleUnbanMember,
   handleSetMemberRole,
+  handleTeamChangePassword,
+  handleSearchAvailableUsers,
+  handleAddMember,
 } from './api/members';
 
 import {
@@ -233,13 +236,22 @@ export default {
     if (method === 'GET' && membersMatch) {
       return await handleListMembers(request, env, decodeURIComponent(membersMatch[1]));
     }
-    const memberActionMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/(kick|ban|unban)$/);
+    if (method === 'POST' && membersMatch) {
+      return await handleAddMember(request, env, decodeURIComponent(membersMatch[1]));
+    }
+    // GET /api/teams/:slug/available-users?q=
+    const availUsersMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/available-users$/);
+    if (method === 'GET' && availUsersMatch) {
+      return await handleSearchAvailableUsers(request, env, decodeURIComponent(availUsersMatch[1]));
+    }
+    const memberActionMatch = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/(kick|ban|unban|change-password)$/);
     if (method === 'POST' && memberActionMatch) {
       const slug = decodeURIComponent(memberActionMatch[1]);
       const tid  = decodeURIComponent(memberActionMatch[2]);
       const act  = memberActionMatch[3];
-      if (act === 'kick')  return await handleKickMember(request, env, slug, tid);
-      if (act === 'ban')   return await handleBanMember(request, env, slug, tid);
+      if (act === 'kick')            return await handleKickMember(request, env, slug, tid);
+      if (act === 'ban')             return await handleBanMember(request, env, slug, tid);
+      if (act === 'change-password') return await handleTeamChangePassword(request, env, slug, tid);
     }
     if (method === 'DELETE' && pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)) {
       const m = pathname.match(/^\/api\/teams\/([^\/]+)\/members\/([^\/]+)\/ban$/)!;

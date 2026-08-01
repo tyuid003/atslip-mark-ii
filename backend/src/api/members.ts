@@ -1,11 +1,13 @@
 // ============================================================
 // MEMBER MANAGEMENT API
-// GET    /api/teams/:slug/members              — list members
-// POST   /api/teams/:slug/members/:tid/kick   — kick (remove + clear sessions)
-// POST   /api/teams/:slug/members/:tid/ban    — ban (add to team_bans)
-// DELETE /api/teams/:slug/members/:tid/ban    — unban
-// PATCH  /api/teams/:slug/members/:tid/role   — set role (admin/member)
-// POST   /api/teams/:slug/members/:tid/delete — delete user from system
+// GET    /api/teams/:slug/members                        — list members
+// POST   /api/teams/:slug/members/:tid/kick              — kick (remove + clear sessions)
+// POST   /api/teams/:slug/members/:tid/ban               — ban (add to team_bans)
+// DELETE /api/teams/:slug/members/:tid/ban               — unban
+// PATCH  /api/teams/:slug/members/:tid/role              — set role (admin/member)
+// POST   /api/teams/:slug/members/:tid/change-password   — change member password (admin only)
+// GET    /api/teams/:slug/available-users?q=             — search users not in this team
+// POST   /api/teams/:slug/members/add                    — add existing user to team
 // ============================================================
 
 import type { Env } from '../types';
@@ -338,4 +340,177 @@ export async function handleSetMemberRole(
     .run();
 
   return jsonResponse({ ok: true, role: newRole });
+}
+
+// ── Password hashing (PBKDF2) ─────────────────────────────
+async function hashPassword(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 },
+    keyMaterial, 256
+  );
+  const hashArr = new Uint8Array(bits);
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashHex = Array.from(hashArr).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `pbkdf2:${saltHex}:${hashHex}`;
+}
+
+// ── POST /api/teams/:slug/members/:tid/change-password ─────
+
+export async function handleTeamChangePassword(
+  request: Request,
+  env: Env,
+  slug: string,
+  targetTelegramId: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+
+  const actor = await getSessionUser(env.DB, token);
+  if (!actor) return errorResponse('Unauthorized', 401);
+
+  const team = await getTeamBySlug(env.DB, slug);
+  if (!team) return errorResponse('Team not found', 404);
+
+  // เฉพาะ admin หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้น', 403);
+    }
+  }
+
+  // ตรวจว่า target อยู่ในทีม
+  const inTeam = await hasMembership(env.DB, team.id, targetTelegramId);
+  if (!inTeam) return errorResponse('User not in team', 404);
+
+  const body = await request.json<{ new_password: string }>().catch(() => null);
+  if (!body?.new_password || body.new_password.length < 6)
+    return errorResponse('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+
+  const hash = await hashPassword(body.new_password);
+  await env.DB
+    .prepare(`UPDATE telegram_users SET password_hash = ?, updated_at = ? WHERE telegram_id = ?`)
+    .bind(hash, Date.now(), targetTelegramId)
+    .run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ── GET /api/teams/:slug/available-users?q= ───────────────
+
+export async function handleSearchAvailableUsers(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+
+  const actor = await getSessionUser(env.DB, token);
+  if (!actor) return errorResponse('Unauthorized', 401);
+
+  const team = await getTeamBySlug(env.DB, slug);
+  if (!team) return errorResponse('Team not found', 404);
+
+  // ต้องเป็น admin หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้น', 403);
+    }
+  }
+
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('q') ?? '').trim();
+  if (!q || q.length < 2) return errorResponse('q ต้องมีอย่างน้อย 2 ตัวอักษร', 400);
+
+  // ค้นหา users ที่ไม่อยู่ใน team นี้
+  const rows = await env.DB
+    .prepare(
+      `SELECT tu.telegram_id, tu.display_name, tu.username
+       FROM telegram_users tu
+       WHERE (LOWER(tu.username) LIKE ? OR LOWER(tu.display_name) LIKE ?)
+         AND tu.telegram_id NOT IN (
+           SELECT user_id FROM user_presence WHERE team_id = ?
+         )
+       ORDER BY tu.display_name
+       LIMIT 10`
+    )
+    .bind(`%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`, team.id)
+    .all<{ telegram_id: string; display_name: string | null; username: string | null }>();
+
+  return jsonResponse({
+    ok: true,
+    users: (rows.results ?? []).map(u => ({
+      telegram_id: u.telegram_id,
+      display_name: u.display_name || u.username || u.telegram_id,
+      username: u.username,
+    })),
+  });
+}
+
+// ── POST /api/teams/:slug/members/add ─────────────────────
+
+export async function handleAddMember(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response> {
+  const token = extractToken(request);
+  if (!token) return errorResponse('Unauthorized', 401);
+
+  const actor = await getSessionUser(env.DB, token);
+  if (!actor) return errorResponse('Unauthorized', 401);
+
+  const team = await getTeamBySlug(env.DB, slug);
+  if (!team) return errorResponse('Team not found', 404);
+
+  // ต้องเป็น admin หรือ master
+  if (!actor.is_master) {
+    const actorPresence = await env.DB
+      .prepare(`SELECT role FROM user_presence WHERE team_id = ? AND user_id = ? LIMIT 1`)
+      .bind(team.id, actor.telegram_id)
+      .first<{ role: string }>();
+    if (!actorPresence || actorPresence.role !== 'admin') {
+      return errorResponse('เฉพาะ Admin เท่านั้น', 403);
+    }
+  }
+
+  const body = await request.json<{ telegram_id: string; role?: string }>().catch(() => null);
+  if (!body?.telegram_id) return errorResponse('telegram_id required');
+
+  const targetUser = await env.DB
+    .prepare(`SELECT telegram_id, display_name, telegram_first_name, telegram_last_name FROM telegram_users WHERE telegram_id = ? LIMIT 1`)
+    .bind(body.telegram_id)
+    .first<{ telegram_id: string; display_name: string | null; telegram_first_name: string | null; telegram_last_name: string | null }>();
+  if (!targetUser) return errorResponse('User not found', 404);
+
+  const displayName = targetUser.display_name ||
+    [targetUser.telegram_first_name, targetUser.telegram_last_name].filter(Boolean).join(' ') ||
+    targetUser.telegram_id;
+
+  const role = body.role === 'admin' ? 'admin' : 'member';
+  const now = Math.floor(Date.now() / 1000);
+
+  await env.DB
+    .prepare(
+      `INSERT INTO user_presence (user_id, team_id, display_name, photo, last_seen, role)
+       VALUES (?, ?, ?, NULL, ?, ?)
+       ON CONFLICT(user_id, team_id) DO UPDATE SET last_seen = excluded.last_seen, role = excluded.role`
+    )
+    .bind(body.telegram_id, team.id, displayName, now, role)
+    .run();
+
+  return jsonResponse({ ok: true, display_name: displayName });
 }

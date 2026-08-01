@@ -1030,9 +1030,17 @@
     <div class="modal" style="max-width: 560px;">
       <div class="modal-header">
         <h3 class="modal-title"><i data-lucide="users"></i> จัดการผู้ใช้งาน</h3>
-        <button class="modal-close" onclick="closeManageUsersModal()">
-          <i data-lucide="x"></i>
-        </button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button id="muAddUserBtn" class="btn btn-primary" style="font-size:0.78rem;padding:4px 10px;" onclick="muToggleAddUser()">➕ เพิ่มผู้ใช้</button>
+          <button class="modal-close" onclick="closeManageUsersModal()"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <!-- Add user panel -->
+      <div id="muAddUserPanel" style="display:none;padding:12px 16px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+        <div style="font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:8px;">เพิ่มผู้ใช้เข้าทีม</div>
+        <input type="text" id="muAddUserSearch" class="mu-search-input" placeholder="ค้นหา username หรือชื่อ..." oninput="muOnSearchInput(this.value)" autocapitalize="none" autocomplete="off">
+        <div id="muAddUserResults" class="mu-search-results"></div>
+        <div id="muAddUserStatus" style="font-size:0.8rem;margin-top:6px;display:none;"></div>
       </div>
       <div class="modal-body" style="padding: 0;">
         <div id="manageUsersList" style="min-height: 120px;"></div>
@@ -1043,16 +1051,32 @@
     </div>
   </div>
 
+  <!-- Change-password overlay (inside manage users context) -->
+  <div id="muCpOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:340px;box-shadow:0 16px 48px rgba(0,0,0,.15);">
+      <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">🔑 เปลี่ยนรหัสผ่าน</h3>
+      <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px;">รหัสผ่านใหม่ *</label>
+      <input type="password" id="muCpNew" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:0.88rem;margin-bottom:8px;" placeholder="อย่างน้อย 6 ตัว" autocomplete="new-password">
+      <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px;">ยืนยันรหัสผ่าน *</label>
+      <input type="password" id="muCpConfirm" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:0.88rem;margin-bottom:8px;" placeholder="กรอกอีกครั้ง" autocomplete="new-password">
+      <div id="muCpStatus" style="font-size:0.8rem;margin-bottom:8px;display:none;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="muCloseCp()" style="border:1px solid #e5e7eb;border-radius:6px;padding:6px 14px;font-size:0.82rem;cursor:pointer;background:#f9fafb;">ยกเลิก</button>
+        <button id="muCpSubmit" onclick="muSubmitCp()" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:0.82rem;font-weight:600;cursor:pointer;">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="js/config.js?v=2.1"></script>
   <script src="js/auth.js?v=1.0"></script>
-  <script src="js/api.js?v=1.14"></script>
+  <script src="js/api.js?v=1.15"></script>
   <script src="js/ui.js?v=1.9"></script>
   <script src="js/reply-message.js?v=1.2"></script>
   <script src="js/telegram-connect.js?v=1.8"></script>
   <script src="js/app-2.js?v=1.19"></script>
   <script src="js/realtime.js?v=1.6"></script>
-  <script src="js/manage-users.js?v=1.1"></script>
+  <script src="js/manage-users.js?v=1.2"></script>
   <script src="js/team-selector.js?v=1.0"></script>
 
   <script>

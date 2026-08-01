@@ -998,6 +998,48 @@ body {
   margin-bottom: 4px;
 }
 
+/* ── Three-dot menu (manage users) ─────────────────────── */
+.mu-menu-wrap { position: relative; flex-shrink: 0; }
+.mu-menu-btn {
+  background: none; border: none; cursor: pointer; color: #9ca3af;
+  border-radius: 6px; padding: 5px 6px; display: flex; align-items: center;
+}
+.mu-menu-btn:hover { background: #f3f4f6; color: #374151; }
+.mu-dropdown {
+  display: none; position: absolute; right: 0; top: calc(100% + 4px);
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); min-width: 170px; z-index: 500; overflow: hidden;
+}
+.mu-dropdown.open { display: block; }
+.mu-drop-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 13px; font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; background: none; border: none; width: 100%;
+  text-align: left; font-family: inherit; color: #374151;
+}
+.mu-drop-item:hover { background: #f9fafb; }
+.mu-drop-warn { color: #f97316; }
+.mu-drop-warn:hover { background: #fff7ed; }
+.mu-drop-divider { height: 1px; background: #f3f4f6; margin: 3px 0; }
+
+/* ── Add user search panel ──────────────────────────────── */
+.mu-search-input {
+  width: 100%; border: 1px solid #d1d5db; border-radius: 7px;
+  padding: 7px 10px; font-size: 0.85rem; font-family: inherit;
+}
+.mu-search-input:focus { outline: none; border-color: #2563eb; }
+.mu-search-results { margin-top: 6px; max-height: 180px; overflow-y: auto; }
+.mu-search-row {
+  display: flex; align-items: center; gap: 9px; padding: 7px 6px;
+  border-radius: 7px; cursor: pointer;
+}
+.mu-search-row:hover { background: #eff6ff; }
+.mu-search-av {
+  width: 32px; height: 32px; border-radius: 50%; background: #eff6ff;
+  color: #2563eb; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+}
+
 /* ============================================================
    SKELETON LOADING
    ============================================================ */
