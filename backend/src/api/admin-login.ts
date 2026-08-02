@@ -133,13 +133,12 @@ export const AdminLoginAPI = {
         }
 
         const loginData = await loginResponse.json() as any;
-        sessionToken = loginData.token || '';
-        if (!sessionToken) throw new Error('No session token received');
 
         // ── Google Authenticator (TOTP) — v1 เท่านั้น ──
-        // token จาก /api/login (เมื่อเปิด TOTP) = preAuthToken (stage totp_pending) ยังใช้เรียก API ไม่ได้
+        // บาง backend ส่ง token:"" (ว่าง) + preAuthToken เมื่อเปิด TOTP — ต้อง check ก่อน
         if (Number(tenant.totp_enabled) === 1) {
-          const preAuthToken = sessionToken;
+          const preAuthToken = loginData.preAuthToken || loginData.token || '';
+          if (!preAuthToken) throw new Error('No pre-auth token received for TOTP');
           const adminId = loginData.id ?? loginData.adminId ?? loginData?.data?.id ?? null;
           const totpRes = await resolveTotpToken(
             env, tenantId, adminApiUrl, adminId, preAuthToken,
@@ -149,6 +148,9 @@ export const AdminLoginAPI = {
             return jsonResponse({ success: false, need_totp: true, data: totpRes.needData, message: totpRes.message }, 200);
           }
           sessionToken = totpRes.token;
+        } else {
+          sessionToken = loginData.token || '';
+          if (!sessionToken) throw new Error('No session token received');
         }
       }
 
