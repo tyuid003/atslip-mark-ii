@@ -70,6 +70,7 @@ export async function getTenantById(env: Env, id: string): Promise<TenantWithSta
       t.admin_username, t.admin_password, t.easyslip_token,
       COALESCE(t.api_version, 'v1') as api_version,
       COALESCE(t.totp_enabled, 0) as totp_enabled,
+      COALESCE(t.scan_enabled, 1) as scan_enabled,
       COUNT(DISTINCT lo.id) as line_oa_count,
       COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
     FROM tenants t
@@ -130,6 +131,7 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
         t.admin_username, t.admin_password,
         COALESCE(t.api_version, 'v1') as api_version,
         COALESCE(t.totp_enabled, 0) as totp_enabled,
+        COALESCE(t.scan_enabled, 1) as scan_enabled,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
         COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t
@@ -144,6 +146,7 @@ export async function getAllTenants(env: Env, teamSlug?: string) {
         t.admin_username, t.admin_password,
         COALESCE(t.api_version, 'v1') as api_version,
         COALESCE(t.totp_enabled, 0) as totp_enabled,
+        COALESCE(t.scan_enabled, 1) as scan_enabled,
         COUNT(DISTINCT CASE WHEN lo.status = 'active' THEN lo.id END) as line_oa_count,
         COUNT(DISTINCT CASE WHEN pt.status = 'pending' THEN pt.id END) as pending_count
       FROM tenants t

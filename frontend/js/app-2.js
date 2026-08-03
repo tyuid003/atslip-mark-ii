@@ -2,6 +2,10 @@
 // APPLICATION STATE
 // ============================================================
 
+// Version banner (แสดงครั้งเดียวต่อ session)
+console.log('%c ATslip v3.3.0 | Updated: 2026-08-03 ', 'background:#1e40af;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;padding:2px 8px;');
+console.log('%c tenant scan_enabled switch | bank receive_mode | ERR_INVALID_URL fix ', 'color:#6b7280;font-size:11px;');
+
 let currentTeamSlug = null; // team slug จาก URL
 let currentPage = 'dashboard';
 let currentTeamId = null;
@@ -763,17 +767,20 @@ async function viewBankAccounts(tenantId) {
     // ดึง metadata และ account modes พร้อมกัน
     let metadata = [];
     let accountModes = {};
+    let receiveModes = {};
     try {
-      const [metadataResponse, modesResponse] = await Promise.allSettled([
+      const [metadataResponse, modesResponse, receiveResponse] = await Promise.allSettled([
         api.getBankAccountsMetadata(tenantId),
         api.getAccountModes(),
+        api.getReceiveModes(),
       ]);
       if (metadataResponse.status === 'fulfilled') metadata = (metadataResponse.value.data || {}).accounts || [];
       if (modesResponse.status === 'fulfilled') accountModes = modesResponse.value.account_modes || {};
+      if (receiveResponse.status === 'fulfilled') receiveModes = receiveResponse.value.receive_modes || {};
     } catch (err) {
     }
 
-    renderBankAccountsList(accounts, metadata, accountModes);
+    renderBankAccountsList(accounts, metadata, accountModes, receiveModes);
     document.getElementById('bankAccountsModal').style.display = 'flex';
     lucide.createIcons();
   } catch (error) {
@@ -781,7 +788,7 @@ async function viewBankAccounts(tenantId) {
   }
 }
 
-function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
+function renderBankAccountsList(accounts, metadata = [], accountModes = {}, receiveModes = {}) {
   let html = '';
 
   if (accounts.length === 0) {
@@ -798,6 +805,7 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
       const englishName = meta?.account_name_en || '';
       const metaId = meta?.id || '';
       const isAuto = accountModes[accountId] !== false;
+      const isReceiving = receiveModes[accountId] !== false;
       const safeAccId = accountId.replace(/'/g, "\\'");
       const safeMetaId = String(metaId).replace(/'/g, "\\'");
       const safeEnName = englishName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -811,7 +819,15 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}) {
               <div class="bank-number">${account.accountNumber || '-'}</div>
               ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
               <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">โหมดรับสลิป:</span>
+                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">รับสลิป:</span>
+                <label class="toggle-switch" style="margin:0;">
+                  <input type="checkbox" ${isReceiving ? 'checked' : ''} onchange="window._setReceiveMode('${safeAccId}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:0.78rem;color:${isReceiving ? 'var(--color-success,#16a34a)' : 'var(--color-error,#dc2626)'};font-weight:500;" id="acc-recv-label-${safeAccId}">${isReceiving ? 'เปิด' : 'ปิด'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">โหมดฝาก:</span>
                 <label class="toggle-switch" style="margin:0;">
                   <input type="checkbox" ${isAuto ? 'checked' : ''} onchange="window._setAccountMode('${safeAccId}', this.checked)">
                   <span class="toggle-slider"></span>
@@ -908,6 +924,20 @@ window._setAccountMode = async function (accountId, auto) {
       label.style.color = auto ? 'var(--color-success,#16a34a)' : 'var(--color-gray-500)';
     }
     addNotification(auto ? '✅ เปลี่ยนเป็น Auto' : '✅ เปลี่ยนเป็น Manual');
+  } catch (e) {
+    addNotification('❌ บันทึกไม่สำเร็จ: ' + e.message);
+  }
+};
+
+window._setReceiveMode = async function (accountId, enabled) {
+  try {
+    await api.setReceiveMode(accountId, enabled);
+    const label = document.getElementById('acc-recv-label-' + accountId);
+    if (label) {
+      label.textContent = enabled ? 'เปิด' : 'ปิด';
+      label.style.color = enabled ? 'var(--color-success,#16a34a)' : 'var(--color-error,#dc2626)';
+    }
+    addNotification(enabled ? '✅ เปิดรับสลิปสำหรับบัญชีนี้' : '❌ ปิดรับสลิปสำหรับบัญชีนี้');
   } catch (e) {
     addNotification('❌ บันทึกไม่สำเร็จ: ' + e.message);
   }
@@ -3011,6 +3041,38 @@ async function toggleAutoDeposit(tenantId, enabled) {
     if (toggle) {
       toggle.disabled = false;
     }
+  }
+}
+
+async function toggleScanEnabled(tenantId, enabled) {
+  const toggle = document.getElementById(`scan-toggle-${tenantId}`);
+  const sliderEl = toggle?.parentElement?.querySelector('.toggle-slider');
+  try {
+    if (toggle) toggle.disabled = true;
+    if (toggle) toggle.checked = enabled;
+    if (sliderEl) sliderEl.style.background = enabled ? '' : 'var(--color-gray-400,#9ca3af)';
+    // update emoji label
+    const labelEl = toggle?.closest('.tenant-toggle-group')?.querySelector('.tenant-toggle-label');
+    if (labelEl) labelEl.textContent = enabled ? '📡' : '🚫';
+
+    const response = await api.toggleScanEnabled(tenantId, enabled);
+    const serverEnabled = response?.data?.scan_enabled !== 0;
+
+    const tenant = currentTenants.find((t) => t.id === tenantId);
+    if (tenant) tenant.scan_enabled = serverEnabled ? 1 : 0;
+    sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
+
+    if (toggle) toggle.checked = serverEnabled;
+    if (sliderEl) sliderEl.style.background = serverEnabled ? '' : 'var(--color-gray-400,#9ca3af)';
+    if (labelEl) labelEl.textContent = serverEnabled ? '📡' : '🚫';
+
+    addNotification(`${serverEnabled ? '✅ เปิด' : '❌ ปิด'} รับสแกนสลิปสำหรับ tenant`);
+  } catch (error) {
+    if (toggle) toggle.checked = !enabled;
+    if (sliderEl) sliderEl.style.background = !enabled ? '' : 'var(--color-gray-400,#9ca3af)';
+    addNotification('❌ ไม่สามารถเปลี่ยนสถานะรับสแกน: ' + error.message);
+  } finally {
+    if (toggle) toggle.disabled = false;
   }
 }
 

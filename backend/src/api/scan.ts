@@ -682,6 +682,19 @@ export const ScanAPI = {
         }
       }
 
+      // 🔕 Receive mode check — ถ้าบัญชีรับปิดรับสลิป ให้ return โดยไม่บันทึก
+      if (cachedAccountId !== null) {
+        try {
+          const receiveEnabled = await AntidupSettingsAPI.isReceiveModeEnabled(env, matchedTenant.team_id, cachedAccountId);
+          if (!receiveEnabled) {
+            log('[ScanAPI] 🔕 Receive mode OFF for account', cachedAccountId, '— slip discarded');
+            return jsonResponse({ success: false, error: 'บัญชีนี้ปิดรับสลิปอยู่', data: { status: 'receive_mode_disabled' } }, 400);
+          }
+        } catch (rmErr: any) {
+          log('[ScanAPI] ⚠️ Receive mode check error (non-blocking):', rmErr?.message);
+        }
+      }
+
       // บันทึกใน pending_transactions (duplicate check was done in fast-path above)
       const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const now = Math.floor(Date.now() / 1000);

@@ -167,8 +167,13 @@ export async function handleLineWebhook(
 
   // หา team_id ของ tenant สำหรับ enqueue (ทำครั้งเดียวก่อน loop)
   const tenantRow = await env.DB.prepare(
-    `SELECT team_id FROM tenants WHERE id = ? AND status = 'active' LIMIT 1`
-  ).bind(lineOA.tenant_id).first<{ team_id: string }>();
+    `SELECT team_id, COALESCE(scan_enabled, 1) as scan_enabled FROM tenants WHERE id = ? AND status = 'active' LIMIT 1`
+  ).bind(lineOA.tenant_id).first<{ team_id: string; scan_enabled: number }>();
+
+  // ถ้า tenant ปิดสแกน → ignore event ทั้งหมดโดยไม่ต้องประมวลผล
+  if (tenantRow && Number(tenantRow.scan_enabled) === 0) {
+    return jsonResponse({ success: true, ignored: true, reason: 'scan_disabled' });
+  }
 
   for (const event of events) {
     if (event?.type !== 'message' || event?.message?.type !== 'image') {

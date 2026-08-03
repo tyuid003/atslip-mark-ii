@@ -142,4 +142,41 @@ export const AntidupSettingsAPI = {
     const modes = await getAccountModes(env, teamId);
     return modes[String(accountId)] !== false; // default auto
   },
+
+  // ─── Receive mode (accept slip or not) per account ───────────────────────────
+  async handleGetReceiveModes(request: Request, env: Env): Promise<Response> {
+    const teamId = await getTeamIdFromRequest(request, env);
+    if (!teamId) return errorResponse('team_slug required', 400);
+    const raw = await env.BANK_KV.get(`team:${teamId}:receive-modes`);
+    const modes: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+    return jsonResponse({ success: true, receive_modes: modes });
+  },
+
+  async handlePostReceiveMode(request: Request, env: Env): Promise<Response> {
+    const teamId = await getTeamIdFromRequest(request, env);
+    if (!teamId) return errorResponse('team_slug required', 400);
+    const body = await request.json() as { account_id?: unknown; enabled?: unknown };
+    const accountId = String(body.account_id ?? '').trim();
+    if (!accountId) return errorResponse('account_id required', 400);
+    const enabled = body.enabled !== false && body.enabled !== 'false'; // default true
+    const raw = await env.BANK_KV.get(`team:${teamId}:receive-modes`);
+    const current: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+    if (enabled) {
+      delete current[accountId]; // true is default → keep KV lean
+    } else {
+      current[accountId] = false;
+    }
+    await env.BANK_KV.put(`team:${teamId}:receive-modes`, JSON.stringify(current));
+    return jsonResponse({ success: true, receive_modes: current });
+  },
+
+  /** true = accept slip (default), false = scan-only (no save) */
+  async isReceiveModeEnabled(env: Env, teamId: string, accountId: string | number): Promise<boolean> {
+    const raw = await env.BANK_KV.get(`team:${teamId}:receive-modes`);
+    if (!raw) return true;
+    try {
+      const modes: Record<string, boolean> = JSON.parse(raw);
+      return modes[String(accountId)] !== false;
+    } catch { return true; }
+  },
 };

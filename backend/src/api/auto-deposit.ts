@@ -8,6 +8,30 @@ interface Env {
 }
 
 export const AutoDepositAPI = {
+  async handleToggleScanEnabled(env: Env, request: Request, tenantId: string): Promise<Response> {
+    try {
+      const body = await request.json() as { enabled?: boolean };
+      if (typeof body.enabled !== 'boolean') {
+        return errorResponse('enabled must be a boolean', 400);
+      }
+      const existing = await env.DB.prepare('SELECT id FROM tenants WHERE id = ? LIMIT 1')
+        .bind(tenantId).first();
+      if (!existing) return errorResponse('Tenant not found', 404);
+
+      const enabled = body.enabled ? 1 : 0;
+      const now = Math.floor(Date.now() / 1000);
+      await env.DB.prepare('UPDATE tenants SET scan_enabled = ?, updated_at = ? WHERE id = ?')
+        .bind(enabled, now, tenantId).run();
+
+      return jsonResponse({
+        success: true,
+        data: { tenant_id: tenantId, scan_enabled: body.enabled },
+      });
+    } catch (error: any) {
+      return errorResponse(error.message, 500);
+    }
+  },
+
   async handleToggleAutoDeposit(env: Env, request: Request, tenantId: string): Promise<Response> {
     try {
       const body = await request.json() as { enabled?: boolean };

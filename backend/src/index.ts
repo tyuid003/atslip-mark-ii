@@ -427,6 +427,13 @@ export default {
       return await TenantsAPI.handleDisconnectAdmin(env, tenantId);
     }
 
+    // PATCH /api/tenants/:id/scan-enabled - Toggle tenant scan enabled
+    const scanEnabledMatch = pathname.match(/^\/api\/tenants\/([^\/]+)\/scan-enabled$/);
+    if (method === 'PATCH' && scanEnabledMatch) {
+      const tenantId = decodeURIComponent(scanEnabledMatch[1]);
+      return await AutoDepositAPI.handleToggleScanEnabled(env, request, tenantId);
+    }
+
     // PATCH /api/tenants/:id/auto-deposit - Toggle auto deposit
     const autoDepositMatch = pathname.match(
       /^\/api\/tenants\/([^\/]+)\/auto-deposit$/
@@ -733,6 +740,12 @@ export default {
     }
     if (method === 'POST' && pathname === '/api/settings/account-modes') {
       return await AntidupSettingsAPI.handlePostAccountMode(request, env);
+    }
+    if (method === 'GET' && pathname === '/api/settings/receive-modes') {
+      return await AntidupSettingsAPI.handleGetReceiveModes(request, env);
+    }
+    if (method === 'POST' && pathname === '/api/settings/receive-modes') {
+      return await AntidupSettingsAPI.handlePostReceiveMode(request, env);
     }
 
     // ============================================================

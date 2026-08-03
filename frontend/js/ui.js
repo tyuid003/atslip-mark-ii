@@ -116,6 +116,7 @@ const UI = {
     const autoDepositEnabled = hasPendingState 
       ? window.pendingToggleStates.get(tenant.id)
       : tenant.auto_deposit_enabled === 1;
+    const scanEnabled = tenant.scan_enabled !== 0 && tenant.scan_enabled !== false;
     const statusBadge = isConnected
       ? '<span class="badge badge-success"><i data-lucide="check-circle" size="12"></i> เชื่อมต่อแล้ว</span>'
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
@@ -137,6 +138,13 @@ const UI = {
             </div>
           </div>
           <div class="tenant-card-actions">
+            <div class="tenant-toggle-group" title="${scanEnabled ? 'รับสแกนสลิปอยู่ — คลิกเพื่อปิด' : 'ปิดรับสแกน — คลิกเพื่อเปิด'}">
+              <span class="tenant-toggle-label" style="font-size:0.7rem;color:var(--color-gray-500);margin-right:2px;">${scanEnabled ? '📡' : '🚫'}</span>
+              <label class="toggle-switch toggle-switch-compact">
+                <input type="checkbox" id="scan-toggle-${tenant.id}" ${scanEnabled ? 'checked' : ''} onchange="toggleScanEnabled('${tenant.id}', this.checked)">
+                <span class="toggle-slider" style="${scanEnabled ? '' : 'background:var(--color-gray-400,#9ca3af);'}"></span>
+              </label>
+            </div>
             <label class="toggle-switch toggle-switch-compact">
               <input type="checkbox" id="toggle-${tenant.id}" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
               <span class="toggle-slider"></span>
@@ -367,8 +375,18 @@ const UI = {
         let scannedByHtml = '';
         const src = item.source || 'manual';
         const buildUserBadge = (name, photo) => {
-          const avatarHtml = photo
-            ? `<img src="${photo}" class="scanned-by-avatar">`
+          // ตรวจสอบ photo URL ให้ถูกต้อง — ถ้าเป็น base64 ต้องมี data:image prefix
+          let safePhoto = null;
+          if (photo) {
+            if (photo.startsWith('data:image') || photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
+              safePhoto = photo;
+            } else if (photo.length > 50 && !photo.includes(' ')) {
+              // raw base64 ไม่มี prefix — เพิ่ม prefix ให้
+              safePhoto = `data:image/jpeg;base64,${photo}`;
+            }
+          }
+          const avatarHtml = safePhoto
+            ? `<img src="${safePhoto}" class="scanned-by-avatar" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';"><span class="scanned-by-avatar scanned-by-avatar-initial" style="display:none">${name.charAt(0).toUpperCase()}</span>`
             : `<span class="scanned-by-avatar scanned-by-avatar-initial">${name.charAt(0).toUpperCase()}</span>`;
           return `<span class="scanned-by-badge">${avatarHtml}<span class="scanned-by-name">${name}</span></span>`;
         };

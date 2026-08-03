@@ -135,6 +135,24 @@ class API {
     });
   }
 
+  async toggleScanEnabled(id, enabled) {
+    return this.request(`/api/tenants/${id}/scan-enabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async getReceiveModes() {
+    return this.request('/api/settings/receive-modes');
+  }
+
+  async setReceiveMode(accountId, enabled) {
+    return this.request('/api/settings/receive-modes', {
+      method: 'POST',
+      body: JSON.stringify({ account_id: accountId, enabled }),
+    });
+  }
+
   // ============================================================
   // TEAM APIs
   // ============================================================
