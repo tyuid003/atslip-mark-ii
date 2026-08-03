@@ -23,6 +23,7 @@ export async function handleGetPendingTransactions(
           json_extract(pt.slip_data, '$.date') as slip_date,
           pt.matched_user_id, pt.matched_username,
           pt.source, pt.scanned_by_id, pt.scanned_by_name,
+          SUBSTR(pt.scanned_by_photo, 1, 4096) as scanned_by_photo,
           pt.created_at,
           t.name as tenant_name
          FROM pending_transactions pt
@@ -43,6 +44,7 @@ export async function handleGetPendingTransactions(
           json_extract(pt.slip_data, '$.date') as slip_date,
           pt.matched_user_id, pt.matched_username,
           pt.source, pt.scanned_by_id, pt.scanned_by_name,
+          SUBSTR(pt.scanned_by_photo, 1, 4096) as scanned_by_photo,
           pt.created_at,
           t.name as tenant_name
          FROM pending_transactions pt

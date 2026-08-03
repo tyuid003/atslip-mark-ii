@@ -464,6 +464,22 @@
     } catch (_) {}
   }
 
+  // แปลง presence photo ที่อาจถูก truncate กลางสตริง base64 → เติม padding ให้ถูก RFC 4648
+  // ถ้าไม่ใช่ data:image/ prefix → คืน null
+  function _safePresencePhoto(p) {
+    if (!p || typeof p !== 'string') return null;
+    if (!p.startsWith('data:image/')) return null;
+    const b64Start = p.indexOf(',') + 1;
+    if (b64Start <= 0) return null;
+    const b64 = p.substring(b64Start);
+    if (b64.length % 4 !== 0) {
+      // truncated: เติม padding = เพื่อให้ base64 valid (ภาพอาจแสดงไม่ครบแต่ไม่ ERR_INVALID_URL)
+      const pad = (4 - (b64.length % 4)) % 4;
+      return p.substring(0, b64Start) + b64 + '='.repeat(pad);
+    }
+    return p;
+  }
+
   function renderOnlineUsers(users) {
     const wrap = document.getElementById('topbarOnlineUsers');
     if (!wrap) return;
@@ -473,8 +489,9 @@
     wrap.innerHTML = others.map(u => {
       const name = escapeHtml(u.display_name || String(u.user_id));
       const initial = (u.display_name || String(u.user_id)).charAt(0).toUpperCase();
-      const avatarHtml = u.photo
-        ? `<img src="${u.photo}" class="topbar-online-avatar-img" alt="">`
+      const safePhoto = _safePresencePhoto(u.photo);
+      const avatarHtml = safePhoto
+        ? `<img src="${safePhoto}" class="topbar-online-avatar-img" alt="" onerror="this.style.display='none'">`
         : `<span class="topbar-online-avatar-init" data-uid="${u.user_id}">${escapeHtml(initial)}</span>`;
       return `<div class="topbar-online-avatar">
         ${avatarHtml}
@@ -490,10 +507,12 @@
         headers: { 'Authorization': `Bearer ${getSession()}` },
       }).then(r => r.json()).then(d => {
         if (d.ok && d.photo && span.parentElement) {
+          const safePhoto = _safePresencePhoto(d.photo) || d.photo; // full photo from KV — should be valid
           const img = document.createElement('img');
-          img.src = d.photo;
+          img.src = safePhoto;
           img.className = 'topbar-online-avatar-img';
           img.alt = '';
+          img.onerror = () => { img.style.display = 'none'; };
           span.parentElement.replaceChild(img, span);
         }
       }).catch(() => {});

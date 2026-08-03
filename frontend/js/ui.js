@@ -356,13 +356,17 @@ const UI = {
         let scannedByHtml = '';
         const src = item.source || 'manual';
         const buildUserBadge = (name, photo) => {
-          // ตรวจสอบ photo URL ให้ถูกต้อง — ถ้าเป็น base64 ต้องมี data:image prefix
+          // เติม padding ให้ base64 ที่อาจถูก truncate → ป้องกัน ERR_INVALID_URL
           let safePhoto = null;
           if (photo) {
-            if (photo.startsWith('data:image') || photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
+            if (photo.startsWith('data:image')) {
+              const b64Start = photo.indexOf(',') + 1;
+              const b64 = photo.substring(b64Start);
+              const pad = (4 - (b64.length % 4)) % 4;
+              safePhoto = photo.substring(0, b64Start) + b64 + '='.repeat(pad);
+            } else if (photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
               safePhoto = photo;
             } else if (photo.length > 50 && !photo.includes(' ')) {
-              // raw base64 ไม่มี prefix — เพิ่ม prefix ให้
               safePhoto = `data:image/jpeg;base64,${photo}`;
             }
           }

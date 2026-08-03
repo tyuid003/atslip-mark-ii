@@ -148,7 +148,9 @@ export async function handleCreditPendingTransaction(
 
     const scannedById   = body.scanned_by_id   ? String(body.scanned_by_id).substring(0, 64)   : null;
     const scannedByName = body.scanned_by_name ? String(body.scanned_by_name).substring(0, 255) : null;
-    const scannedByPhoto = body.scanned_by_photo ? String(body.scanned_by_photo).substring(0, 32768) : null;
+    const scannedByPhoto = body.scanned_by_photo
+      ? (() => { const p = String(body.scanned_by_photo).substring(0, 4096); const i = p.indexOf(',') + 1; return i > 0 ? p.substring(0, i + Math.floor((p.length - i) / 4) * 4) : p; })()
+      : null;
 
     const transaction = await env.DB.prepare(
       `SELECT pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_account, pt.receiver_account, pt.slip_data,
@@ -350,7 +352,9 @@ export async function handleWithdrawPendingCredit(
 
     const withdrawScannedById   = body.scanned_by_id   ? String(body.scanned_by_id).substring(0, 64)   : null;
     const withdrawScannedByName = body.scanned_by_name ? String(body.scanned_by_name).substring(0, 255) : null;
-    const withdrawScannedByPhoto = body.scanned_by_photo ? String(body.scanned_by_photo).substring(0, 32768) : null;
+    const withdrawScannedByPhoto = body.scanned_by_photo
+      ? (() => { const p = String(body.scanned_by_photo).substring(0, 4096); const i = p.indexOf(',') + 1; return i > 0 ? p.substring(0, i + Math.floor((p.length - i) / 4) * 4) : p; })()
+      : null;
 
     const transaction = await env.DB.prepare(
       `SELECT id, tenant_id, amount, matched_user_id, matched_username, status

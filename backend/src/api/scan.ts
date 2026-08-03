@@ -204,9 +204,15 @@ export const ScanAPI = {
       // สำหรับ auto/telegram/line จะเป็น null → frontend แสดงตาม source แทน
       const scannedById   = String(formData.get('scanned_by_id')    || '').trim() || null;
       const scannedByName = String(formData.get('scanned_by_name')   || '').trim() || null;
-      // photo อาจเป็น base64 ขนาดใหญ่ — เก็บแค่ 32KB เพื่อประหยัด DB
       const scannedByPhotoRaw = (formData.get('scanned_by_photo') as string | null) || null;
-      const scannedByPhoto = scannedByPhotoRaw ? scannedByPhotoRaw.substring(0, 32768) : null;
+      // photo: เก็บแค่ 4KB (rounded base64) เพื่อประหยัด DB + ป้องกัน ERR_INVALID_URL
+      const scannedByPhoto = scannedByPhotoRaw
+        ? (() => {
+            const p = scannedByPhotoRaw.substring(0, 4096);
+            const i = p.indexOf(',') + 1;
+            return i > 0 ? p.substring(0, i + Math.floor((p.length - i) / 4) * 4) : p;
+          })()
+        : null;
 
       log('[ScanAPI] Scan source:', {
         source,

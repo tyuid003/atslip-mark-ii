@@ -1849,7 +1849,8 @@ async function creditPendingItem(transactionId, btnOrEvent) {
       addNotification('✅ เติมเครดิตสำเร็จ');
     }
 
-    await loadPendingTransactions();
+    // fire-and-forget ทั้งคู่ (ไม่ await เพื่อไม่บล็อก UX)
+    loadPendingTransactions();
     _refreshScanLogIfVisible();
   } catch (error) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
@@ -1961,7 +1962,8 @@ async function _doWithdrawPendingCredit(transactionId) {
     });
 
     addNotification('✅ ดึงเครดิตกลับสำเร็จ');
-    await loadPendingTransactions();
+    // fire-and-forget (ไม่ await เพื่อไม่บล็อก UX)
+    loadPendingTransactions();
     _refreshScanLogIfVisible();
   } catch (error) {
     addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + error.message);
@@ -1970,6 +1972,7 @@ async function _doWithdrawPendingCredit(transactionId) {
 
 window.creditPendingItem = creditPendingItem;
 window.withdrawPendingCredit = withdrawPendingCredit;
+window.loadPendingTransactions = loadPendingTransactions;
 
 // Helper: refresh scan log page silently if it is currently visible
 function _refreshScanLogIfVisible() {
@@ -3444,6 +3447,8 @@ window.scanLogReload = async function(page, silent) {
     if (items.length === 0) {
       listEl.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: var(--color-gray-500);">ไม่พบรายการตามตัวกรอง</div>';
     } else {
+      // ถ้าเป็น silent reload → ข้ามถ้ามี action ค้างอยู่ (กัน DOM replace ตอน loading)
+      if (silent && listEl.querySelector('[data-loading="1"]')) return;
       // Reuse the same item HTML used in the scan card
       const prev = document.getElementById('pendingList');
       const originalParent = prev?.parentNode;
@@ -3481,7 +3486,15 @@ function renderScanLogItemHTML(item) {
   const amount = Number(item.amount || 0).toLocaleString('th-TH');
   let slipDate = '-';
   try {
-    if (item.slip_data) {
+    // ลองใช้ slip_date ก่อน (lightweight field จาก list endpoint)
+    if (item.slip_date) {
+      const d = new Date(item.slip_date);
+      if (!isNaN(d.getTime())) {
+        slipDate = d.toLocaleString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+    }
+    // fallback: parse slip_data (search endpoint ยังส่ง JSON เต็ม)
+    if (slipDate === '-' && item.slip_data) {
       const sd = typeof item.slip_data === 'string' ? JSON.parse(item.slip_data) : item.slip_data;
       if (sd && sd.date) {
         const d = new Date(sd.date);
@@ -3506,7 +3519,13 @@ function renderScanLogItemHTML(item) {
   const buildScanLogUserBadge = (name, photo) => {
     let safePhoto = null;
     if (photo) {
-      if (photo.startsWith('data:image') || photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
+      if (photo.startsWith('data:image')) {
+        // เติม padding ให้ base64 ที่อาจถูก truncate (ป้องกัน ERR_INVALID_URL)
+        const b64Start = photo.indexOf(',') + 1;
+        const b64 = photo.substring(b64Start);
+        const pad = (4 - (b64.length % 4)) % 4;
+        safePhoto = photo.substring(0, b64Start) + b64 + '='.repeat(pad);
+      } else if (photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
         safePhoto = photo;
       } else if (photo.length > 50 && !photo.includes(' ')) {
         safePhoto = `data:image/jpeg;base64,${photo}`;

@@ -48,7 +48,15 @@ export async function handlePresenceHeartbeat(request: Request, env: Env): Promi
     String(user.telegram_id);
 
   const photo = typeof body?.photo === 'string' && body.photo.startsWith('data:image/')
-    ? body.photo.substring(0, 32768)
+    ? (() => {
+        const p = body.photo.substring(0, 32768);
+        // round base64 down to multiple of 4 to prevent truncated base64 → ERR_INVALID_URL
+        const prefixEnd = p.indexOf(',') + 1;
+        if (prefixEnd <= 0) return p;
+        const b64Len = p.length - prefixEnd;
+        const roundedLen = Math.floor(b64Len / 4) * 4;
+        return p.substring(0, prefixEnd + roundedLen);
+      })()
     : null;
 
   const now = Math.floor(Date.now() / 1000);

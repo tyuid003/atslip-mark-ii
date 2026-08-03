@@ -130,7 +130,9 @@ export async function handleMatchPendingTransaction(
     const scannedById   = body.scanned_by_id   ? String(body.scanned_by_id).substring(0, 64)   : null;
     const scannedByName = body.scanned_by_name ? String(body.scanned_by_name).substring(0, 255) : null;
     const scannedByPhotoRaw = body.scanned_by_photo || null;
-    const scannedByPhoto = scannedByPhotoRaw ? String(scannedByPhotoRaw).substring(0, 32768) : null;
+    const scannedByPhoto = scannedByPhotoRaw
+      ? (() => { const p = String(scannedByPhotoRaw).substring(0, 4096); const i = p.indexOf(',') + 1; return i > 0 ? p.substring(0, i + Math.floor((p.length - i) / 4) * 4) : p; })()
+      : null;
 
     // Update matched info (and tenant_id if provided — ใช้เมื่อผู้ใช้เลือก tenant ใหม่ตอนจับคู่ใหม่)
     let result;
