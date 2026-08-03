@@ -164,6 +164,8 @@ class RealtimeClient {
       this.onNewPending(message.data);
     } else if (message.type === 'transaction_updated') {
       this.onTransactionUpdated(message.data);
+    } else if (message.type === 'presence_update') {
+      this.onPresenceUpdate(message.data);
     } else if (message.type === 'join_request') {
       this.onJoinRequest(message.data);
     } else if (message.type === 'join_request_resolved') {
@@ -217,6 +219,11 @@ class RealtimeClient {
       // โหลดข้อมูลเต็มจาก API เพื่ออัพเดท slip_date, sender_account, tenant_name ที่ WS event ไม่มี
       if (typeof window.loadPendingTransactions === 'function') {
         window.loadPendingTransactions();
+      }
+
+      // อัพเดท scan log page ถ้ากำลังเปิดอยู่
+      if (typeof window._refreshScanLogIfVisible === 'function') {
+        window._refreshScanLogIfVisible();
       }
 
       // Optionally play a sound notification
@@ -291,6 +298,15 @@ class RealtimeClient {
     if (typeof showToast === 'function') {
       showToast('🟢 เชื่อมต่อเรียลไทม์สำเร็จ', 'success');
     }
+  }
+
+  /**
+   * Called when presence_update is received from WS
+   * auth.js listens to 'presenceUpdate' CustomEvent and updates the topbar
+   */
+  onPresenceUpdate(data) {
+    if (!data || !data.user_id) return;
+    window.dispatchEvent(new CustomEvent('presenceUpdate', { detail: data }));
   }
 
   /**

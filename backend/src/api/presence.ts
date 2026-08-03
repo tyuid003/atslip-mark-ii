@@ -1,11 +1,12 @@
 // API: User Presence (online status per team)
-// POST /api/presence      — heartbeat (upsert last_seen)
+// POST /api/presence      — heartbeat (upsert last_seen) + WS broadcast
 // GET  /api/presence      — list online users in a team (?team_id=xxx)
 
 import { jsonResponse, errorResponse } from '../utils/helpers';
 
 interface Env {
   DB: D1Database;
+  PENDING_NOTIFICATIONS: DurableObjectNamespace;
 }
 
 function extractToken(req: Request): string | null {
@@ -49,8 +50,8 @@ export async function handlePresenceHeartbeat(request: Request, env: Env): Promi
 
   const photo = typeof body?.photo === 'string' && body.photo.startsWith('data:image/')
     ? (() => {
-        const p = body.photo.substring(0, 32768);
-        // round base64 down to multiple of 4 to prevent truncated base64 → ERR_INVALID_URL
+        // เก็บแค่ 4KB (rounded base64) — ลดขนาด DB + ป้องกัน ERR_INVALID_URL
+        const p = body.photo.substring(0, 4096);
         const prefixEnd = p.indexOf(',') + 1;
         if (prefixEnd <= 0) return p;
         const b64Len = p.length - prefixEnd;
@@ -76,6 +77,27 @@ export async function handlePresenceHeartbeat(request: Request, env: Env): Promi
   )
     .bind(displayName, photo, now, user.telegram_id, teamId)
     .run();
+
+  // Broadcast presence update via WebSocket so clients don't need to poll GET /api/presence
+  try {
+    const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
+    const doInstance = env.PENDING_NOTIFICATIONS.get(doId);
+    // fire-and-forget (ctx.waitUntil not available here — ignore rejection)
+    doInstance.fetch('https://durable-object/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'presence_update',
+        data: {
+          team_id: teamId,
+          user_id: user.telegram_id,
+          display_name: displayName,
+          photo: photo,   // null if no photo or ghost
+          last_seen: now,
+        },
+      }),
+    }).catch(() => {});
+  } catch (_) {}
 
   return jsonResponse({ ok: true });
 }

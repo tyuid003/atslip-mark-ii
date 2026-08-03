@@ -412,24 +412,59 @@
       .replace(/"/g, '&quot;');
   }
 
-  // ── Presence (online users) ──────────────────────────────
+  // ── Presence (online users) — WS-driven ──────────────────
+  // GET /api/presence ยิงครั้งเดียวตอน startup เท่านั้น
+  // หลังจากนั้น presence_update จาก WebSocket อัพเดท topbar แทน
   let presenceTimer = null;
+  let presenceCleanupTimer = null;
+  const _onlineCache = new Map(); // user_id (string) → { user_id, display_name, photo, last_seen }
 
   function startPresence() {
     stopPresence();
     sendPresenceHeartbeat();
-    fetchOnlineUsers();
+    fetchOnlineUsers(); // initial only
+    // Heartbeat every 90s (ลดจาก 30s — ไม่ต้อง poll GET /api/presence อีกต่อไป)
     presenceTimer = setInterval(() => {
-      sendPresenceHeartbeat();
-      fetchOnlineUsers();
-    }, 30000);
+      if (!document.hidden) sendPresenceHeartbeat();
+    }, 90000);
+    // Cleanup stale users locally every 60s — no API call
+    presenceCleanupTimer = setInterval(() => {
+      const cutoff = Math.floor(Date.now() / 1000) - 120;
+      let changed = false;
+      _onlineCache.forEach((u, id) => {
+        if (u.last_seen < cutoff) { _onlineCache.delete(id); changed = true; }
+      });
+      if (changed) _renderFromCache();
+    }, 60000);
   }
 
   function stopPresence() {
     if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
+    if (presenceCleanupTimer) { clearInterval(presenceCleanupTimer); presenceCleanupTimer = null; }
+    _onlineCache.clear();
     const wrap = document.getElementById('topbarOnlineUsers');
     if (wrap) wrap.innerHTML = '';
   }
+
+  function _renderFromCache() {
+    renderOnlineUsers([..._onlineCache.values()]);
+  }
+
+  // รับ presence_update event จาก realtime.js → อัพเดท topbar ทันที
+  window.addEventListener('presenceUpdate', (e) => {
+    const data = e.detail;
+    if (!data || !data.user_id) return;
+    if (window.currentTeamId && String(data.team_id) !== String(window.currentTeamId)) return;
+    const me = window.atslipAuth?.user;
+    if (me && String(data.user_id) === String(me.telegram_id)) return; // ตัวเอง ข้ามได้
+    _onlineCache.set(String(data.user_id), {
+      user_id: String(data.user_id),
+      display_name: data.display_name,
+      photo: data.photo || null,
+      last_seen: data.last_seen || Math.floor(Date.now() / 1000),
+    });
+    _renderFromCache();
+  });
 
   async function sendPresenceHeartbeat() {
     const teamId = window.currentTeamId;
@@ -460,7 +495,17 @@
         headers: { 'Authorization': `Bearer ${session}` },
       });
       const data = await res.json();
-      if (data.ok) renderOnlineUsers(data.users || []);
+      if (data.ok) {
+        // Populate cache from initial fetch
+        _onlineCache.clear();
+        const me = window.atslipAuth?.user;
+        (data.users || []).forEach(u => {
+          if (!me || String(u.user_id) !== String(me.telegram_id)) {
+            _onlineCache.set(String(u.user_id), u);
+          }
+        });
+        _renderFromCache();
+      }
     } catch (_) {}
   }
 
@@ -483,10 +528,8 @@
   function renderOnlineUsers(users) {
     const wrap = document.getElementById('topbarOnlineUsers');
     if (!wrap) return;
-    const me = window.atslipAuth?.user;
-    const others = users.filter(u => String(u.user_id) !== String(me?.telegram_id));
-    if (others.length === 0) { wrap.innerHTML = ''; return; }
-    wrap.innerHTML = others.map(u => {
+    if (users.length === 0) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = users.map(u => {
       const name = escapeHtml(u.display_name || String(u.user_id));
       const initial = (u.display_name || String(u.user_id)).charAt(0).toUpperCase();
       const safePhoto = _safePresencePhoto(u.photo);
@@ -499,15 +542,20 @@
       </div>`;
     }).join('');
 
-    // Async load photos for users that didn't have photo in presence (just logged in before photo was stored)
-    others.filter(u => !u.photo).forEach(u => {
+    // Async load photos for users that don't have photo yet (logged in before photo was stored)
+    // Uses span[data-uid] placeholder left by renderOnlineUsers
+    users.filter(u => !u.photo).forEach(u => {
       const span = wrap.querySelector(`[data-uid="${u.user_id}"]`);
       if (!span) return;
       fetch(`${BACKEND}/api/auth/photo/${encodeURIComponent(u.user_id)}`, {
         headers: { 'Authorization': `Bearer ${getSession()}` },
       }).then(r => r.json()).then(d => {
         if (d.ok && d.photo && span.parentElement) {
-          const safePhoto = _safePresencePhoto(d.photo) || d.photo; // full photo from KV — should be valid
+          // Cache it so future renders don't need to re-fetch
+          const cached = _onlineCache.get(String(u.user_id));
+          if (cached) cached.photo = d.photo;
+          const safePhoto = _safePresencePhoto(d.photo) || null;
+          if (!safePhoto) return;
           const img = document.createElement('img');
           img.src = safePhoto;
           img.className = 'topbar-online-avatar-img';

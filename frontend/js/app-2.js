@@ -3380,18 +3380,8 @@ window.openScanLogPage = async function(e) {
 
   window.__scanLogState.page = 1;
   await scanLogReload(1);
-
-  // Start polling every 10s (only when on page 1, no date filter, and tab visible)
-  if (window.__scanLogState.pollTimer) clearInterval(window.__scanLogState.pollTimer);
-  window.__scanLogState.pollTimer = setInterval(() => {
-    // ข้ามตอนแท็บไม่ active — ลด CPU/RAM ตอนผู้ใช้สลับไปทำอย่างอื่น
-    if (typeof document !== 'undefined' && document.hidden) return;
-    const dateFrom = document.getElementById('scanLogDateFrom')?.value;
-    const dateTo = document.getElementById('scanLogDateTo')?.value;
-    if (window.__scanLogState.page === 1 && !dateFrom && !dateTo) {
-      scanLogReload(1, true);
-    }
-  }, 10000);
+  // ไม่ใช้ poll timer อีกต่อไป — WebSocket events (new_pending / transaction_updated)
+  // จาก realtime.js จะเรียก _refreshScanLogIfVisible() แทน
 
   if (window.lucide) lucide.createIcons();
 };
@@ -3401,10 +3391,6 @@ window.closeScanLogPage = function() {
   const page = document.getElementById('scanLogPage');
   if (page) page.style.display = 'none';
   if (dashboard) dashboard.style.display = 'block';
-  if (window.__scanLogState.pollTimer) {
-    clearInterval(window.__scanLogState.pollTimer);
-    window.__scanLogState.pollTimer = null;
-  }
 };
 
 window.scanLogClearFilters = function() {
