@@ -113,10 +113,9 @@ const UI = {
     const isConnected = tenant.admin_connected;
     // ตรวจสอบว่ามีสถานะ pending หรือไม่ ถ้ามีให้ใช้สถานะนั้น
     const hasPendingState = window.pendingToggleStates && window.pendingToggleStates.has(tenant.id);
-    const autoDepositEnabled = hasPendingState 
+    const scanEnabled = hasPendingState
       ? window.pendingToggleStates.get(tenant.id)
-      : tenant.auto_deposit_enabled === 1;
-    const scanEnabled = tenant.scan_enabled !== 0 && tenant.scan_enabled !== false;
+      : (tenant.scan_enabled !== 0 && tenant.scan_enabled !== false);
     const statusBadge = isConnected
       ? '<span class="badge badge-success"><i data-lucide="check-circle" size="12"></i> เชื่อมต่อแล้ว</span>'
       : '<span class="badge badge-disconnected"><i data-lucide="x-circle" size="12"></i> ไม่เชื่อมต่อ</span>';
@@ -138,15 +137,8 @@ const UI = {
             </div>
           </div>
           <div class="tenant-card-actions">
-            <div class="tenant-toggle-group" title="${scanEnabled ? 'รับสแกนสลิปอยู่ — คลิกเพื่อปิด' : 'ปิดรับสแกน — คลิกเพื่อเปิด'}">
-              <span class="tenant-toggle-label" style="font-size:0.7rem;color:var(--color-gray-500);margin-right:2px;">${scanEnabled ? '📡' : '🚫'}</span>
-              <label class="toggle-switch toggle-switch-compact">
-                <input type="checkbox" id="scan-toggle-${tenant.id}" ${scanEnabled ? 'checked' : ''} onchange="toggleScanEnabled('${tenant.id}', this.checked)">
-                <span class="toggle-slider" style="${scanEnabled ? '' : 'background:var(--color-gray-400,#9ca3af);'}"></span>
-              </label>
-            </div>
-            <label class="toggle-switch toggle-switch-compact">
-              <input type="checkbox" id="toggle-${tenant.id}" ${autoDepositEnabled ? 'checked' : ''} onchange="toggleAutoDeposit('${tenant.id}', this.checked)">
+            <label class="toggle-switch toggle-switch-compact" title="${scanEnabled ? 'รับสแกนสลิปอยู่ — คลิกเพื่อปิด' : 'ปิดรับสแกน — คลิกเพื่อเปิด'}">
+              <input type="checkbox" id="toggle-${tenant.id}" ${scanEnabled ? 'checked' : ''} onchange="toggleScanEnabled('${tenant.id}', this.checked)">
               <span class="toggle-slider"></span>
             </label>
             <div class="tenant-card-menu">

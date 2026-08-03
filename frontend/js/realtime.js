@@ -420,8 +420,15 @@ function showJoinRequestCard(data) {
   card.id = `join-req-card-${requestId}`;
   card.className = 'join-request-card';
 
-  const avatarHtml = data.photo
-    ? `<img src="${data.photo}" class="join-req-avatar-img" alt="">`
+  const _safePhoto = (p) => {
+    if (!p) return null;
+    if (p.startsWith('data:image') || p.startsWith('http://') || p.startsWith('https://') || p.startsWith('/')) return p;
+    if (p.length > 50 && !p.includes(' ')) return `data:image/jpeg;base64,${p}`;
+    return null;
+  };
+  const _sp = _safePhoto(data.photo);
+  const avatarHtml = _sp
+    ? `<img src="${_sp}" class="join-req-avatar-img" alt="" onerror="this.style.display='none'">`
     : `<div class="join-req-avatar-init">${(data.display_name || '?').charAt(0).toUpperCase()}</div>`;
 
   const name = String(data.display_name || data.telegram_id).replace(/</g, '&lt;').replace(/>/g, '&gt;');

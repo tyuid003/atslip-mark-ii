@@ -42,11 +42,19 @@ function renderManageUsers(members, pending, slug) {
   listEl.innerHTML = renderPendingSection(pending, slug) + renderMemberSection(members, slug);
 }
 
+function _safePhotoSrc(p) {
+  if (!p) return null;
+  if (p.startsWith('data:image') || p.startsWith('http://') || p.startsWith('https://') || p.startsWith('/')) return p;
+  if (p.length > 50 && !p.includes(' ')) return `data:image/jpeg;base64,${p}`;
+  return null;
+}
+
 function renderPendingSection(pending, slug) {
   if (!pending || !pending.length) return '';
   const rows = pending.map(r => {
-    const av = r.photo
-      ? `<img src="${r.photo}" class="mu-avatar" alt="avatar">`
+    const _sp = _safePhotoSrc(r.photo);
+    const av = _sp
+      ? `<img src="${_sp}" class="mu-avatar" alt="avatar" onerror="this.style.display='none'">`
       : `<div class="mu-avatar mu-avatar-init">${(r.display_name || '?').charAt(0).toUpperCase()}</div>`;
     return `<div class="mu-row" data-req="${escHtml(r.id)}">
         <div class="mu-avatar-wrap">${av}</div>
@@ -68,8 +76,9 @@ function renderMemberSection(members, slug) {
 
   return members.map((m, i) => {
     const isMe = String(m.telegram_id) === String(myTelegramId);
-    const av = m.photo
-      ? `<img src="${m.photo}" class="mu-avatar" alt="avatar">`
+    const _sp2 = _safePhotoSrc(m.photo);
+    const av = _sp2
+      ? `<img src="${_sp2}" class="mu-avatar" alt="avatar" onerror="this.style.display='none'">`
       : `<div class="mu-avatar mu-avatar-init">${(m.display_name || '?').charAt(0).toUpperCase()}</div>`;
 
     const nameHtml = (m.display_name !== m.telegram_name && m.telegram_name)

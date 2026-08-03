@@ -2,9 +2,9 @@
 // APPLICATION STATE
 // ============================================================
 
-// Version banner (แสดงครั้งเดียวต่อ session)
-console.log('%c ATslip v3.3.0 | Updated: 2026-08-03 ', 'background:#1e40af;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;padding:2px 8px;');
-console.log('%c tenant scan_enabled switch | bank receive_mode | ERR_INVALID_URL fix ', 'color:#6b7280;font-size:11px;');
+// Version banner
+console.warn('%c ATslip v3.3.0 | Updated: 2026-08-03 ', 'background:#1e40af;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;padding:2px 8px;');
+console.warn('%c tenant scan switch | bank receive_mode | photo fix ', 'color:#6b7280;font-size:11px;');
 
 let currentTeamSlug = null; // team slug จาก URL
 let currentPage = 'dashboard';
@@ -3037,15 +3037,11 @@ async function toggleAutoDeposit(tenantId, enabled) {
 }
 
 async function toggleScanEnabled(tenantId, enabled) {
-  const toggle = document.getElementById(`scan-toggle-${tenantId}`);
-  const sliderEl = toggle?.parentElement?.querySelector('.toggle-slider');
+  const toggle = document.getElementById(`toggle-${tenantId}`);
   try {
     if (toggle) toggle.disabled = true;
+    pendingToggleStates.set(tenantId, enabled);
     if (toggle) toggle.checked = enabled;
-    if (sliderEl) sliderEl.style.background = enabled ? '' : 'var(--color-gray-400,#9ca3af)';
-    // update emoji label
-    const labelEl = toggle?.closest('.tenant-toggle-group')?.querySelector('.tenant-toggle-label');
-    if (labelEl) labelEl.textContent = enabled ? '📡' : '🚫';
 
     const response = await api.toggleScanEnabled(tenantId, enabled);
     const serverEnabled = response?.data?.scan_enabled !== 0;
@@ -3053,15 +3049,14 @@ async function toggleScanEnabled(tenantId, enabled) {
     const tenant = currentTenants.find((t) => t.id === tenantId);
     if (tenant) tenant.scan_enabled = serverEnabled ? 1 : 0;
     sessionStorage.setItem('tenants_cache', JSON.stringify(currentTenants));
+    tenantCache = currentTenants;
 
     if (toggle) toggle.checked = serverEnabled;
-    if (sliderEl) sliderEl.style.background = serverEnabled ? '' : 'var(--color-gray-400,#9ca3af)';
-    if (labelEl) labelEl.textContent = serverEnabled ? '📡' : '🚫';
-
+    pendingToggleStates.delete(tenantId);
     addNotification(`${serverEnabled ? '✅ เปิด' : '❌ ปิด'} รับสแกนสลิปสำหรับ tenant`);
   } catch (error) {
+    pendingToggleStates.delete(tenantId);
     if (toggle) toggle.checked = !enabled;
-    if (sliderEl) sliderEl.style.background = !enabled ? '' : 'var(--color-gray-400,#9ca3af)';
     addNotification('❌ ไม่สามารถเปลี่ยนสถานะรับสแกน: ' + error.message);
   } finally {
     if (toggle) toggle.disabled = false;
