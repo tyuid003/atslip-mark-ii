@@ -1850,8 +1850,8 @@ async function creditPendingItem(transactionId, btnOrEvent) {
     }
 
     // fire-and-forget ทั้งคู่ (ไม่ await เพื่อไม่บล็อก UX)
-    loadPendingTransactions();
-    _refreshScanLogIfVisible();
+    // WS transaction_updated event จาก backend จะอัพเดท allPendingTransactions
+    // และ refresh scan log เอง—ไม่ต้องเรียก loadPendingTransactions()/scanLog reload เพิ่ม
   } catch (error) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + error.message);
     if (btn) {
@@ -1962,9 +1962,8 @@ async function _doWithdrawPendingCredit(transactionId) {
     });
 
     addNotification('✅ ดึงเครดิตกลับสำเร็จ');
-    // fire-and-forget (ไม่ await เพื่อไม่บล็อก UX)
-    loadPendingTransactions();
-    _refreshScanLogIfVisible();
+    // WS transaction_updated event จาก backend จะอัพเดท allPendingTransactions
+    // และ refresh scan log เอง—ไม่ต้องเรียก loadPendingTransactions()/scanLog reload เพิ่ม
   } catch (error) {
     addNotification('❌ ดึงเครดิตกลับไม่สำเร็จ: ' + error.message);
   }
@@ -1981,6 +1980,18 @@ function _refreshScanLogIfVisible() {
     scanLogReload(window.__scanLogState?.page || 1, true);
   }
 }
+
+// Debounced version: ไม่ทำ HTTP call ซ้ำถ้า WS events มาใกล้กัน (new_pending + auto-credit)
+// รีเซ็ต window ทุกครั้ง ทั้งหมดจะยิง scanLogReload 1 ครั้งหลังจาก event สุดท้าย +2s
+let _refreshScanLogTimer = null;
+window._refreshScanLogDebounced = function() {
+  if (_refreshScanLogTimer) clearTimeout(_refreshScanLogTimer);
+  _refreshScanLogTimer = setTimeout(() => {
+    _refreshScanLogTimer = null;
+    _refreshScanLogIfVisible();
+  }, 2000);
+};
+window._refreshScanLogIfVisible = _refreshScanLogIfVisible;
 
 // ============================================================
 // USER SEARCH & MANUAL MATCHING

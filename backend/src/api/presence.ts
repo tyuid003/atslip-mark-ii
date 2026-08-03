@@ -7,6 +7,7 @@ import { jsonResponse, errorResponse } from '../utils/helpers';
 interface Env {
   DB: D1Database;
   PENDING_NOTIFICATIONS: DurableObjectNamespace;
+  BANK_KV: KVNamespace;
 }
 
 function extractToken(req: Request): string | null {
@@ -79,7 +80,11 @@ export async function handlePresenceHeartbeat(request: Request, env: Env): Promi
     .run();
 
   // Broadcast presence update via WebSocket so clients don't need to poll GET /api/presence
+  // รวมภาพจาก KV เพื่อไม่ได้เก็บภาพแบบ truncate ใน user_presence
   try {
+    let broadcastPhoto: string | null = null;
+    try { broadcastPhoto = await env.BANK_KV.get(`tg_photo:${user.telegram_id}`); } catch (_) {}
+
     const doId = env.PENDING_NOTIFICATIONS.idFromName('global');
     const doInstance = env.PENDING_NOTIFICATIONS.get(doId);
     // fire-and-forget (ctx.waitUntil not available here — ignore rejection)
@@ -92,7 +97,7 @@ export async function handlePresenceHeartbeat(request: Request, env: Env): Promi
           team_id: teamId,
           user_id: user.telegram_id,
           display_name: displayName,
-          photo: photo,   // null if no photo or ghost
+          photo: broadcastPhoto,   // full photo from KV — no truncation
           last_seen: now,
         },
       }),
@@ -120,14 +125,25 @@ export async function handleGetPresence(request: Request, env: Env): Promise<Res
   const cutoff = Math.floor(Date.now() / 1000) - 90;
 
   const result = await env.DB.prepare(
-    `SELECT user_id, display_name, photo, last_seen
+    `SELECT user_id, display_name, last_seen
      FROM user_presence
      WHERE team_id = ? AND last_seen > ?
      ORDER BY last_seen DESC
      LIMIT 50`
   )
     .bind(teamId, cutoff)
-    .all<{ user_id: string; display_name: string; photo: string | null; last_seen: number }>();
+    .all<{ user_id: string; display_name: string; last_seen: number }>();
 
-  return jsonResponse({ ok: true, users: result.results ?? [] });
+  const users = result.results ?? [];
+
+  // Fetch full photos from KV in parallel — no truncation issues
+  const photos = await Promise.all(
+    users.map((u) =>
+      env.BANK_KV.get(`tg_photo:${u.user_id}`).catch(() => null)
+    )
+  );
+
+  const usersWithPhotos = users.map((u, i) => ({ ...u, photo: photos[i] || null }));
+
+  return jsonResponse({ ok: true, users: usersWithPhotos });
 }

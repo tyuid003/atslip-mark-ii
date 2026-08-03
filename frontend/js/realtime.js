@@ -216,14 +216,12 @@ class RealtimeClient {
         applyPendingFiltersAndSort();
       }
 
-      // โหลดข้อมูลเต็มจาก API เพื่ออัพเดท slip_date, sender_account, tenant_name ที่ WS event ไม่มี
-      if (typeof window.loadPendingTransactions === 'function') {
-        window.loadPendingTransactions();
-      }
+      // ทุก field ที่ frontend ต้องการอยู่ใน WS payload แล้ว — ไม่ต้อง reload HTTP
+      // (ยกเว้น loadPendingTransactions() ออก)
 
       // อัพเดท scan log page ถ้ากำลังเปิดอยู่
-      if (typeof window._refreshScanLogIfVisible === 'function') {
-        window._refreshScanLogIfVisible();
+      if (typeof window._refreshScanLogDebounced === 'function') {
+        window._refreshScanLogDebounced();
       }
 
       // Optionally play a sound notification
@@ -278,9 +276,9 @@ class RealtimeClient {
           applyPendingFiltersAndSort();
         }
 
-        // อัพเดท scan log page ด้วยถ้ากำลังเปิดอยู่
-        if (typeof window._refreshScanLogIfVisible === 'function') {
-          window._refreshScanLogIfVisible();
+        // อัพเดท scan log page ด้วยถ้ากำลังเปิดอยู่ (ใช้ debounce ลด HTTP calls)
+        if (typeof window._refreshScanLogDebounced === 'function') {
+          window._refreshScanLogDebounced();
         }
 
         // Play notification sound
