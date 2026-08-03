@@ -370,16 +370,29 @@ export const ScanAPI = {
       const teamSlug = request.headers.get('X-Team-Slug') || undefined;
       log('[ScanAPI] Team slug from header:', teamSlug || '(none — all teams)');
 
-      const matchedTenant = await ScanService.matchReceiver(
-        env,
-        receiverBank,
-        receiverAccount,
-        receiverNameTh,
-        receiverNameEn,
-        teamSlug,
-        log,
-        isManualScan ? 'manual' : 'normal'
-      );
+      // Extract sender info early — needed for fast-path duplicate response
+      const senderNameTh = slip.sender.account.name.th;
+      const senderNameEn = slip.sender.account.name.en;
+      const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
+      const senderBank = slip.sender.bank; // { id, name, short }
+
+      // 🚀 Perf: parallelize matchReceiver (DB JOIN ~100ms) + slip_ref duplicate check (DB ~50ms)
+      // saves ~50-100ms and — more importantly — if slip is duplicate we skip matchSender entirely
+      const [matchedTenant, existingSlipFast] = await Promise.all([
+        ScanService.matchReceiver(
+          env,
+          receiverBank,
+          receiverAccount,
+          receiverNameTh,
+          receiverNameEn,
+          teamSlug,
+          log,
+          isManualScan ? 'manual' : 'normal'
+        ),
+        env.DB.prepare(
+          `SELECT id, matched_user_id, matched_username, tenant_id, status FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
+        ).bind(slip.transRef).first<{ id: string; matched_user_id: string | null; matched_username: string | null; tenant_id: string; status: string }>(),
+      ]);
 
       if (!matchedTenant) {
         log('[ScanAPI] ❌ RESULT: No matching tenant found');
@@ -394,11 +407,24 @@ export const ScanAPI = {
       });
       log('[ScanAPI] 🏦 ===== RECEIVER MATCHING END (MATCHED) =====');
 
-      // Match sender (ผู้โอน)
-      const senderNameTh = slip.sender.account.name.th;
-      const senderNameEn = slip.sender.account.name.en;
-      const senderAccount = slip.sender.account.bank?.account || slip.sender.account.proxy?.account || '';
-      const senderBank = slip.sender.bank; // { id, name, short }
+      // 🚀 Fast-path: duplicate found in parallel DB check — skip matchSender & anti-dup entirely
+      if (existingSlipFast) {
+        log('[ScanAPI] ⚠️ Duplicate slip detected (fast-path, saved matchSender):', slip.transRef);
+        return jsonResponse({
+          success: false,
+          error: 'สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)',
+          data: {
+            status: 'duplicate',
+            current_status: existingSlipFast.status,
+            transaction_id: existingSlipFast.id,
+            matched_user_id: existingSlipFast.matched_user_id || null,
+            matched_username: existingSlipFast.matched_username || null,
+            tenant: { id: matchedTenant.id, name: matchedTenant.name },
+            slip: { ref: slip.transRef, amount: slip.amount?.amount || 0, date: slip.date },
+            sender: { id: null, name: senderNameTh || senderNameEn || 'Unknown', username: null, matched: false },
+          },
+        }, 400);
+      }
 
       log('[ScanAPI] 🔍 ===== SENDER MATCHING START =====');
       log('[ScanAPI] 📥 Sender Info from SLIP:', {
@@ -418,20 +444,32 @@ export const ScanAPI = {
         .first();
 
       let matchedUser = null;
+      // 🚀 Perf: resolveToAccountId is called up to 4× with identical args — compute once, reuse
+      let cachedAccountId: number | null = null;
 
       if (session) {
-        log('[ScanAPI] ✅ Session found, calling matchSender...');
+        log('[ScanAPI] ✅ Session found, running matchSender + resolveToAccountId in parallel...');
         const sessionToken = session.session_token as string;
-        matchedUser = await ScanService.matchSender(
-          matchedTenant.admin_api_url,
-          sessionToken,
-          senderNameTh,
-          senderNameEn,
-          senderAccount,
-          senderBank,
-          log,
-          (matchedTenant as any).api_version
-        );
+
+        // 🚀 Parallelize matchSender (admin API ~1-3s) + resolveToAccountId prefetch (KV/API ~50-500ms)
+        // resolveToAccountId result is cached and reused in anti-dup, cross-dup, and auto-deposit below
+        const [matchedUserRaw, prefetchedAccountId] = await Promise.all([
+          ScanService.matchSender(
+            matchedTenant.admin_api_url,
+            sessionToken,
+            senderNameTh,
+            senderNameEn,
+            senderAccount,
+            senderBank,
+            log,
+            (matchedTenant as any).api_version
+          ),
+          receiverAccount
+            ? resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionToken, receiverAccount, env)
+            : Promise.resolve(null),
+        ]);
+        cachedAccountId = prefetchedAccountId;
+        matchedUser = matchedUserRaw;
 
         if (matchedUser) {
           log('[ScanAPI] ✅ MATCHED USER:', {
@@ -492,9 +530,8 @@ export const ScanAPI = {
       const isV2Tenant = String((matchedTenant as any).api_version || 'v1') === 'v2';
       if (matchedUser && matchedUser.id && !isV2Tenant) {
         try {
-          const accIdForAntidup = receiverAccount && sessionTokenForAntidup
-            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionTokenForAntidup, receiverAccount, env)
-            : null;
+          // 🚀 Reuse cachedAccountId (already computed in parallel with matchSender above)
+          const accIdForAntidup = cachedAccountId;
           const antidupEnabled = accIdForAntidup
             ? await AntidupSettingsAPI.isEnabled(env, matchedTenant.team_id, accIdForAntidup)
             : false;
@@ -566,9 +603,8 @@ export const ScanAPI = {
       // ── Cross-user anti-dup (เช็คซ้ำกับรายการฝากของสมาชิกอื่น) ────────────────────
       if (!isV2Tenant && sessionTokenForAntidup) {
         try {
-          const crossAccId = receiverAccount && sessionTokenForAntidup
-            ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url, sessionTokenForAntidup, receiverAccount, env)
-            : null;
+          // 🚀 Reuse cachedAccountId (already computed in parallel with matchSender above)
+          const crossAccId = cachedAccountId;
           const crossEnabled = crossAccId
             ? await AntidupSettingsAPI.isCrossEnabled(env, matchedTenant.team_id, crossAccId)
             : false;
@@ -646,41 +682,7 @@ export const ScanAPI = {
         }
       }
 
-      // ตรวจสอบสลิปซ้ำก่อนบันทึก
-      const existingSlip = await env.DB.prepare(
-        `SELECT id, matched_user_id, matched_username, tenant_id, status FROM pending_transactions WHERE slip_ref = ? LIMIT 1`
-      )
-        .bind(slip.transRef)
-        .first<{ id: string; matched_user_id: string | null; matched_username: string | null; tenant_id: string; status: string }>();
-
-      if (existingSlip) {
-        log('[ScanAPI] ⚠️ Duplicate slip detected:', slip.transRef);
-        return jsonResponse({
-          success: false,
-          error: 'สลิปนี้เคยบันทึกไว้แล้ว (Duplicate slip)',
-          data: {
-            status: 'duplicate',
-            current_status: existingSlip.status,
-            transaction_id: existingSlip.id,
-            matched_user_id: existingSlip.matched_user_id || null,
-            matched_username: existingSlip.matched_username || null,
-            tenant: { id: matchedTenant.id, name: matchedTenant.name },
-            slip: {
-              ref: slip.transRef,
-              amount: slip.amount?.amount || 0,
-              date: slip.date,
-            },
-            sender: {
-              id: null,
-              name: senderNameTh || senderNameEn || 'Unknown',
-              username: null,
-              matched: false,
-            },
-          },
-        }, 400);
-      }
-
-      // บันทึกใน pending_transactions
+      // บันทึกใน pending_transactions (duplicate check was done in fast-path above)
       const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const now = Math.floor(Date.now() / 1000);
 
@@ -777,10 +779,8 @@ export const ScanAPI = {
         const autoDepositEnabled = await CreditService.isAutoDepositEnabled(env, matchedTenant.id);
 
         // ตรวจสอบ account mode (auto/manual per account)
-        const toAccountIdForMode = receiverAccount
-          ? await resolveToAccountId(matchedTenant.id, matchedTenant.admin_api_url,
-              session ? String((session as any).session_token || '') : null, receiverAccount, env)
-          : null;
+        // 🚀 Reuse cachedAccountId (already computed in parallel with matchSender above)
+        const toAccountIdForMode = cachedAccountId;
         const accountIsAuto = toAccountIdForMode
           ? await AntidupSettingsAPI.getAccountIsAuto(env, matchedTenant.team_id, toAccountIdForMode)
           : true;
@@ -788,15 +788,8 @@ export const ScanAPI = {
         if (autoDepositEnabled && accountIsAuto) {
           log('[ScanAPI] 🎯 Auto-deposit is ENABLED - triggering credit submission...');
 
-          const toAccountId = receiverAccount
-            ? await resolveToAccountId(
-                matchedTenant.id,
-                matchedTenant.admin_api_url,
-                session ? String((session as any).session_token || '') : null,
-                receiverAccount,
-                env
-              )
-            : null;
+          // 🚀 Reuse cachedAccountId (already computed in parallel with matchSender above)
+          const toAccountId = cachedAccountId;
 
           if (!toAccountId) {
             log('[ScanAPI] ⚠️ toAccountId could not be resolved - skipping auto credit');
