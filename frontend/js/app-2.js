@@ -1697,8 +1697,7 @@ window._dupCreditItem = async function (btnEl) {
     });
     addNotification(response?.data?.status === 'duplicate' ? '⚠️ รายการซ้ำในระบบแอดมิน' : '✅ เติมเครดิตสำเร็จ');
     await loadPendingTransactions();
-    _refreshScanLogIfVisible();
-    // เติมเครดิตสำเร็จ = จบงาน → ปิด popup
+    // WS transaction_updated จะ refresh scan log เอง
     closeDuplicatePopup();
   } catch (err) {
     addNotification('❌ เติมเครดิตไม่สำเร็จ: ' + err.message);
@@ -1724,7 +1723,7 @@ window._dupWithdrawItem = async function (btnEl) {
     });
     addNotification('✅ ดึงเครดิตกลับสำเร็จ');
     await loadPendingTransactions();
-    _refreshScanLogIfVisible();
+    // WS transaction_updated จะ refresh scan log เอง
     // ไม่ปิด popup — กลับเป็น matched ให้จับคู่ใหม่/เติมใหม่ได้
     _setDupStatus('matched');
   } catch (err) {
@@ -2340,7 +2339,7 @@ async function selectUser(indexOrId, fallbackName) {
     }
     closeUserSearch();
     await loadPendingTransactions();
-    _refreshScanLogIfVisible();
+    // WS transaction_updated จะ refresh scan log เอง
 
   } catch (error) {
     console.error('[Manual Match] Error:', error);

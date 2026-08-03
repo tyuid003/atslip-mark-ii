@@ -12,10 +12,10 @@ export async function handleGetPendingTransactions(
 
     const teamSlug = request.headers.get('X-Team-Slug') || 'default';
 
-    let results;
+    let rawItems: any[];
     if (teamSlug && teamSlug !== 'default') {
       // Filter by team: เฉพาะ pending ของ tenant ที่อยู่ใน team นี้
-      results = await env.DB.prepare(
+      const results = await env.DB.prepare(
         `SELECT 
           pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, pt.sender_account,
           pt.receiver_name, pt.receiver_account,
@@ -23,7 +23,6 @@ export async function handleGetPendingTransactions(
           json_extract(pt.slip_data, '$.date') as slip_date,
           pt.matched_user_id, pt.matched_username,
           pt.source, pt.scanned_by_id, pt.scanned_by_name,
-          SUBSTR(pt.scanned_by_photo, 1, 4096) as scanned_by_photo,
           pt.created_at,
           t.name as tenant_name
          FROM pending_transactions pt
@@ -31,12 +30,11 @@ export async function handleGetPendingTransactions(
          INNER JOIN teams tm ON tm.id = t.team_id AND tm.slug = ?
          ORDER BY pt.created_at DESC
          LIMIT ?`
-      )
-        .bind(teamSlug, limit)
-        .all();
+      ).bind(teamSlug, limit).all();
+      rawItems = results.results || [];
     } else {
       // ไม่ระบุ team = ดึงทั้งหมด
-      results = await env.DB.prepare(
+      const results = await env.DB.prepare(
         `SELECT 
           pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, pt.sender_account,
           pt.receiver_name, pt.receiver_account,
@@ -44,19 +42,34 @@ export async function handleGetPendingTransactions(
           json_extract(pt.slip_data, '$.date') as slip_date,
           pt.matched_user_id, pt.matched_username,
           pt.source, pt.scanned_by_id, pt.scanned_by_name,
-          SUBSTR(pt.scanned_by_photo, 1, 4096) as scanned_by_photo,
           pt.created_at,
           t.name as tenant_name
          FROM pending_transactions pt
          LEFT JOIN tenants t ON t.id = pt.tenant_id
          ORDER BY pt.created_at DESC
          LIMIT ?`
-      )
-        .bind(limit)
-        .all();
+      ).bind(limit).all();
+      rawItems = results.results || [];
     }
 
-    return successResponse(results.results || []);
+    // Batch-fetch full photos from KV (parallel)
+    const uniqueIds = [...new Set(rawItems.map((r: any) => r.scanned_by_id).filter(Boolean))] as string[];
+    const photoMap: Record<string, string | null> = {};
+    if (uniqueIds.length > 0) {
+      await Promise.all(
+        uniqueIds.map((id) =>
+          env.BANK_KV.get(`tg_photo:${id}`)
+            .then((p) => { photoMap[id] = p; })
+            .catch(() => { photoMap[id] = null; })
+        )
+      );
+    }
+    const itemsWithPhotos = rawItems.map((r: any) => ({
+      ...r,
+      scanned_by_photo: (r.scanned_by_id && photoMap[r.scanned_by_id]) || null,
+    }));
+
+    return successResponse(itemsWithPhotos);
   } catch (error: any) {
     return errorResponse(error.message, 500);
   }
@@ -142,7 +155,7 @@ export async function handleSearchPendingTransactions(
     ).bind(...params).first<{ total: number }>();
     const total = Number(countRow?.total || 0);
 
-    // Fetch page
+    // Fetch page — ดึง scanned_by_id เพื่อ lookup ภาพเต็มจาก KV (ไม่เก็บ photo ใน result ตรงๆ)
     const rows = await env.DB.prepare(
       `SELECT 
         pt.id, pt.tenant_id, pt.slip_ref, pt.amount, pt.sender_name, pt.sender_account,
@@ -151,7 +164,6 @@ export async function handleSearchPendingTransactions(
         json_extract(pt.slip_data, '$.date') as slip_date,
         pt.matched_user_id, pt.matched_username,
         pt.source, pt.scanned_by_id, pt.scanned_by_name,
-        SUBSTR(pt.scanned_by_photo, 1, 4096) as scanned_by_photo,
         pt.created_at,
         t.name as tenant_name
        ${fromClause}
@@ -160,8 +172,29 @@ export async function handleSearchPendingTransactions(
        LIMIT ? OFFSET ?`
     ).bind(...params, limit, offset).all();
 
+    const items = rows.results || [];
+
+    // Batch-fetch full photos from KV using scanned_by_id (parallel — no truncation issues)
+    const uniqueIds = [...new Set(
+      items.map((r: any) => r.scanned_by_id).filter(Boolean)
+    )] as string[];
+    const photoMap: Record<string, string | null> = {};
+    if (uniqueIds.length > 0) {
+      await Promise.all(
+        uniqueIds.map((id) =>
+          env.BANK_KV.get(`tg_photo:${id}`)
+            .then((p) => { photoMap[id] = p; })
+            .catch(() => { photoMap[id] = null; })
+        )
+      );
+    }
+    const itemsWithPhotos = items.map((r: any) => ({
+      ...r,
+      scanned_by_photo: (r.scanned_by_id && photoMap[r.scanned_by_id]) || null,
+    }));
+
     return successResponse({
-      data: rows.results || [],
+      data: itemsWithPhotos,
       total,
       page,
       limit,

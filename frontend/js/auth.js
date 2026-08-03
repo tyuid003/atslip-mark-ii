@@ -568,12 +568,14 @@
   }
 
   // Start presence after auth + wait for currentTeamId
+  // ใช้ flag เพื่อป้องกัน atslipAuthReady + teamLoaded เรียก startPresence ซ้ำ
+  let _presenceStarted = false;
   window.addEventListener('atslipAuthReady', () => {
     if (!window.atslipAuth.user) return;
     let tries = 0;
     const tryStart = () => {
       if (window.currentTeamId) {
-        startPresence();
+        if (!_presenceStarted) { _presenceStarted = true; startPresence(); }
       } else if (tries++ < 20) {
         setTimeout(tryStart, 500);
       }
@@ -581,9 +583,14 @@
     tryStart();
   });
 
-  // Restart presence when team changes
+  // Restart presence only when team actually changes (not on first load — atslipAuthReady handles that)
+  let _lastPresenceTeamId = null;
   window.addEventListener('teamLoaded', () => {
-    if (window.atslipAuth.user && window.currentTeamId) startPresence();
+    if (!window.atslipAuth.user || !window.currentTeamId) return;
+    if (_lastPresenceTeamId === window.currentTeamId) return; // same team, skip
+    _lastPresenceTeamId = window.currentTeamId;
+    _presenceStarted = true;
+    startPresence();
   });
 
   // ── INIT ──────────────────────────────────────────────────
