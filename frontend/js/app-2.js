@@ -819,20 +819,12 @@ function renderBankAccountsList(accounts, metadata = [], accountModes = {}, rece
               <div class="bank-number">${account.accountNumber || '-'}</div>
               ${account.bankName ? `<div style="font-size: 0.875rem; color: var(--color-gray-500); margin-top: 2px;">${account.bankName}</div>` : ''}
               <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">รับสลิป:</span>
+                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">โหมดรับสลิป:</span>
                 <label class="toggle-switch" style="margin:0;">
                   <input type="checkbox" ${isReceiving ? 'checked' : ''} onchange="window._setReceiveMode('${safeAccId}', this.checked)">
                   <span class="toggle-slider"></span>
                 </label>
                 <span style="font-size:0.78rem;color:${isReceiving ? 'var(--color-success,#16a34a)' : 'var(--color-error,#dc2626)'};font-weight:500;" id="acc-recv-label-${safeAccId}">${isReceiving ? 'เปิด' : 'ปิด'}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-                <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">โหมดฝาก:</span>
-                <label class="toggle-switch" style="margin:0;">
-                  <input type="checkbox" ${isAuto ? 'checked' : ''} onchange="window._setAccountMode('${safeAccId}', this.checked)">
-                  <span class="toggle-slider"></span>
-                </label>
-                <span style="font-size:0.78rem;color:${isAuto ? 'var(--color-success,#16a34a)' : 'var(--color-gray-500)'};font-weight:500;" id="acc-mode-label-${safeAccId}">${isAuto ? 'Auto' : 'Manual'}</span>
               </div>
               <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
                 <span style="font-size:0.78rem;color:var(--color-gray-600);font-weight:500;">ชื่ออังกฤษ:</span>
@@ -3604,8 +3596,16 @@ function renderScanLogItemHTML(item) {
   // scanned-by badge
   const SCAN_LOG_TELEGRAM_AVATAR = `<svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="border-radius:50%;flex-shrink:0"><circle cx="32" cy="32" r="32" fill="#229ED9"/><path d="M46.7 17.3L10.6 31.4c-.8.3-.8 1.5 0 1.8l9.2 3.1 3.5 10.8c.3.9 1.4 1.1 2 .5l5.3-5 9.8 7.2c.8.6 2 .1 2.2-.9l6-29.5c.3-1.2-.9-2.2-2-1.6z" fill="#fff"/></svg>`;
   const buildScanLogUserBadge = (name, photo) => {
-    const av = photo
-      ? `<img src="${photo}" class="scanned-by-avatar">`
+    let safePhoto = null;
+    if (photo) {
+      if (photo.startsWith('data:image') || photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('/')) {
+        safePhoto = photo;
+      } else if (photo.length > 50 && !photo.includes(' ')) {
+        safePhoto = `data:image/jpeg;base64,${photo}`;
+      }
+    }
+    const av = safePhoto
+      ? `<img src="${safePhoto}" class="scanned-by-avatar" onerror="this.style.display='none'">`
       : `<span class="scanned-by-avatar scanned-by-avatar-initial">${name.charAt(0).toUpperCase()}</span>`;
     return `<span class="scanned-by-badge">${av}<span class="scanned-by-name">${name}</span></span>`;
   };
