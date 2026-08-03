@@ -214,6 +214,11 @@ class RealtimeClient {
         applyPendingFiltersAndSort();
       }
 
+      // โหลดข้อมูลเต็มจาก API เพื่ออัพเดท slip_date, sender_account, tenant_name ที่ WS event ไม่มี
+      if (typeof window.loadPendingTransactions === 'function') {
+        window.loadPendingTransactions();
+      }
+
       // Optionally play a sound notification
       this.playNotificationSound();
     }
@@ -264,6 +269,11 @@ class RealtimeClient {
         // Re-apply filters and render
         if (typeof applyPendingFiltersAndSort === 'function') {
           applyPendingFiltersAndSort();
+        }
+
+        // อัพเดท scan log page ด้วยถ้ากำลังเปิดอยู่
+        if (typeof window._refreshScanLogIfVisible === 'function') {
+          window._refreshScanLogIfVisible();
         }
 
         // Play notification sound
@@ -471,7 +481,9 @@ window.resolveJoinRequest = async function(slug, requestId, action) {
 };
 
 // Auto-initialize on script load
-const realtimeClient = new RealtimeClient();
+// เปิดเผยเป็น window.realtimeClient เพื่อให้ app-2.js ใช้เป็น canonical WS (ป้องกันสร้างซ้ำ)
+window.realtimeClient = new RealtimeClient();
+const realtimeClient = window.realtimeClient; // backward compat
 
 // Cleanup WebSocket and polling when page unloads (prevents leaked connections)
 window.addEventListener('pagehide', () => {

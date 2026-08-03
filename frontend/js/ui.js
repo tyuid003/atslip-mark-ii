@@ -307,48 +307,37 @@ const UI = {
       .map((item) => {
         const amount = Number(item.amount || 0).toLocaleString('th-TH');
         
-        // ใช้วันที่จากสลิป (slip_data.date) แทน created_at
+        // ใช้ slip_date (precomputed จาก backend) หรือ fallback parse slip_data.date (legacy/scan-log)
         let slipDate = '-';
         try {
-          if (item.slip_data) {
-            let slipData;
-            
-            // Parse JSON ถ้าเป็น string
-            if (typeof item.slip_data === 'string') {
-              try {
-                slipData = JSON.parse(item.slip_data);
-              } catch (parseError) {
-                console.error('[Pending] Error parsing slip_data JSON:', parseError);
-                slipData = null;
-              }
-            } else {
-              slipData = item.slip_data;
-            }
-            
-            // ดึงวันที่จาก slip_data.date
-            if (slipData && slipData.date) {
-              const date = new Date(slipData.date);
-              if (!isNaN(date.getTime())) {
-                slipDate = date.toLocaleString('th-TH', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                });
-              }
+          // slip_date = json_extract ตรงๆ จาก DB (ISO string หรือ null)
+          const rawDate = item.slip_date || (item.slip_data ? (() => {
+            try {
+              const sd = typeof item.slip_data === 'string' ? JSON.parse(item.slip_data) : item.slip_data;
+              return sd?.date || null;
+            } catch (_) { return null; }
+          })() : null);
+
+          if (rawDate) {
+            const date = new Date(rawDate);
+            if (!isNaN(date.getTime())) {
+              slipDate = date.toLocaleString('th-TH', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              });
             }
           }
-          
-          // Fallback to created_at if slip_data parsing failed
+
+          // Fallback to created_at
           if (slipDate === '-' && item.created_at) {
             slipDate = new Date(item.created_at * 1000).toLocaleString('th-TH');
           }
         } catch (e) {
-          slipDate = item.created_at 
-            ? new Date(item.created_at * 1000).toLocaleString('th-TH')
-            : '-';
+          slipDate = item.created_at ? new Date(item.created_at * 1000).toLocaleString('th-TH') : '-';
         }
 
         // สร้างข้อความแสดงผู้ใช้ที่จับคู่ได้ (ถ้ามี)

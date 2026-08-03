@@ -3,8 +3,8 @@
 // ============================================================
 
 // Version banner
-console.warn('%c ATslip v3.3.0 | Updated: 2026-08-03 ', 'background:#1e40af;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;padding:2px 8px;');
-console.warn('%c tenant scan switch | bank receive_mode | photo fix ', 'color:#6b7280;font-size:11px;');
+console.warn('%c ATslip v3.3.1 | Updated: 2026-08-03 ', 'background:#1e40af;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;padding:2px 8px;');
+console.warn('%c fix: dual-WS removed, slip_date, scanned_by_photo stripped from list ', 'color:#6b7280;font-size:11px;');
 
 let currentTeamSlug = null; // team slug จาก URL
 let currentPage = 'dashboard';
@@ -201,7 +201,7 @@ async function init() {
   await loadTenants();
   await loadPendingTransactions();
   initializeNotifications();
-  connectWebSocket();
+  // WS จัดการโดย realtime.js (window.realtimeClient) — ไม่สร้างซ้ำที่นี่
 }
 
 async function checkTeamMembership(slug) {
@@ -2651,96 +2651,9 @@ function resetSlipUpload(zoneId = null) {
 // ============================================================
 // REALTIME WEBSOCKET
 // ============================================================
-
-let realtimeWS = null;
-let wsReconnectTimer = null;
-let wsConnected = false;
-
-function connectWebSocket() {
-  if (wsReconnectTimer) {
-    clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = null;
-  }
-
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${proto}//${window.location.host}/api/realtime/ws`;
-
-  try {
-    realtimeWS = new WebSocket(wsUrl);
-
-    realtimeWS.addEventListener('open', () => {
-      wsConnected = true;
-    });
-
-    realtimeWS.addEventListener('message', (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        handleRealtimeMessage(message);
-      } catch (e) {
-        console.warn('[WS] Failed to parse message:', e);
-      }
-    });
-
-    realtimeWS.addEventListener('close', () => {
-      wsConnected = false;
-      wsReconnectTimer = setTimeout(connectWebSocket, 5000);
-    });
-
-    realtimeWS.addEventListener('error', () => {
-      // close event fires after error, which handles reconnect
-    });
-  } catch (e) {
-    console.warn('[WS] Connection error:', e);
-    wsReconnectTimer = setTimeout(connectWebSocket, 5000);
-  }
-}
-
-function handleRealtimeMessage(message) {
-  if (!message || !message.type) return;
-  if (message.type === 'connected') return;
-
-  if (message.type === 'new_pending') {
-    // Reload from API to pick up the new item with full data and team filter
-    loadPendingTransactions();
-    const data = message.data || {};
-    addNotification(`🔔 สลิปใหม่: ${data.sender_name || ''} ยอด ${data.amount || ''} บาท`);
-    return;
-  }
-
-  if (message.type === 'transaction_updated') {
-    const update = message.data;
-    if (!update || !update.id) return;
-
-    const idx = allPendingTransactions.findIndex((t) => t.id === update.id);
-    if (idx === -1) {
-      // บางเคส event มาก่อน data จะเข้าลิสต์ (เช่น scan from LINE แล้ว auto-credit ทันที)
-      loadPendingTransactions();
-      return;
-    }
-
-    // Patch the item in place
-    const item = { ...allPendingTransactions[idx] };
-    if (update.status !== undefined) item.status = update.status;
-    if (update.matched_user_id !== undefined) item.matched_user_id = update.matched_user_id;
-    if (update.matched_username !== undefined) item.matched_username = update.matched_username;
-    if (update.tenant_id !== undefined) {
-      item.tenant_id = update.tenant_id;
-      // อัพเดทชื่อเว็บ (tenant_name) ด้วย: ใช้จาก payload ก่อน ถ้าไม่มีให้ดึงจาก cache
-      if (update.tenant_name) {
-        item.tenant_name = update.tenant_name;
-      } else if (tenantCache && tenantCache.length > 0) {
-        const t = tenantCache.find((x) => x.id === update.tenant_id);
-        if (t) item.tenant_name = t.name;
-      }
-    }
-    allPendingTransactions[idx] = item;
-
-    applyPendingFiltersAndSort();
-    // อัพเดท scan log page ด้วยถ้ากำลังเปิดอยู่ (in-place silent reload)
-    _refreshScanLogIfVisible();
-    return;
-  }
-}
+// ใช้ window.realtimeClient จาก realtime.js เป็น canonical WS connection
+// ไม่สร้าง WebSocket ซ้ำ — realtime.js จัดการ reconnect, audio, toast อยู่แล้ว
+// และจะ relay loadPendingTransactions() + _refreshScanLogIfVisible() มาให้บล็อกนี้โดยอัตโนมัติ
 
 // ============================================================
 // NOTIFICATIONS
