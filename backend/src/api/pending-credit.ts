@@ -223,7 +223,7 @@ export async function handleCreditPendingTransaction(
               String(transaction.matched_user_id),
               slipAmount,
               slipDate,
-              60 * 1000,
+              5 * 60 * 1000, // 5 นาที (เดิม 60 วินาที) ป้องกัน SMS bot delay
               console.log
             );
             if (dup.isDuplicate) {

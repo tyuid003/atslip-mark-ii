@@ -532,15 +532,18 @@ export const ScanAPI = {
         try {
           // 🚀 Reuse cachedAccountId (already computed in parallel with matchSender above)
           const accIdForAntidup = cachedAccountId;
+          // ถ้า resolveToAccountId ล้มเหลว (cachedAccountId = null) ให้ fallback ตรวจว่าทีมมีการเปิด
+          // anti-dup กับบัญชีใดก็ได้ เพื่อไม่ให้ anti-dup ถูก skip เงียบๆ เมื่อ account resolve ไม่ได้
           const antidupEnabled = accIdForAntidup
             ? await AntidupSettingsAPI.isEnabled(env, matchedTenant.team_id, accIdForAntidup)
-            : false;
+            : await AntidupSettingsAPI.isAnyEnabled(env, matchedTenant.team_id);
 
           if (antidupEnabled && sessionTokenForAntidup) {
-            log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup);
+            log('[ScanAPI] 🔍 Anti-dup check enabled for account', accIdForAntidup ?? '(fallback-any)');
 
-            // window 1 นาที: สลิปยอดเท่ากัน เวลาต่างกันไม่เกิน 60 วินาที = ซ้ำ
-            const ANTIDUP_WINDOW_MS = 1 * 60 * 1000;
+            // window 5 นาที: ป้องกัน SMS bot ที่อาจบันทึก transferAt ต่างจากเวลาโอนจริงในสลิป
+            // (เดิม 60 วินาที ซึ่งแคบเกินไปสำหรับ SMS processing delay)
+            const ANTIDUP_WINDOW_MS = 5 * 60 * 1000;
             const slipTime = normalizeTimeMs(slip.date);
             const slipAmount = slip.amount?.amount;
 

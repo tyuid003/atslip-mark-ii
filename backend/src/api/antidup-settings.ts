@@ -76,6 +76,15 @@ export const AntidupSettingsAPI = {
     return enabled.includes(String(accountId));
   },
 
+  /** ตรวจสอบว่าทีมนี้มีการเปิด anti-dup ไว้กับบัญชีใดก็ได้อย่างน้อย 1 บัญชี
+   *  ใช้เป็น fallback เมื่อ resolveToAccountId ไม่สำเร็จ (cachedAccountId = null)
+   *  เพื่อไม่ให้ anti-dup ถูก skip โดยอัตโนมัติ
+   */
+  async isAnyEnabled(env: Env, teamId: string): Promise<boolean> {
+    const enabled = await getEnabledAccounts(env, teamId);
+    return enabled.length > 0;
+  },
+
   // ─── Cross-user anti-dup (new) ─────────────────────────────
   async handleGetCross(request: Request, env: Env): Promise<Response> {
     const teamId = await getTeamIdFromRequest(request, env);
